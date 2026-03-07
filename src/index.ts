@@ -7,12 +7,51 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Client, GatewayIntentBits, TextChannel, Message } from 'discord.js';
 import { z } from 'zod';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const execFileAsync = promisify(execFile);
+function runClaude(args: string[], input: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('claude', args, {
+      env: (() => {
+        const env: Record<string, string> = {};
+        for (const [key, value] of Object.entries(process.env)) {
+          if (value !== undefined) env[key] = value;
+        }
+        delete env.MCP_SERVER_NAME;
+        return env;
+      })(),
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        const err: any = new Error(`Claude CLI exited with code ${code}`);
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      }
+    });
+
+    proc.on('error', reject);
+
+    proc.stdin.write(input);
+    proc.stdin.end();
+
+    setTimeout(() => {
+      proc.kill();
+      reject(new Error('Claude CLI timed out after 120 seconds'));
+    }, 120000);
+  });
+}
 
 // Load environment variables
 dotenv.config();
@@ -169,27 +208,16 @@ async function askClaude(question: string, author: string, channelName: string, 
   ].join('\n');
 
   try {
-    console.error(`[Claude CLI] Spawning claude with prompt (${prompt.length} chars)`);
-    // Clean env to avoid MCP/stdio conflicts with the spawned CLI
-    const cleanEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) cleanEnv[key] = value;
-    }
-    // Remove MCP-related vars that could interfere
-    delete cleanEnv.MCP_SERVER_NAME;
+    console.error(`[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`);
 
-    const { stdout, stderr } = await execFileAsync('claude', [
+    const { stdout, stderr } = await runClaude([
       '-p',
       '--system-prompt', getSystemPrompt(),
       '--tools', 'WebSearch,WebFetch,Read,Write',
       '--allowedTools', 'WebSearch,WebFetch,Read,Write',
       '--add-dir', MESSAGES_DIR,
-      prompt,
-    ], {
-      timeout: 120000, // 2 minute timeout
-      maxBuffer: 1024 * 1024,
-      env: cleanEnv,
-    });
+    ], prompt);
+
     if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
     console.error(`[Claude CLI] Response received (${stdout.length} chars)`);
     if (!stdout.trim()) {
