@@ -9,4 +9,21 @@ if [ ! -f /root/.claude.json ]; then
   fi
 fi
 
+# Check if Claude CLI is authenticated
+echo "[Entrypoint] Checking Claude CLI auth status..."
+AUTH_OUTPUT=$(claude -p "hello" 2>&1)
+if echo "$AUTH_OUTPUT" | grep -qi "auth\|login\|sign in\|unauthorized\|API key"; then
+  echo ""
+  echo "============================================"
+  echo "  Claude CLI is NOT authenticated!"
+  echo "  Run this command to log in:"
+  echo ""
+  echo "  docker exec -it \$(hostname) claude auth login"
+  echo ""
+  echo "  Or from the host machine:"
+  echo "  docker exec -it <container_name> claude auth login"
+  echo "============================================"
+  echo ""
+fi
+
 exec node build/index.js

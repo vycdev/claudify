@@ -188,7 +188,10 @@ async function askClaude(question: string, author: string, channelName: string, 
     });
     if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
     console.error(`[Claude CLI] Response received (${stdout.length} chars)`);
-    return stdout.trim() || 'Sorry, I could not generate a response.';
+    if (!stdout.trim()) {
+      console.error(`[Claude CLI] WARNING: Empty response. Claude CLI may not be authenticated. Run: docker exec -it <container> claude auth login`);
+    }
+    return stdout.trim() || 'Sorry, I could not generate a response. The bot may not be authenticated yet — check the server logs.';
   } catch (error: any) {
     console.error(`[Claude CLI] Error: ${error.message}`);
     if (error.stderr) console.error(`[Claude CLI] stderr: ${error.stderr}`);
