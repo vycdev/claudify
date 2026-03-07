@@ -406,12 +406,23 @@ client.on('messageCreate', async (msg: Message) => {
       return;
     }
 
+    // Fetch referenced message if this is a reply
+    let replyContext = '';
+    if (msg.reference?.messageId) {
+      const refMsg = await msg.channel.messages.fetch(msg.reference.messageId).catch(() => null);
+      if (refMsg) {
+        replyContext = `[Replying to ${refMsg.author.tag}: "${refMsg.content}"]\n`;
+        console.error(`[Bot] Reply context from ${refMsg.author.tag}: ${refMsg.content}`);
+      }
+    }
+
     // Extract the question
-    const question = isAskCommand
+    const rawQuestion = isAskCommand
       ? msg.content.slice(5).trim()
       : msg.content.replace(`<@${client.user!.id}>`, '').trim() || msg.content.trim();
+    const question = replyContext + rawQuestion;
 
-    if (!question) {
+    if (!rawQuestion) {
       console.error(`[Bot] Empty question from ${msg.author.tag}`);
       await msg.reply('Please provide a question! Usage: `!ask <your question>` or mention me with a question.');
       return;
