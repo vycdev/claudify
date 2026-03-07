@@ -154,8 +154,9 @@ async function askClaude(question: string, author: string, channelName: string, 
   try {
     const { stdout } = await execFileAsync('claude', [
       '-p',
-      '--tools', 'WebSearch,WebFetch',
-      '--allowedTools', 'WebSearch,WebFetch',
+      '--tools', 'WebSearch,WebFetch,Read,Write',
+      '--allowedTools', 'WebSearch,WebFetch,Read,Write',
+      '--add-dir', MESSAGES_DIR,
       prompt,
     ], {
       timeout: 120000, // 2 minute timeout
