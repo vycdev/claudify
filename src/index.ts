@@ -152,7 +152,12 @@ async function askClaude(question: string, author: string, channelName: string, 
   ].join('\n');
 
   try {
-    const { stdout } = await execFileAsync('claude', ['-p', prompt], {
+    const { stdout } = await execFileAsync('claude', [
+      '-p',
+      '--tools', 'WebSearch,WebFetch',
+      '--allowedTools', 'WebSearch,WebFetch',
+      prompt,
+    ], {
       timeout: 120000, // 2 minute timeout
       maxBuffer: 1024 * 1024,
       env: { ...process.env },
