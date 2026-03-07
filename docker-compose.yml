@@ -2,9 +2,8 @@ services:
   discord-mcp:
     build: .
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      - DISCORD_TOKEN=your_discord_bot_token_here
       - MESSAGES_DIR=/app/messages
     volumes:
       - messages:/app/messages
