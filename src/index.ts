@@ -146,35 +146,69 @@ async function findChannel(channelIdentifier: string, guildIdentifier?: string):
   throw new Error(`Channel "${channelIdentifier}" is not a text channel or not found in server "${guild.name}"`);
 }
 
-// Save a message to a text file
-function saveMessage(msg: Message, type: 'history' | 'pending' = 'history') {
-  const dir = type === 'pending' ? PENDING_DIR : HISTORY_DIR;
-  const timestamp = msg.createdAt.toISOString().replace(/[:.]/g, '-');
-  const filename = `${timestamp}_${msg.id}.txt`;
+// User profiles directory
+const PROFILES_DIR = path.join(MESSAGES_DIR, 'profiles');
+fs.mkdirSync(PROFILES_DIR, { recursive: true });
+
+// Get the daily log filename for a channel: #general_2026-03-07.txt
+function getDailyLogPath(channelName: string, date: Date = new Date()): string {
+  const dateStr = date.toISOString().split('T')[0];
+  const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, '_');
+  return path.join(HISTORY_DIR, `${safeName}_${dateStr}.txt`);
+}
+
+// Append a message to the daily channel log
+function appendToLog(author: string, content: string, channelName: string, timestamp: Date = new Date()) {
+  const filePath = getDailyLogPath(channelName, timestamp);
+  const time = timestamp.toTimeString().split(' ')[0];
+  const line = `[${time}] ${author}: ${content}\n`;
+  fs.appendFileSync(filePath, line, 'utf-8');
+}
+
+// Save a message to pending (still individual files for tracking)
+function savePending(msg: Message) {
+  const filename = `${msg.id}.txt`;
   const content = [
-    `ID: ${msg.id}`,
-    `Author: ${msg.author.tag} (${msg.author.id})`,
+    `Author: ${msg.author.tag}`,
     `Channel: #${(msg.channel as TextChannel).name}`,
-    `Server: ${msg.guild?.name || 'DM'}`,
     `Timestamp: ${msg.createdAt.toISOString()}`,
     `---`,
     msg.content,
   ].join('\n');
-
-  fs.writeFileSync(path.join(dir, filename), content, 'utf-8');
-  return filename;
+  fs.writeFileSync(path.join(PENDING_DIR, filename), content, 'utf-8');
 }
 
-// Load recent history files for context
-function loadRecentHistory(limit = 20): string {
-  const files = fs.readdirSync(HISTORY_DIR)
-    .filter(f => f.endsWith('.txt'))
-    .sort()
-    .slice(-limit);
+function removePending(msgId: string) {
+  const filePath = path.join(PENDING_DIR, `${msgId}.txt`);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
 
-  if (files.length === 0) return 'No previous conversation history.';
+// Load recent history: today's log for the channel + yesterday if today is short
+function loadRecentHistory(channelName: string): string {
+  const today = getDailyLogPath(channelName);
+  const yesterday = getDailyLogPath(channelName, new Date(Date.now() - 86400000));
 
-  return files.map(f => fs.readFileSync(path.join(HISTORY_DIR, f), 'utf-8')).join('\n\n===\n\n');
+  let history = '';
+  if (fs.existsSync(yesterday)) {
+    const content = fs.readFileSync(yesterday, 'utf-8');
+    // Only include last 30 lines from yesterday
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > 0) {
+      history += `--- Yesterday ---\n${lines.slice(-30).join('\n')}\n\n`;
+    }
+  }
+  if (fs.existsSync(today)) {
+    history += `--- Today ---\n${fs.readFileSync(today, 'utf-8')}`;
+  }
+
+  return history.trim() || 'No previous conversation history.';
+}
+
+// Load user profile
+function getUserProfile(userId: string): string {
+  const filePath = path.join(PROFILES_DIR, `${userId}.txt`);
+  if (fs.existsSync(filePath)) return fs.readFileSync(filePath, 'utf-8');
+  return '';
 }
 
 // Invoke Claude Code CLI to answer a question
@@ -193,6 +227,11 @@ function getSystemPrompt(): string {
     `- Don't try to mediate or play peacekeeper. If someone's wrong, say so.`,
     `- Keep responses under 2000 characters (Discord's limit).`,
     `- You can read and write to the messages directory for memory across conversations.`,
+    ``,
+    `Memory:`,
+    `- Conversation logs are in ${HISTORY_DIR}/ as daily files named #channel_YYYY-MM-DD.txt`,
+    `- User profiles are in ${PROFILES_DIR}/ as <user_id>.txt — update these when you learn something notable about a user (preferences, expertise, interests, etc.)`,
+    `- When you learn something new about a user, write it to their profile file so you remember next time.`,
   ].join('\n');
 }
 
@@ -207,16 +246,24 @@ async function downloadAttachment(url: string, filename: string): Promise<string
   return filePath;
 }
 
-async function askClaude(question: string, author: string, channelName: string, serverName: string, imagePaths: string[] = []): Promise<string> {
-  const recentHistory = loadRecentHistory(10);
+async function askClaude(question: string, author: string, authorId: string, channelName: string, serverName: string, imagePaths: string[] = []): Promise<string> {
+  const recentHistory = loadRecentHistory(channelName);
+  const userProfile = getUserProfile(authorId);
 
   const promptParts = [
-    `Recent conversation history for context:`,
+    `Recent conversation history in #${channelName}:`,
     recentHistory,
-    ``,
-    `Current question from ${author} in #${channelName} (${serverName}):`,
-    question,
   ];
+
+  if (userProfile) {
+    promptParts.push('');
+    promptParts.push(`Profile notes for ${author}:`);
+    promptParts.push(userProfile);
+  }
+
+  promptParts.push('');
+  promptParts.push(`Current question from ${author} in #${channelName} (${serverName}):`);
+  promptParts.push(question);
 
   if (imagePaths.length > 0) {
     promptParts.push('');
@@ -539,7 +586,7 @@ client.on('messageCreate', async (msg: Message) => {
     console.error(`[Bot] Processing question: "${question}" (${allAttachments.length} images)`);
 
     // Save the incoming message
-    saveMessage(msg, 'pending');
+    savePending(msg);
 
     // Download attachments
     const imagePaths: string[] = [];
@@ -560,6 +607,7 @@ client.on('messageCreate', async (msg: Message) => {
     const response = await askClaude(
       question,
       msg.author.tag,
+      msg.author.id,
       msg.channel.name,
       msg.guild?.name || 'DM',
       imagePaths
@@ -589,29 +637,12 @@ client.on('messageCreate', async (msg: Message) => {
 
     console.error(`[Bot] Response sent successfully`);
 
-    // Save both the question and response to history
-    saveMessage(msg, 'history');
-
-    // Save Claude's response as a history file too
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const responseFile = `${timestamp}_claude-response.txt`;
-    const responseContent = [
-      `ID: claude-response`,
-      `Author: Claude (bot)`,
-      `Channel: #${msg.channel.name}`,
-      `Server: ${msg.guild?.name || 'DM'}`,
-      `In-Reply-To: ${msg.id} (${msg.author.tag})`,
-      `Timestamp: ${new Date().toISOString()}`,
-      `---`,
-      response,
-    ].join('\n');
-    fs.writeFileSync(path.join(HISTORY_DIR, responseFile), responseContent, 'utf-8');
+    // Append question and response to daily channel log
+    appendToLog(msg.author.tag, rawQuestion, msg.channel.name, msg.createdAt);
+    appendToLog(botName + ' (bot)', response, msg.channel.name);
 
     // Remove from pending
-    const pendingFiles = fs.readdirSync(PENDING_DIR).filter(f => f.includes(msg.id));
-    for (const f of pendingFiles) {
-      fs.unlinkSync(path.join(PENDING_DIR, f));
-    }
+    removePending(msg.id);
   } catch (error: any) {
     console.error(`[Bot] Unhandled error in messageCreate: ${error.message}`);
     console.error(error.stack);
