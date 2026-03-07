@@ -5,11 +5,26 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, TextChannel, Message } from 'discord.js';
 import { z } from 'zod';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
+
+const execFileAsync = promisify(execFile);
 
 // Load environment variables
 dotenv.config();
+
+// Message history directory
+const MESSAGES_DIR = process.env.MESSAGES_DIR || path.join(process.cwd(), 'messages');
+const HISTORY_DIR = path.join(MESSAGES_DIR, 'history');
+const PENDING_DIR = path.join(MESSAGES_DIR, 'pending');
+
+// Ensure directories exist
+fs.mkdirSync(HISTORY_DIR, { recursive: true });
+fs.mkdirSync(PENDING_DIR, { recursive: true });
 
 // Discord client setup
 const client = new Client({
@@ -91,6 +106,64 @@ async function findChannel(channelIdentifier: string, guildIdentifier?: string):
   throw new Error(`Channel "${channelIdentifier}" is not a text channel or not found in server "${guild.name}"`);
 }
 
+// Save a message to a text file
+function saveMessage(msg: Message, type: 'history' | 'pending' = 'history') {
+  const dir = type === 'pending' ? PENDING_DIR : HISTORY_DIR;
+  const timestamp = msg.createdAt.toISOString().replace(/[:.]/g, '-');
+  const filename = `${timestamp}_${msg.id}.txt`;
+  const content = [
+    `ID: ${msg.id}`,
+    `Author: ${msg.author.tag} (${msg.author.id})`,
+    `Channel: #${(msg.channel as TextChannel).name}`,
+    `Server: ${msg.guild?.name || 'DM'}`,
+    `Timestamp: ${msg.createdAt.toISOString()}`,
+    `---`,
+    msg.content,
+  ].join('\n');
+
+  fs.writeFileSync(path.join(dir, filename), content, 'utf-8');
+  return filename;
+}
+
+// Load recent history files for context
+function loadRecentHistory(limit = 20): string {
+  const files = fs.readdirSync(HISTORY_DIR)
+    .filter(f => f.endsWith('.txt'))
+    .sort()
+    .slice(-limit);
+
+  if (files.length === 0) return 'No previous conversation history.';
+
+  return files.map(f => fs.readFileSync(path.join(HISTORY_DIR, f), 'utf-8')).join('\n\n===\n\n');
+}
+
+// Invoke Claude Code CLI to answer a question
+async function askClaude(question: string, author: string, channelName: string, serverName: string): Promise<string> {
+  const recentHistory = loadRecentHistory(10);
+
+  const prompt = [
+    `You are responding to a Discord user's question. Be concise and helpful. Keep responses under 2000 characters (Discord's limit).`,
+    ``,
+    `Recent conversation history for context:`,
+    recentHistory,
+    ``,
+    `Current question from ${author} in #${channelName} (${serverName}):`,
+    question,
+  ].join('\n');
+
+  try {
+    const { stdout } = await execFileAsync('claude', ['-p', prompt], {
+      timeout: 120000, // 2 minute timeout
+      maxBuffer: 1024 * 1024,
+      env: { ...process.env },
+    });
+    return stdout.trim() || 'Sorry, I could not generate a response.';
+  } catch (error: any) {
+    console.error('Claude CLI error:', error.message);
+    return 'Sorry, I encountered an error processing your request.';
+  }
+}
+
 // Updated validation schemas
 const SendMessageSchema = z.object({
   server: z.string().optional().describe('Server name or ID (optional if bot is only in one server)'),
@@ -144,6 +217,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "read-message-history",
+        description: "Read saved message history files from disk (messages exchanged via !ask or bot mentions)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Number of recent history entries to read (default 20)",
+              default: 20,
+            },
+            type: {
+              type: "string",
+              enum: ["history", "pending"],
+              description: "Read from history (past exchanges) or pending (unanswered questions)",
+              default: "history",
+            },
+          },
+        },
+      },
+      {
         name: "read-messages",
         description: "Read recent messages from a Discord channel",
         inputSchema: {
@@ -189,6 +282,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "read-message-history": {
+        const limit = (args as any)?.limit ?? 20;
+        const type = (args as any)?.type === 'pending' ? 'pending' : 'history';
+        const dir = type === 'pending' ? PENDING_DIR : HISTORY_DIR;
+
+        const files = fs.readdirSync(dir)
+          .filter(f => f.endsWith('.txt'))
+          .sort()
+          .slice(-limit);
+
+        if (files.length === 0) {
+          return {
+            content: [{ type: "text", text: `No ${type} messages found.` }],
+          };
+        }
+
+        const messages = files.map(f => fs.readFileSync(path.join(dir, f), 'utf-8'));
+        return {
+          content: [{ type: "text", text: messages.join('\n\n===\n\n') }],
+        };
+      }
+
       case "read-messages": {
         const { channel: channelIdentifier, limit } = ReadMessagesSchema.parse(args);
         const channel = await findChannel(channelIdentifier);
@@ -228,6 +343,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Discord client login and error handling
 client.once('ready', () => {
   console.error('Discord bot is ready!');
+  console.error(`Messages will be saved to: ${MESSAGES_DIR}`);
+});
+
+// Listen for !ask commands and bot mentions
+client.on('messageCreate', async (msg: Message) => {
+  if (msg.author.bot) return;
+  if (!(msg.channel instanceof TextChannel)) return;
+
+  const isMention = msg.mentions.has(client.user!);
+  const isAskCommand = msg.content.startsWith('!ask ');
+
+  if (!isMention && !isAskCommand) return;
+
+  // Extract the question
+  const question = isAskCommand
+    ? msg.content.slice(5).trim()
+    : msg.content.replace(`<@${client.user!.id}>`, '').trim();
+
+  if (!question) {
+    await msg.reply('Please provide a question! Usage: `!ask <your question>` or mention me with a question.');
+    return;
+  }
+
+  // Save the incoming message
+  saveMessage(msg, 'pending');
+
+  // Show typing indicator while Claude thinks
+  await msg.channel.sendTyping();
+
+  // Get response from Claude CLI
+  const response = await askClaude(
+    question,
+    msg.author.tag,
+    msg.channel.name,
+    msg.guild?.name || 'DM'
+  );
+
+  // Send the response (split if over 2000 chars)
+  if (response.length <= 2000) {
+    await msg.reply(response);
+  } else {
+    const chunks = response.match(/.{1,2000}/gs) || [response];
+    for (const chunk of chunks) {
+      await msg.channel.send(chunk);
+    }
+  }
+
+  // Save both the question and response to history
+  saveMessage(msg, 'history');
+
+  // Save Claude's response as a history file too
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const responseFile = `${timestamp}_claude-response.txt`;
+  const responseContent = [
+    `ID: claude-response`,
+    `Author: Claude (bot)`,
+    `Channel: #${msg.channel.name}`,
+    `Server: ${msg.guild?.name || 'DM'}`,
+    `In-Reply-To: ${msg.id} (${msg.author.tag})`,
+    `Timestamp: ${new Date().toISOString()}`,
+    `---`,
+    response,
+  ].join('\n');
+  fs.writeFileSync(path.join(HISTORY_DIR, responseFile), responseContent, 'utf-8');
+
+  // Remove from pending
+  const pendingFiles = fs.readdirSync(PENDING_DIR).filter(f => f.includes(msg.id));
+  for (const f of pendingFiles) {
+    fs.unlinkSync(path.join(PENDING_DIR, f));
+  }
 });
 
 // Start the server
