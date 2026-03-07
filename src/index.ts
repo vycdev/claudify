@@ -569,6 +569,7 @@ function writeMcpConfig() {
   const config = {
     mcpServers: {
       discord: {
+        type: 'http',
         url: `http://localhost:${MCP_PORT}/mcp`,
       },
     },
