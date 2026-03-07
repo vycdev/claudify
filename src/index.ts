@@ -7,7 +7,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Client, GatewayIntentBits, TextChannel, Message } from 'discord.js';
 import { z } from 'zod';
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import fs from 'fs';
 import path from 'path';
 
@@ -233,6 +236,7 @@ async function askClaude(question: string, author: string, channelName: string, 
 
     const { stdout, stderr } = await runClaude([
       '-p',
+      '--model', 'sonnet',
       '--system-prompt', getSystemPrompt(),
       '--tools', 'WebSearch,WebFetch,Read,Write',
       '--allowedTools', 'WebSearch,WebFetch,Read,Write',
@@ -445,12 +449,15 @@ client.on('messageCreate', async (msg: Message) => {
     if (msg.content.trim() === '!usage') {
       console.error(`[Bot] Usage requested by ${msg.author.tag}`);
       try {
-        const { stdout, stderr } = await runClaude(['usage'], '');
-        const output = stdout.trim() || stderr.trim() || 'Could not retrieve usage info.';
-        await msg.reply(output);
+        const { stdout, stderr } = await execFileAsync('claude', ['usage'], {
+          timeout: 30000,
+          env: process.env,
+        });
+        const output = (stdout + stderr).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
+        await msg.reply('```\n' + output + '\n```');
       } catch (err: any) {
-        const output = err.stdout?.trim() || err.stderr?.trim() || 'Could not retrieve usage info.';
-        await msg.reply(output);
+        const output = ((err.stdout || '') + (err.stderr || '')).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
+        await msg.reply('```\n' + output + '\n```');
       }
       return;
     }
