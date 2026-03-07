@@ -1,0 +1,13 @@
+services:
+  discord-mcp:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MESSAGES_DIR=/app/messages
+    volumes:
+      - messages:/app/messages
+
+volumes:
+  messages:
