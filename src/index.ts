@@ -453,9 +453,14 @@ client.on('messageCreate', async (msg: Message) => {
           timeout: 30000,
           env: process.env,
         });
+        console.error(`[Bot] Usage stdout: ${stdout}`);
+        console.error(`[Bot] Usage stderr: ${stderr}`);
         const output = (stdout + stderr).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
         await msg.reply('```\n' + output + '\n```');
       } catch (err: any) {
+        console.error(`[Bot] Usage error: ${err.message}`);
+        console.error(`[Bot] Usage error stdout: ${err.stdout}`);
+        console.error(`[Bot] Usage error stderr: ${err.stderr}`);
         const output = ((err.stdout || '') + (err.stderr || '')).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
         await msg.reply('```\n' + output + '\n```');
       }
