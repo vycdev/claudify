@@ -8,8 +8,8 @@ services:
       - MESSAGES_DIR=/app/messages
     volumes:
       - messages:/app/messages
-      - claude-config:/root/.claude
+      - claude-home:/root
 
 volumes:
   messages:
-  claude-config:
+  claude-home:
