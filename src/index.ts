@@ -449,19 +449,26 @@ client.on('messageCreate', async (msg: Message) => {
     if (msg.content.trim() === '!usage') {
       console.error(`[Bot] Usage requested by ${msg.author.tag}`);
       try {
-        const { stdout, stderr } = await execFileAsync('claude', ['usage'], {
+        // claude usage needs a TTY, use script to fake one
+        const { stdout } = await execFileAsync('script', ['-q', '-c', 'claude usage', '/dev/null'], {
           timeout: 30000,
-          env: process.env,
+          env: { ...process.env, TERM: 'dumb' },
         });
-        console.error(`[Bot] Usage stdout: ${stdout}`);
-        console.error(`[Bot] Usage stderr: ${stderr}`);
-        const output = (stdout + stderr).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
+        console.error(`[Bot] Usage output length: ${stdout.length}`);
+        // Strip ANSI codes and carriage returns
+        const output = stdout
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          .replace(/\r/g, '')
+          .trim() || 'Could not retrieve usage info.';
         await msg.reply('```\n' + output + '\n```');
       } catch (err: any) {
         console.error(`[Bot] Usage error: ${err.message}`);
         console.error(`[Bot] Usage error stdout: ${err.stdout}`);
         console.error(`[Bot] Usage error stderr: ${err.stderr}`);
-        const output = ((err.stdout || '') + (err.stderr || '')).replace(/\x1b\[[0-9;]*m/g, '').trim() || 'Could not retrieve usage info.';
+        const output = ((err.stdout || '') + (err.stderr || ''))
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          .replace(/\r/g, '')
+          .trim() || 'Could not retrieve usage info.';
         await msg.reply('```\n' + output + '\n```');
       }
       return;
