@@ -1,157 +1,89 @@
-# Discord MCP Server
+# Claudify
 
-A Model Context Protocol (MCP) server that enables LLMs to interact with Discord channels, allowing them to send and read messages through Discord's API. Using this server, LLMs like Claude can directly interact with Discord channels while maintaining user control and security.
+An AI-powered Discord bot that uses Claude Code CLI to answer questions directly in your server. It also doubles as an MCP server, so Claude Desktop or Claude Code can read and send Discord messages.
 
-## Features
+## How it works
 
-- Send messages to Discord channels
-- Read recent messages from channels
-- Automatic server and channel discovery
-- Support for both channel names and IDs
-- Proper error handling and validation
+1. A user sends `!ask <question>` or mentions the bot in a channel
+2. The bot spawns the Claude Code CLI to generate a response
+3. The response is sent back to the channel as a reply
+4. All exchanges are saved as text files, giving Claude memory across conversations
 
-## Prerequisites
+Claude is sandboxed — it can only search the web and read/write its own message history files. No shell access, no code execution.
 
-- Node.js 16.x or higher
-- A Discord bot token
-- The bot must be invited to your server with proper permissions:
-  - Read Messages/View Channels
-  - Send Messages
-  - Read Message History
+## Setup (Docker)
 
-## Setup
+1. Create a Discord bot and invite it to your server with these permissions:
+   - Read Messages/View Channels
+   - Send Messages
+   - Read Message History
 
-1. Clone this repository:
+2. Set your environment variables in `docker-compose.yml`:
+   - `DISCORD_TOKEN` — your bot token
+   - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave as placeholder to allow everyone)
+   - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
+
+3. Run it:
 ```bash
-git clone https://github.com/yourusername/discordmcp.git
-cd discordmcp
+docker compose up
 ```
 
-2. Install dependencies:
+4. On first run, send `!ask hello` in Discord. Check the container logs — Claude CLI will print a login URL. Open it in your browser to authenticate.
+
+5. Once authenticated, restart with:
 ```bash
-npm install
+docker compose up -d
 ```
 
-3. Create a `.env` file in the root directory with your Discord bot token:
-```
-DISCORD_TOKEN=your_discord_bot_token_here
-```
+Auth persists across restarts via the `claude-home` volume.
 
-4. Build the server:
-```bash
-npm run build
-```
+## MCP Server Tools
 
-## Usage with Claude for Desktop
+When used as an MCP server (e.g., with Claude Desktop or Claude Code), these tools are available:
 
-1. Open your Claude for Desktop configuration file:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+| Tool | Description |
+|------|-------------|
+| `send-message` | Send a message to a Discord channel |
+| `read-messages` | Read recent messages from a channel via Discord API |
+| `read-message-history` | Read saved message history/pending files from disk |
 
-2. Add the Discord MCP server configuration:
+### MCP Configuration
+
 ```json
 {
   "mcpServers": {
     "discord": {
       "command": "node",
-      "args": ["path/to/discordmcp/build/index.js"],
+      "args": ["path/to/claudify/build/index.js"],
       "env": {
-        "DISCORD_TOKEN": "your_discord_bot_token_here"
+        "DISCORD_TOKEN": "your_token"
       }
     }
   }
 }
 ```
 
-3. Restart Claude for Desktop
-
-## Available Tools
-
-### send-message
-Sends a message to a specified Discord channel.
-
-Parameters:
-- `server` (optional): Server name or ID (required if bot is in multiple servers)
-- `channel`: Channel name (e.g., "general") or ID
-- `message`: Message content to send
-
-Example:
-```json
-{
-  "channel": "general",
-  "message": "Hello from MCP!"
-}
-```
-
-### read-messages
-Reads recent messages from a specified Discord channel.
-
-Parameters:
-- `server` (optional): Server name or ID (required if bot is in multiple servers)
-- `channel`: Channel name (e.g., "general") or ID
-- `limit` (optional): Number of messages to fetch (default: 50, max: 100)
-
-Example:
-```json
-{
-  "channel": "general",
-  "limit": 10
-}
-```
-
 ## Development
 
-1. Install development dependencies:
 ```bash
-npm install --save-dev typescript @types/node
+npm install
+npm run dev      # watch mode
+npm run build    # compile
+npm start        # run
 ```
 
-2. Start the server in development mode:
-```bash
-npm run dev
-```
-
-## Testing
-
-You can test the server using the MCP Inspector:
-
+Test with the MCP Inspector:
 ```bash
 npx @modelcontextprotocol/inspector node build/index.js
 ```
 
-## Examples
+## Security
 
-Here are some example interactions you can try with Claude after setting up the Discord MCP server:
-
-1. "Can you read the last 5 messages from the general channel?"
-2. "Please send a message to the announcements channel saying 'Meeting starts in 10 minutes'"
-3. "What were the most recent messages in the development channel about the latest release?"
-
-Claude will use the appropriate tools to interact with Discord while asking for your approval before sending any messages.
-
-## Security Considerations
-
-- The bot requires proper Discord permissions to function
-- All message sending operations require explicit user approval
-- Environment variables should be properly secured
-- Token should never be committed to version control
-- Channel access is limited to channels the bot has been given access to
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Claude CLI is restricted to `WebSearch`, `WebFetch`, `Read`, and `Write` tools only
+- File access is scoped to the messages directory
+- Role-based access control limits who can interact with the bot
+- Runs in Docker for isolation
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-If you encounter any issues or have questions:
-1. Check the GitHub Issues section
-2. Consult the MCP documentation at https://modelcontextprotocol.io
-3. Open a new issue with detailed reproduction steps
+MIT
