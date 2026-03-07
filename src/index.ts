@@ -403,7 +403,17 @@ client.on('messageCreate', async (msg: Message) => {
   if (response.length <= 2000) {
     await msg.reply(response);
   } else {
-    const chunks = response.match(/.{1,2000}/gs) || [response];
+    const chunks: string[] = [];
+    let current = '';
+    for (const line of response.split('\n')) {
+      if (current.length + line.length + 1 > 2000) {
+        chunks.push(current);
+        current = line;
+      } else {
+        current += (current ? '\n' : '') + line;
+      }
+    }
+    if (current) chunks.push(current);
     for (const chunk of chunks) {
       await msg.channel.send(chunk);
     }
