@@ -815,17 +815,13 @@ client.on('messageCreate', async (msg: Message) => {
         if (full.length <= 2000) {
           await msg.reply(full);
         } else {
-          // Split into chunks
-          const chunks: string[] = [];
-          let remaining = memory;
-          const maxChunk = 2000 - 10; // leave room for formatting
+          // First chunk accounts for header length
+          const firstMax = 2000 - header.length;
+          await msg.reply(header + memory.slice(0, firstMax));
+          let remaining = memory.slice(firstMax);
           while (remaining.length > 0) {
-            chunks.push(remaining.slice(0, maxChunk));
-            remaining = remaining.slice(maxChunk);
-          }
-          await msg.reply(header + chunks[0]);
-          for (let i = 1; i < chunks.length; i++) {
-            await (msg.channel as TextChannel).send(chunks[i]);
+            await (msg.channel as TextChannel).send(remaining.slice(0, 2000));
+            remaining = remaining.slice(2000);
           }
         }
       } else {
@@ -845,16 +841,12 @@ client.on('messageCreate', async (msg: Message) => {
         if (full.length <= 2000) {
           await msg.reply(full);
         } else {
-          const chunks: string[] = [];
-          let remaining = profile;
-          const maxChunk = 2000 - 10;
+          const firstMax = 2000 - header.length;
+          await msg.reply(header + profile.slice(0, firstMax));
+          let remaining = profile.slice(firstMax);
           while (remaining.length > 0) {
-            chunks.push(remaining.slice(0, maxChunk));
-            remaining = remaining.slice(maxChunk);
-          }
-          await msg.reply(header + chunks[0]);
-          for (let i = 1; i < chunks.length; i++) {
-            await (msg.channel as TextChannel).send(chunks[i]);
+            await (msg.channel as TextChannel).send(remaining.slice(0, 2000));
+            remaining = remaining.slice(2000);
           }
         }
       } else {
