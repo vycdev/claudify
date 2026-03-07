@@ -521,11 +521,29 @@ function createMcpServer(): Server {
           const { channel: channelIdentifier, limit } = ReadMessagesSchema.parse(args);
           const channel = await findChannel(channelIdentifier);
           const messages = await channel.messages.fetch({ limit });
-          const formatted = Array.from(messages.values()).map(msg => ({
-            channel: `#${channel.name}`, server: channel.guild.name,
-            author: msg.author.tag, content: msg.content, timestamp: msg.createdAt.toISOString(),
-          }));
-          return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
+          const formatted = [];
+          for (const msg of messages.values()) {
+            const entry: any = {
+              channel: `#${channel.name}`, server: channel.guild.name,
+              author: msg.author.tag, content: msg.content, timestamp: msg.createdAt.toISOString(),
+            };
+            // Download image attachments and include paths
+            const images: string[] = [];
+            for (const att of msg.attachments.values()) {
+              if (att.contentType?.startsWith('image/')) {
+                try {
+                  const filePath = await downloadAttachment(att.url, `mcp_${att.id}_${att.name || 'image.png'}`);
+                  images.push(filePath);
+                } catch { /* skip failed downloads */ }
+              }
+            }
+            if (images.length > 0) entry.images = images;
+            formatted.push(entry);
+          }
+          const resultText = JSON.stringify(formatted, null, 2);
+          const hasImages = formatted.some((m: any) => m.images?.length);
+          const hint = hasImages ? '\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above.' : '';
+          return { content: [{ type: "text", text: resultText + hint }] };
         }
         default:
           throw new Error(`Unknown tool: ${name}`);
