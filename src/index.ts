@@ -810,7 +810,24 @@ client.on('messageCreate', async (msg: Message) => {
       }
       const memory = getServerMemory(msg.guild.id);
       if (memory) {
-        await msg.reply(`**Server memory for ${msg.guild.name}:**\n${memory}`);
+        const header = `**Server memory for ${msg.guild.name}:**\n`;
+        const full = header + memory;
+        if (full.length <= 2000) {
+          await msg.reply(full);
+        } else {
+          // Split into chunks
+          const chunks: string[] = [];
+          let remaining = memory;
+          const maxChunk = 2000 - 10; // leave room for formatting
+          while (remaining.length > 0) {
+            chunks.push(remaining.slice(0, maxChunk));
+            remaining = remaining.slice(maxChunk);
+          }
+          await msg.reply(header + chunks[0]);
+          for (let i = 1; i < chunks.length; i++) {
+            await (msg.channel as TextChannel).send(chunks[i]);
+          }
+        }
       } else {
         await msg.reply(`No server memory found for ${msg.guild.name}. Server memory is built automatically as users interact with the bot.`);
       }
