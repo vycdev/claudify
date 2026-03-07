@@ -682,6 +682,19 @@ client.on('messageCreate', async (msg: Message) => {
       return;
     }
 
+    // Handle !profile command
+    if (msg.content.trim().startsWith('!profile')) {
+      const mentioned = msg.mentions.users.first();
+      const targetUser = mentioned || msg.author;
+      const profile = getUserProfile(targetUser.id);
+      if (profile) {
+        await msg.reply(`**Profile for ${targetUser.tag}:**\n${profile}`);
+      } else {
+        await msg.reply(`No profile found for ${targetUser.tag}. Profiles are built automatically as users interact with the bot.`);
+      }
+      return;
+    }
+
     const isMention = msg.mentions.has(client.user!);
     const isAskCommand = msg.content.startsWith('!ask ');
     const isReplyToBot = msg.reference?.messageId
