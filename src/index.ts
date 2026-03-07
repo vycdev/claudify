@@ -196,16 +196,37 @@ function getSystemPrompt(): string {
   ].join('\n');
 }
 
-async function askClaude(question: string, author: string, channelName: string, serverName: string): Promise<string> {
+const IMAGES_DIR = path.join(MESSAGES_DIR, 'images');
+fs.mkdirSync(IMAGES_DIR, { recursive: true });
+
+async function downloadAttachment(url: string, filename: string): Promise<string> {
+  const response = await fetch(url);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const filePath = path.join(IMAGES_DIR, filename);
+  fs.writeFileSync(filePath, buffer);
+  return filePath;
+}
+
+async function askClaude(question: string, author: string, channelName: string, serverName: string, imagePaths: string[] = []): Promise<string> {
   const recentHistory = loadRecentHistory(10);
 
-  const prompt = [
+  const promptParts = [
     `Recent conversation history for context:`,
     recentHistory,
     ``,
     `Current question from ${author} in #${channelName} (${serverName}):`,
     question,
-  ].join('\n');
+  ];
+
+  if (imagePaths.length > 0) {
+    promptParts.push('');
+    promptParts.push(`The user attached ${imagePaths.length} image(s). Use the Read tool to view them:`);
+    for (const imgPath of imagePaths) {
+      promptParts.push(`- ${imgPath}`);
+    }
+  }
+
+  const prompt = promptParts.join('\n');
 
   try {
     console.error(`[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`);
@@ -440,11 +461,25 @@ client.on('messageCreate', async (msg: Message) => {
 
     // Fetch referenced message if this is a reply
     let replyContext = '';
+    const allAttachments: { url: string; name: string }[] = [];
     if (msg.reference?.messageId) {
       const refMsg = await msg.channel.messages.fetch(msg.reference.messageId).catch(() => null);
       if (refMsg) {
         replyContext = `[Replying to ${refMsg.author.tag}: "${refMsg.content}"]\n`;
         console.error(`[Bot] Reply context from ${refMsg.author.tag}: ${refMsg.content}`);
+        // Collect attachments from referenced message
+        for (const att of refMsg.attachments.values()) {
+          if (att.contentType?.startsWith('image/')) {
+            allAttachments.push({ url: att.url, name: `ref_${att.id}_${att.name || 'image.png'}` });
+          }
+        }
+      }
+    }
+
+    // Collect attachments from current message
+    for (const att of msg.attachments.values()) {
+      if (att.contentType?.startsWith('image/')) {
+        allAttachments.push({ url: att.url, name: `${att.id}_${att.name || 'image.png'}` });
       }
     }
 
@@ -461,10 +496,22 @@ client.on('messageCreate', async (msg: Message) => {
       return;
     }
 
-    console.error(`[Bot] Processing question: "${question}"`);
+    console.error(`[Bot] Processing question: "${question}" (${allAttachments.length} images)`);
 
     // Save the incoming message
     saveMessage(msg, 'pending');
+
+    // Download attachments
+    const imagePaths: string[] = [];
+    for (const att of allAttachments) {
+      try {
+        const filePath = await downloadAttachment(att.url, att.name);
+        imagePaths.push(filePath);
+        console.error(`[Bot] Downloaded image: ${att.name}`);
+      } catch (err: any) {
+        console.error(`[Bot] Failed to download image ${att.name}: ${err.message}`);
+      }
+    }
 
     // Show typing indicator while Claude thinks
     await msg.channel.sendTyping();
@@ -474,7 +521,8 @@ client.on('messageCreate', async (msg: Message) => {
       question,
       msg.author.tag,
       msg.channel.name,
-      msg.guild?.name || 'DM'
+      msg.guild?.name || 'DM',
+      imagePaths
     );
 
     console.error(`[Bot] Sending response (${response.length} chars) to #${msg.channel.name}`);
