@@ -24,6 +24,7 @@ function runClaude(args: string[], input: string, model?: string): Promise<{ std
       args = ['--model', model, ...args];
     }
 
+    console.error(`[Claude CLI] Spawning with model=${model || 'default'}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || 'unset'}`);
     const proc = spawn('claude', args, { env });
 
     let stdout = '';
@@ -876,8 +877,22 @@ client.on('messageCreate', async (msg: Message) => {
     if (msg.reference?.messageId) {
       const refMsg = await msg.channel.messages.fetch(msg.reference.messageId).catch(() => null);
       if (refMsg) {
-        replyContext = `[Replying to ${refMsg.author.tag}: "${refMsg.content}"]\n`;
-        console.error(`[Bot] Reply context from ${refMsg.author.tag}: ${refMsg.content}`);
+        let refText = refMsg.content;
+        if (refMsg.embeds.length > 0) {
+          const embedTexts = refMsg.embeds.map(e => {
+            const parts: string[] = [];
+            if (e.title) parts.push(e.title);
+            if (e.description) parts.push(e.description);
+            if (e.fields?.length) parts.push(...e.fields.map(f => `${f.name}: ${f.value}`));
+            if (e.footer?.text) parts.push(e.footer.text);
+            return parts.join('\n');
+          }).filter(t => t);
+          if (embedTexts.length > 0) {
+            refText += (refText ? '\n' : '') + '[Embeds]\n' + embedTexts.join('\n---\n');
+          }
+        }
+        replyContext = `[Replying to ${refMsg.author.tag}: "${refText}"]\n`;
+        console.error(`[Bot] Reply context from ${refMsg.author.tag}: ${refText.slice(0, 200)}`);
         // Collect attachments from referenced message
         for (const att of refMsg.attachments.values()) {
           if (att.contentType?.startsWith('image/')) {
