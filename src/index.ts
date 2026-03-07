@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import dotenv from 'dotenv';
 import {
   CallToolRequestSchema,
@@ -8,6 +8,7 @@ import {
 import { Client, GatewayIntentBits, TextChannel, Message } from 'discord.js';
 import { z } from 'zod';
 import { spawn } from 'child_process';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
@@ -360,6 +361,12 @@ function getSystemPrompt(): string {
     `- User profiles are maintained automatically — the user's profile is included in your prompt when they talk to you.`,
     `- You do NOT need to write or update profile files. A background system handles that after each conversation.`,
     `- Conversation logs are in ${HISTORY_DIR}/ if you need to look up older history beyond what's provided.`,
+    ``,
+    `Discord tools (via MCP):`,
+    `- You have access to Discord tools: send-message, read-messages, read-message-history.`,
+    `- Use read-messages to read live messages from any channel the bot can see.`,
+    `- Use send-message to send messages to other channels if needed.`,
+    `- Only use these tools when the user's request requires interacting with Discord beyond the current channel.`,
   ].join('\n');
 }
 
@@ -410,9 +417,9 @@ async function askClaude(question: string, author: string, authorId: string, cha
       '-p',
       '--model', 'sonnet',
       '--system-prompt', getSystemPrompt(),
-      '--tools', 'WebSearch,WebFetch,Read,Write',
-      '--allowedTools', 'WebSearch,WebFetch,Read,Write',
+      '--allowedTools', 'WebSearch,WebFetch,Read,Write,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history',
       '--add-dir', MESSAGES_DIR,
+      '--mcp-config', MCP_CONFIG_PATH,
     ], prompt);
 
     if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
@@ -429,7 +436,7 @@ async function askClaude(question: string, author: string, authorId: string, cha
   }
 }
 
-// Updated validation schemas
+// Validation schemas for MCP tools
 const SendMessageSchema = z.object({
   server: z.string().optional().describe('Server name or ID (optional if bot is only in one server)'),
   channel: z.string().describe('Channel name (e.g., "general") or ID'),
@@ -442,41 +449,24 @@ const ReadMessagesSchema = z.object({
   limit: z.number().min(1).max(100).default(50),
 });
 
-// Create server instance
-const server = new Server(
-  {
-    name: "discord",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
+// Factory: creates a fresh MCP Server with Discord tools registered
+function createMcpServer(): Server {
+  const mcpServer = new Server(
+    { name: "discord", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
 
-// List available tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
+  mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
         name: "send-message",
         description: "Send a message to a Discord channel",
         inputSchema: {
-          type: "object",
+          type: "object" as const,
           properties: {
-            server: {
-              type: "string",
-              description: 'Server name or ID (optional if bot is only in one server)',
-            },
-            channel: {
-              type: "string",
-              description: 'Channel name (e.g., "general") or ID',
-            },
-            message: {
-              type: "string",
-              description: "Message content to send",
-            },
+            server: { type: "string", description: 'Server name or ID (optional if bot is only in one server)' },
+            channel: { type: "string", description: 'Channel name (e.g., "general") or ID' },
+            message: { type: "string", description: "Message content to send" },
           },
           required: ["channel", "message"],
         },
@@ -485,125 +475,137 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "read-message-history",
         description: "Read saved message history files from disk (messages exchanged via !ask or bot mentions)",
         inputSchema: {
-          type: "object",
+          type: "object" as const,
           properties: {
-            limit: {
-              type: "number",
-              description: "Number of recent history entries to read (default 20)",
-              default: 20,
-            },
-            type: {
-              type: "string",
-              enum: ["history", "pending"],
-              description: "Read from history (past exchanges) or pending (unanswered questions)",
-              default: "history",
-            },
+            limit: { type: "number", description: "Number of recent history entries to read (default 20)", default: 20 },
+            type: { type: "string", enum: ["history", "pending"], description: "Read from history or pending", default: "history" },
           },
         },
       },
       {
         name: "read-messages",
-        description: "Read recent messages from a Discord channel",
+        description: "Read recent messages from a Discord channel (live from Discord API)",
         inputSchema: {
-          type: "object",
+          type: "object" as const,
           properties: {
-            server: {
-              type: "string",
-              description: 'Server name or ID (optional if bot is only in one server)',
-            },
-            channel: {
-              type: "string",
-              description: 'Channel name (e.g., "general") or ID',
-            },
-            limit: {
-              type: "number",
-              description: "Number of messages to fetch (max 100)",
-              default: 50,
-            },
+            server: { type: "string", description: 'Server name or ID (optional if bot is only in one server)' },
+            channel: { type: "string", description: 'Channel name (e.g., "general") or ID' },
+            limit: { type: "number", description: "Number of messages to fetch (max 100)", default: 50 },
           },
           required: ["channel"],
         },
       },
     ],
-  };
-});
+  }));
 
-// Handle tool execution
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    switch (name) {
-      case "send-message": {
-        const { channel: channelIdentifier, message } = SendMessageSchema.parse(args);
-        const channel = await findChannel(channelIdentifier);
-        
-        const sent = await channel.send(message);
-        return {
-          content: [{
-            type: "text",
-            text: `Message sent successfully to #${channel.name} in ${channel.guild.name}. Message ID: ${sent.id}`,
-          }],
-        };
-      }
-
-      case "read-message-history": {
-        const limit = (args as any)?.limit ?? 20;
-        const type = (args as any)?.type === 'pending' ? 'pending' : 'history';
-        const dir = type === 'pending' ? PENDING_DIR : HISTORY_DIR;
-
-        const files = fs.readdirSync(dir)
-          .filter(f => f.endsWith('.txt'))
-          .sort()
-          .slice(-limit);
-
-        if (files.length === 0) {
-          return {
-            content: [{ type: "text", text: `No ${type} messages found.` }],
-          };
+  mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    try {
+      switch (name) {
+        case "send-message": {
+          const { channel: channelIdentifier, message } = SendMessageSchema.parse(args);
+          const channel = await findChannel(channelIdentifier);
+          const sent = await channel.send(message);
+          return { content: [{ type: "text", text: `Message sent to #${channel.name}. ID: ${sent.id}` }] };
         }
-
-        const messages = files.map(f => fs.readFileSync(path.join(dir, f), 'utf-8'));
-        return {
-          content: [{ type: "text", text: messages.join('\n\n===\n\n') }],
-        };
+        case "read-message-history": {
+          const limit = (args as any)?.limit ?? 20;
+          const type = (args as any)?.type === 'pending' ? 'pending' : 'history';
+          const dir = type === 'pending' ? PENDING_DIR : HISTORY_DIR;
+          const files = fs.readdirSync(dir).filter(f => f.endsWith('.txt')).sort().slice(-limit);
+          if (files.length === 0) return { content: [{ type: "text", text: `No ${type} messages found.` }] };
+          const messages = files.map(f => fs.readFileSync(path.join(dir, f), 'utf-8'));
+          return { content: [{ type: "text", text: messages.join('\n\n===\n\n') }] };
+        }
+        case "read-messages": {
+          const { channel: channelIdentifier, limit } = ReadMessagesSchema.parse(args);
+          const channel = await findChannel(channelIdentifier);
+          const messages = await channel.messages.fetch({ limit });
+          const formatted = Array.from(messages.values()).map(msg => ({
+            channel: `#${channel.name}`, server: channel.guild.name,
+            author: msg.author.tag, content: msg.content, timestamp: msg.createdAt.toISOString(),
+          }));
+          return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
+        }
+        default:
+          throw new Error(`Unknown tool: ${name}`);
       }
-
-      case "read-messages": {
-        const { channel: channelIdentifier, limit } = ReadMessagesSchema.parse(args);
-        const channel = await findChannel(channelIdentifier);
-        
-        const messages = await channel.messages.fetch({ limit });
-        const formattedMessages = Array.from(messages.values()).map(msg => ({
-          channel: `#${channel.name}`,
-          server: channel.guild.name,
-          author: msg.author.tag,
-          content: msg.content,
-          timestamp: msg.createdAt.toISOString(),
-        }));
-
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(formattedMessages, null, 2),
-          }],
-        };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new Error(`Invalid arguments: ${error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ")}`);
       }
+      throw error;
+    }
+  });
 
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+  return mcpServer;
+}
+
+// MCP HTTP server port (internal, not exposed to internet)
+const MCP_PORT = parseInt(process.env.MCP_PORT || '3100', 10);
+
+// MCP config file for Claude CLI
+const MCP_CONFIG_PATH = path.join(MESSAGES_DIR, '.mcp-config.json');
+
+function writeMcpConfig() {
+  const config = {
+    mcpServers: {
+      discord: {
+        url: `http://localhost:${MCP_PORT}/mcp`,
+      },
+    },
+  };
+  fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  console.error(`[MCP] Config written to ${MCP_CONFIG_PATH}`);
+}
+
+// Start HTTP MCP server
+function startMcpHttpServer(): http.Server {
+  const httpServer = http.createServer(async (req, res) => {
+    const url = new URL(req.url || '/', `http://localhost:${MCP_PORT}`);
+    if (url.pathname !== '/mcp') {
+      res.writeHead(404).end('Not found');
+      return;
     }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new Error(
-        `Invalid arguments: ${error.errors
-          .map((e) => `${e.path.join(".")}: ${e.message}`)
-          .join(", ")}`
-      );
+
+    if (req.method === 'POST') {
+      // Stateless: create fresh server + transport per request
+      const mcpServer = createMcpServer();
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      try {
+        await mcpServer.connect(transport);
+        // Parse body manually (no express body-parser)
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        await transport.handleRequest(req, res, body);
+      } catch (error: any) {
+        console.error(`[MCP HTTP] Error: ${error.message}`);
+        if (!res.headersSent) {
+          res.writeHead(500).end(JSON.stringify({
+            jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null,
+          }));
+        }
+      } finally {
+        await transport.close().catch(() => {});
+        await mcpServer.close().catch(() => {});
+      }
+    } else if (req.method === 'GET' || req.method === 'DELETE') {
+      // Stateless mode: no sessions, reject GET/DELETE
+      res.writeHead(405).end(JSON.stringify({
+        jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed (stateless mode)' }, id: null,
+      }));
+    } else {
+      res.writeHead(405).end();
     }
-    throw error;
-  }
-});
+  });
+
+  httpServer.listen(MCP_PORT, '127.0.0.1', () => {
+    console.error(`[MCP HTTP] Streamable HTTP server listening on http://127.0.0.1:${MCP_PORT}/mcp`);
+  });
+
+  return httpServer;
+}
 
 // Discord client login and error handling
 client.once('ready', () => {
@@ -792,20 +794,17 @@ client.on('messageCreate', async (msg: Message) => {
 
 // Start the server
 async function main() {
-  // Check for Discord token
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
     throw new Error('DISCORD_TOKEN environment variable is not set');
   }
-  
+
   try {
-    // Login to Discord
     await client.login(token);
 
-    // Start MCP server
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("Discord MCP Server running on stdio");
+    // Start MCP HTTP server and write config for Claude CLI
+    writeMcpConfig();
+    startMcpHttpServer();
   } catch (error) {
     console.error("Fatal error in main():", error);
     process.exit(1);
