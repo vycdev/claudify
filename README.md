@@ -25,17 +25,23 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 
 3. Run it:
 ```bash
-docker compose up
-```
-
-4. On first run, send `!ask hello` in Discord. Check the container logs — Claude CLI will print a login URL. Open it in your browser to authenticate.
-
-5. Once authenticated, restart with:
-```bash
 docker compose up -d
 ```
 
-Auth persists across restarts via the `claude-home` volume.
+## Authenticating Claude
+
+Claude Code CLI needs to be authenticated inside the container before the bot can respond. On first run (or after clearing volumes), you need to log in:
+
+1. Exec into the running container:
+```bash
+docker exec -it <container_name> claude auth login
+```
+
+2. The CLI will display a URL. Open it in your browser and complete the login.
+
+3. Once authenticated, the bot is ready — no restart needed. Auth persists across container restarts via the `claude-home` volume.
+
+If the bot sends "Sorry, I could not generate a response", it's most likely an auth issue. Check the logs with `docker logs <container_name>` and re-run the auth command above.
 
 ## MCP Server Tools
 
