@@ -165,7 +165,8 @@ async function askClaude(question: string, author: string, channelName: string, 
   ].join('\n');
 
   try {
-    const { stdout } = await execFileAsync('claude', [
+    console.error(`[Claude CLI] Spawning claude with prompt (${prompt.length} chars)`);
+    const { stdout, stderr } = await execFileAsync('claude', [
       '-p',
       '--system-prompt', SYSTEM_PROMPT,
       '--tools', 'WebSearch,WebFetch,Read,Write',
@@ -177,9 +178,13 @@ async function askClaude(question: string, author: string, channelName: string, 
       maxBuffer: 1024 * 1024,
       env: { ...process.env },
     });
+    if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
+    console.error(`[Claude CLI] Response received (${stdout.length} chars)`);
     return stdout.trim() || 'Sorry, I could not generate a response.';
   } catch (error: any) {
-    console.error('Claude CLI error:', error.message);
+    console.error(`[Claude CLI] Error: ${error.message}`);
+    if (error.stderr) console.error(`[Claude CLI] stderr: ${error.stderr}`);
+    if (error.stdout) console.error(`[Claude CLI] stdout: ${error.stdout}`);
     return 'Sorry, I encountered an error processing your request.';
   }
 }
@@ -368,86 +373,104 @@ client.once('ready', () => {
 
 // Listen for !ask commands and bot mentions
 client.on('messageCreate', async (msg: Message) => {
-  if (msg.author.bot) return;
-  if (!(msg.channel instanceof TextChannel)) return;
+  try {
+    if (msg.author.bot) return;
+    if (!(msg.channel instanceof TextChannel)) return;
 
-  const isMention = msg.mentions.has(client.user!);
-  const isAskCommand = msg.content.startsWith('!ask ');
+    const isMention = msg.mentions.has(client.user!);
+    const isAskCommand = msg.content.startsWith('!ask ');
 
-  if (!isMention && !isAskCommand) return;
+    if (!isMention && !isAskCommand) return;
 
-  // Check role permission
-  if (REQUIRED_ROLE_ID && msg.member && !msg.member.roles.cache.has(REQUIRED_ROLE_ID)) {
-    await msg.reply("You can't use this command because you don't have the required role.");
-    return;
-  }
+    console.error(`[Bot] Received ${isAskCommand ? '!ask' : '@mention'} from ${msg.author.tag} in #${(msg.channel as TextChannel).name}: ${msg.content}`);
 
-  // Extract the question
-  const question = isAskCommand
-    ? msg.content.slice(5).trim()
-    : msg.content.replace(`<@${client.user!.id}>`, '').trim();
+    // Check role permission
+    if (REQUIRED_ROLE_ID && msg.member && !msg.member.roles.cache.has(REQUIRED_ROLE_ID)) {
+      console.error(`[Bot] Rejected: ${msg.author.tag} missing role ${REQUIRED_ROLE_ID}`);
+      await msg.reply("You can't use this command because you don't have the required role.");
+      return;
+    }
 
-  if (!question) {
-    await msg.reply('Please provide a question! Usage: `!ask <your question>` or mention me with a question.');
-    return;
-  }
+    // Extract the question
+    const question = isAskCommand
+      ? msg.content.slice(5).trim()
+      : msg.content.replace(`<@${client.user!.id}>`, '').trim();
 
-  // Save the incoming message
-  saveMessage(msg, 'pending');
+    if (!question) {
+      console.error(`[Bot] Empty question from ${msg.author.tag}`);
+      await msg.reply('Please provide a question! Usage: `!ask <your question>` or mention me with a question.');
+      return;
+    }
 
-  // Show typing indicator while Claude thinks
-  await msg.channel.sendTyping();
+    console.error(`[Bot] Processing question: "${question}"`);
 
-  // Get response from Claude CLI
-  const response = await askClaude(
-    question,
-    msg.author.tag,
-    msg.channel.name,
-    msg.guild?.name || 'DM'
-  );
+    // Save the incoming message
+    saveMessage(msg, 'pending');
 
-  // Send the response (split if over 2000 chars)
-  if (response.length <= 2000) {
-    await msg.reply(response);
-  } else {
-    const chunks: string[] = [];
-    let current = '';
-    for (const line of response.split('\n')) {
-      if (current.length + line.length + 1 > 2000) {
-        chunks.push(current);
-        current = line;
-      } else {
-        current += (current ? '\n' : '') + line;
+    // Show typing indicator while Claude thinks
+    await msg.channel.sendTyping();
+
+    // Get response from Claude CLI
+    const response = await askClaude(
+      question,
+      msg.author.tag,
+      msg.channel.name,
+      msg.guild?.name || 'DM'
+    );
+
+    console.error(`[Bot] Sending response (${response.length} chars) to #${msg.channel.name}`);
+
+    // Send the response (split if over 2000 chars)
+    if (response.length <= 2000) {
+      await msg.reply(response);
+    } else {
+      const chunks: string[] = [];
+      let current = '';
+      for (const line of response.split('\n')) {
+        if (current.length + line.length + 1 > 2000) {
+          chunks.push(current);
+          current = line;
+        } else {
+          current += (current ? '\n' : '') + line;
+        }
+      }
+      if (current) chunks.push(current);
+      for (const chunk of chunks) {
+        await msg.channel.send(chunk);
       }
     }
-    if (current) chunks.push(current);
-    for (const chunk of chunks) {
-      await msg.channel.send(chunk);
+
+    console.error(`[Bot] Response sent successfully`);
+
+    // Save both the question and response to history
+    saveMessage(msg, 'history');
+
+    // Save Claude's response as a history file too
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const responseFile = `${timestamp}_claude-response.txt`;
+    const responseContent = [
+      `ID: claude-response`,
+      `Author: Claude (bot)`,
+      `Channel: #${msg.channel.name}`,
+      `Server: ${msg.guild?.name || 'DM'}`,
+      `In-Reply-To: ${msg.id} (${msg.author.tag})`,
+      `Timestamp: ${new Date().toISOString()}`,
+      `---`,
+      response,
+    ].join('\n');
+    fs.writeFileSync(path.join(HISTORY_DIR, responseFile), responseContent, 'utf-8');
+
+    // Remove from pending
+    const pendingFiles = fs.readdirSync(PENDING_DIR).filter(f => f.includes(msg.id));
+    for (const f of pendingFiles) {
+      fs.unlinkSync(path.join(PENDING_DIR, f));
     }
-  }
-
-  // Save both the question and response to history
-  saveMessage(msg, 'history');
-
-  // Save Claude's response as a history file too
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const responseFile = `${timestamp}_claude-response.txt`;
-  const responseContent = [
-    `ID: claude-response`,
-    `Author: Claude (bot)`,
-    `Channel: #${msg.channel.name}`,
-    `Server: ${msg.guild?.name || 'DM'}`,
-    `In-Reply-To: ${msg.id} (${msg.author.tag})`,
-    `Timestamp: ${new Date().toISOString()}`,
-    `---`,
-    response,
-  ].join('\n');
-  fs.writeFileSync(path.join(HISTORY_DIR, responseFile), responseContent, 'utf-8');
-
-  // Remove from pending
-  const pendingFiles = fs.readdirSync(PENDING_DIR).filter(f => f.includes(msg.id));
-  for (const f of pendingFiles) {
-    fs.unlinkSync(path.join(PENDING_DIR, f));
+  } catch (error: any) {
+    console.error(`[Bot] Unhandled error in messageCreate: ${error.message}`);
+    console.error(error.stack);
+    try {
+      await msg.reply('Sorry, something went wrong while processing your request.');
+    } catch { /* ignore reply failure */ }
   }
 });
 
