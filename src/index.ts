@@ -148,7 +148,11 @@ async function findChannel(channelIdentifier: string, guildIdentifier?: string):
 
 // User profiles directory
 const PROFILES_DIR = path.join(MESSAGES_DIR, 'profiles');
+const SUMMARIES_DIR = path.join(MESSAGES_DIR, 'summaries');
 fs.mkdirSync(PROFILES_DIR, { recursive: true });
+fs.mkdirSync(SUMMARIES_DIR, { recursive: true });
+
+const PROFILE_MAX_CHARS = 500;
 
 // Get the daily log filename for a channel: #general_2026-03-07.txt
 function getDailyLogPath(channelName: string, date: Date = new Date()): string {
@@ -183,31 +187,44 @@ function removePending(msgId: string) {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
-// Load recent history: today's log for the channel + yesterday if today is short
+// Load recent history: past week summaries + today's raw messages
 function loadRecentHistory(channelName: string): string {
-  const today = getDailyLogPath(channelName);
-  const yesterday = getDailyLogPath(channelName, new Date(Date.now() - 86400000));
+  const parts: string[] = [];
 
-  let history = '';
-  if (fs.existsSync(yesterday)) {
-    const content = fs.readFileSync(yesterday, 'utf-8');
-    // Only include last 30 lines from yesterday
+  // Past week summaries (days 2-7 ago)
+  const olderSummaries = loadRecentSummaries(channelName, 7);
+  if (olderSummaries) {
+    parts.push(`--- Past week summaries ---\n${olderSummaries}`);
+  }
+
+  // Yesterday: use summary if available, otherwise last 30 raw lines
+  const yesterday = new Date(Date.now() - 86400000);
+  const yesterdaySummary = getSummaryPath(channelName, yesterday);
+  const yesterdayLog = getDailyLogPath(channelName, yesterday);
+  if (fs.existsSync(yesterdaySummary)) {
+    const dateStr = yesterday.toISOString().split('T')[0];
+    parts.push(`--- Yesterday (${dateStr}) summary ---\n${fs.readFileSync(yesterdaySummary, 'utf-8').trim()}`);
+  } else if (fs.existsSync(yesterdayLog)) {
+    const content = fs.readFileSync(yesterdayLog, 'utf-8');
     const lines = content.split('\n').filter(l => l.trim());
     if (lines.length > 0) {
-      history += `--- Yesterday ---\n${lines.slice(-30).join('\n')}\n\n`;
-    }
-  }
-  if (fs.existsSync(today)) {
-    const content = fs.readFileSync(today, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-    if (lines.length > 100) {
-      history += `--- Today (last 100 of ${lines.length} messages) ---\n${lines.slice(-100).join('\n')}`;
-    } else {
-      history += `--- Today ---\n${content}`;
+      parts.push(`--- Yesterday ---\n${lines.slice(-30).join('\n')}`);
     }
   }
 
-  return history.trim() || 'No previous conversation history.';
+  // Today: raw messages (capped at 50)
+  const todayPath = getDailyLogPath(channelName);
+  if (fs.existsSync(todayPath)) {
+    const content = fs.readFileSync(todayPath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > 50) {
+      parts.push(`--- Today (last 50 of ${lines.length} messages) ---\n${lines.slice(-50).join('\n')}`);
+    } else {
+      parts.push(`--- Today ---\n${content}`);
+    }
+  }
+
+  return parts.join('\n\n').trim() || 'No previous conversation history.';
 }
 
 // Load user profile
@@ -215,6 +232,110 @@ function getUserProfile(userId: string): string {
   const filePath = path.join(PROFILES_DIR, `${userId}.txt`);
   if (fs.existsSync(filePath)) return fs.readFileSync(filePath, 'utf-8');
   return '';
+}
+
+// Get summary file path for a channel+date
+function getSummaryPath(channelName: string, date: Date): string {
+  const dateStr = date.toISOString().split('T')[0];
+  const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, '_');
+  return path.join(SUMMARIES_DIR, `${safeName}_${dateStr}.txt`);
+}
+
+// Load summaries for the past N days (excluding today)
+function loadRecentSummaries(channelName: string, days: number = 7): string {
+  const summaries: string[] = [];
+  for (let i = 1; i <= days; i++) {
+    const date = new Date(Date.now() - i * 86400000);
+    const summaryPath = getSummaryPath(channelName, date);
+    if (fs.existsSync(summaryPath)) {
+      const dateStr = date.toISOString().split('T')[0];
+      summaries.push(`[${dateStr}] ${fs.readFileSync(summaryPath, 'utf-8').trim()}`);
+    }
+  }
+  return summaries.reverse().join('\n\n');
+}
+
+// Generate a summary for a day's channel log (runs in background)
+async function generateDailySummary(channelName: string, date: Date): Promise<void> {
+  const logPath = getDailyLogPath(channelName, date);
+  const summaryPath = getSummaryPath(channelName, date);
+
+  // Skip if no log or summary already exists
+  if (!fs.existsSync(logPath) || fs.existsSync(summaryPath)) return;
+
+  const log = fs.readFileSync(logPath, 'utf-8').trim();
+  if (!log || log.split('\n').length < 3) {
+    // Too short to summarize — just copy as-is
+    fs.writeFileSync(summaryPath, log, 'utf-8');
+    return;
+  }
+
+  try {
+    const dateStr = date.toISOString().split('T')[0];
+    console.error(`[Summary] Generating summary for #${channelName} on ${dateStr}`);
+    const { stdout } = await runClaude([
+      '-p',
+      '--model', 'haiku',
+      '--system-prompt', 'You are a conversation summarizer. Summarize the following Discord chat log into a concise paragraph (max 200 words). Focus on key topics discussed, decisions made, and important information shared. Do not include greetings, small talk, or filler. Output ONLY the summary, no preamble.',
+    ], log);
+
+    if (stdout.trim()) {
+      fs.writeFileSync(summaryPath, stdout.trim(), 'utf-8');
+      console.error(`[Summary] Saved summary for #${channelName} on ${dateStr}`);
+    }
+  } catch (err: any) {
+    console.error(`[Summary] Failed to generate summary: ${err.message}`);
+  }
+}
+
+// Background: update user profile after a conversation
+async function backgroundProfileUpdate(authorTag: string, authorId: string, question: string, response: string): Promise<void> {
+  const profilePath = path.join(PROFILES_DIR, `${authorId}.txt`);
+  const existingProfile = getUserProfile(authorId);
+
+  try {
+    const prompt = [
+      `Current profile for ${authorTag} (may be empty):`,
+      existingProfile || '(no profile yet)',
+      '',
+      `Latest exchange:`,
+      `${authorTag}: ${question}`,
+      `Bot: ${response}`,
+      '',
+      `Task: Based on this exchange, output an updated user profile. Include ONLY lasting facts about the user (name, preferences, expertise, interests, projects, etc). Keep it under ${PROFILE_MAX_CHARS} characters. If you learned nothing new, output the existing profile unchanged. Output ONLY the profile text, no preamble or explanation.`,
+    ].join('\n');
+
+    const { stdout } = await runClaude([
+      '-p',
+      '--model', 'haiku',
+    ], prompt);
+
+    const newProfile = stdout.trim();
+    if (newProfile && newProfile !== existingProfile.trim()) {
+      // Enforce size cap
+      const capped = newProfile.slice(0, PROFILE_MAX_CHARS);
+      fs.writeFileSync(profilePath, capped, 'utf-8');
+      console.error(`[Profile] Updated profile for ${authorTag} (${capped.length} chars)`);
+    }
+  } catch (err: any) {
+    console.error(`[Profile] Failed to update profile for ${authorTag}: ${err.message}`);
+  }
+}
+
+// Check and generate summaries for yesterday (called on bot activity)
+async function ensureYesterdaySummaries(): Promise<void> {
+  const yesterday = new Date(Date.now() - 86400000);
+  try {
+    const files = fs.readdirSync(HISTORY_DIR).filter(f => f.endsWith('.txt'));
+    const dateStr = yesterday.toISOString().split('T')[0];
+    const yesterdayFiles = files.filter(f => f.includes(dateStr));
+    for (const file of yesterdayFiles) {
+      const channelName = file.replace(`_${dateStr}.txt`, '');
+      await generateDailySummary(channelName, yesterday);
+    }
+  } catch (err: any) {
+    console.error(`[Summary] Error checking yesterday summaries: ${err.message}`);
+  }
 }
 
 // Invoke Claude Code CLI to answer a question
@@ -235,10 +356,10 @@ function getSystemPrompt(): string {
     `- You can read and write to the messages directory for memory across conversations.`,
     ``,
     `Memory:`,
-    `- Conversation logs are in ${HISTORY_DIR}/ as daily files named #channel_YYYY-MM-DD.txt`,
-    `- User profiles are in ${PROFILES_DIR}/ as <user_id>.txt — these are provided to you automatically when a user talks to you.`,
-    `- When you learn something genuinely NEW about a user (not already in their profile), update their profile file. Always read the provided profile first to avoid writing duplicate info.`,
-    `- Only update profiles with lasting facts (preferences, expertise, interests, name, etc.), not transient conversation details.`,
+    `- Conversation history (recent messages + past week summaries) is provided automatically in each prompt.`,
+    `- User profiles are maintained automatically — the user's profile is included in your prompt when they talk to you.`,
+    `- You do NOT need to write or update profile files. A background system handles that after each conversation.`,
+    `- Conversation logs are in ${HISTORY_DIR}/ if you need to look up older history beyond what's provided.`,
   ].join('\n');
 }
 
@@ -264,10 +385,8 @@ async function askClaude(question: string, author: string, authorId: string, cha
 
   promptParts.push('');
   if (userProfile) {
-    promptParts.push(`Existing profile for ${author} (${authorId}) at ${PROFILES_DIR}/${authorId}.txt:`);
+    promptParts.push(`Known info about ${author}:`);
     promptParts.push(userProfile);
-  } else {
-    promptParts.push(`No profile exists yet for ${author} (${authorId}). If you learn something notable, save it to ${PROFILES_DIR}/${authorId}.txt`);
   }
 
   promptParts.push('');
@@ -521,16 +640,22 @@ client.on('messageCreate', async (msg: Message) => {
 
       const historyCount = countFiles(HISTORY_DIR);
       const pendingCount = countFiles(PENDING_DIR);
+      const summaryCount = countFiles(SUMMARIES_DIR);
+      const profileCount = countFiles(PROFILES_DIR);
       const historySize = getDirSize(HISTORY_DIR);
       const pendingSize = getDirSize(PENDING_DIR);
+      const summariesSize = getDirSize(SUMMARIES_DIR);
+      const profilesSize = getDirSize(PROFILES_DIR);
       const imagesSize = getDirSize(IMAGES_DIR);
       const totalSize = getDirSize(MESSAGES_DIR);
 
       const output = [
-        `History:  ${historyCount} files (${formatSize(historySize)})`,
-        `Pending:  ${pendingCount} files (${formatSize(pendingSize)})`,
-        `Images:   ${formatSize(imagesSize)}`,
-        `Total:    ${formatSize(totalSize)}`,
+        `History:    ${historyCount} files (${formatSize(historySize)})`,
+        `Summaries:  ${summaryCount} files (${formatSize(summariesSize)})`,
+        `Profiles:   ${profileCount} files (${formatSize(profilesSize)})`,
+        `Pending:    ${pendingCount} files (${formatSize(pendingSize)})`,
+        `Images:     ${formatSize(imagesSize)}`,
+        `Total:      ${formatSize(totalSize)}`,
       ].join('\n');
 
       await msg.reply('```\n' + output + '\n```');
@@ -652,6 +777,10 @@ client.on('messageCreate', async (msg: Message) => {
 
     // Remove from pending
     removePending(msg.id);
+
+    // Background jobs (fire and forget — don't block the response)
+    backgroundProfileUpdate(msg.author.tag, msg.author.id, rawQuestion, response).catch(() => {});
+    ensureYesterdaySummaries().catch(() => {});
   } catch (error: any) {
     console.error(`[Bot] Unhandled error in messageCreate: ${error.message}`);
     console.error(error.stack);
