@@ -24,7 +24,7 @@ COPY --from=build /app/build ./build
 RUN mkdir -p /app/messages/history /app/messages/pending
 
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENV NODE_ENV=production
 ENV MESSAGES_DIR=/app/messages
