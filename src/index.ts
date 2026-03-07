@@ -345,7 +345,7 @@ async function backgroundServerMemoryUpdate(guildId: string, guildName: string, 
       `${authorTag}: ${question}`,
       `Bot: ${response}`,
       '',
-      `Task: Based on this exchange, output an updated server memory. Include general facts about the server, recurring topics, ongoing projects, inside jokes, server culture, important events, and anything worth remembering that isn't specific to a single user. Keep it under ${SERVER_MEMORY_MAX_CHARS} characters. If you learned nothing new about the server, output the existing memory unchanged. Output ONLY the memory text, no preamble or explanation.`,
+      `Task: Based on this exchange, output an updated server memory. Include ONLY server-wide context: channel purposes, recurring topics, ongoing projects, inside jokes, server culture, important events, and shared knowledge. Do NOT include any user-specific information (user descriptions, user preferences, user behavior patterns, who does what) — that belongs in individual user profiles which are managed separately. Keep it under ${SERVER_MEMORY_MAX_CHARS} characters. If you learned nothing new about the server, output the existing memory unchanged. Output ONLY the memory text, no preamble or explanation.`,
     ].join('\n');
 
     const { stdout } = await runClaude([
