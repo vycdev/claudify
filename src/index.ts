@@ -19,6 +19,7 @@ dotenv.config();
 
 // Message history directory
 const MESSAGES_DIR = process.env.MESSAGES_DIR || path.join(process.cwd(), 'messages');
+const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || '';
 const HISTORY_DIR = path.join(MESSAGES_DIR, 'history');
 const PENDING_DIR = path.join(MESSAGES_DIR, 'pending');
 
@@ -374,6 +375,12 @@ client.on('messageCreate', async (msg: Message) => {
   const isAskCommand = msg.content.startsWith('!ask ');
 
   if (!isMention && !isAskCommand) return;
+
+  // Check role permission
+  if (REQUIRED_ROLE_ID && msg.member && !msg.member.roles.cache.has(REQUIRED_ROLE_ID)) {
+    await msg.reply("You can't use this command because you don't have the required role.");
+    return;
+  }
 
   // Extract the question
   const question = isAskCommand
