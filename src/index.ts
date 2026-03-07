@@ -441,6 +441,20 @@ client.on('messageCreate', async (msg: Message) => {
     if (msg.author.bot) return;
     if (!(msg.channel instanceof TextChannel)) return;
 
+    // Handle !usage command
+    if (msg.content.trim() === '!usage') {
+      console.error(`[Bot] Usage requested by ${msg.author.tag}`);
+      try {
+        const { stdout, stderr } = await runClaude(['usage'], '');
+        const output = stdout.trim() || stderr.trim() || 'Could not retrieve usage info.';
+        await msg.reply(output);
+      } catch (err: any) {
+        const output = err.stdout?.trim() || err.stderr?.trim() || 'Could not retrieve usage info.';
+        await msg.reply(output);
+      }
+      return;
+    }
+
     const isMention = msg.mentions.has(client.user!);
     const isAskCommand = msg.content.startsWith('!ask ');
     const isReplyToBot = msg.reference?.messageId
