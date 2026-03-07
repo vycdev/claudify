@@ -166,6 +166,14 @@ async function askClaude(question: string, author: string, channelName: string, 
 
   try {
     console.error(`[Claude CLI] Spawning claude with prompt (${prompt.length} chars)`);
+    // Clean env to avoid MCP/stdio conflicts with the spawned CLI
+    const cleanEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) cleanEnv[key] = value;
+    }
+    // Remove MCP-related vars that could interfere
+    delete cleanEnv.MCP_SERVER_NAME;
+
     const { stdout, stderr } = await execFileAsync('claude', [
       '-p',
       '--system-prompt', SYSTEM_PROMPT,
@@ -176,7 +184,7 @@ async function askClaude(question: string, author: string, channelName: string, 
     ], {
       timeout: 120000, // 2 minute timeout
       maxBuffer: 1024 * 1024,
-      env: { ...process.env },
+      env: cleanEnv,
     });
     if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
     console.error(`[Claude CLI] Response received (${stdout.length} chars)`);
@@ -379,10 +387,14 @@ client.on('messageCreate', async (msg: Message) => {
 
     const isMention = msg.mentions.has(client.user!);
     const isAskCommand = msg.content.startsWith('!ask ');
+    const isReplyToBot = msg.reference?.messageId
+      ? (await msg.channel.messages.fetch(msg.reference.messageId).catch(() => null))?.author?.id === client.user!.id
+      : false;
 
-    if (!isMention && !isAskCommand) return;
+    if (!isMention && !isAskCommand && !isReplyToBot) return;
 
-    console.error(`[Bot] Received ${isAskCommand ? '!ask' : '@mention'} from ${msg.author.tag} in #${(msg.channel as TextChannel).name}: ${msg.content}`);
+    const triggerType = isAskCommand ? '!ask' : isReplyToBot ? 'reply' : '@mention';
+    console.error(`[Bot] Received ${triggerType} from ${msg.author.tag} in #${(msg.channel as TextChannel).name}: ${msg.content}`);
 
     // Check role permission
     if (REQUIRED_ROLE_ID && msg.member && !msg.member.roles.cache.has(REQUIRED_ROLE_ID)) {
@@ -394,7 +406,7 @@ client.on('messageCreate', async (msg: Message) => {
     // Extract the question
     const question = isAskCommand
       ? msg.content.slice(5).trim()
-      : msg.content.replace(`<@${client.user!.id}>`, '').trim();
+      : msg.content.replace(`<@${client.user!.id}>`, '').trim() || msg.content.trim();
 
     if (!question) {
       console.error(`[Bot] Empty question from ${msg.author.tag}`);
