@@ -12,18 +12,19 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
-function runClaude(args: string[], input: string): Promise<{ stdout: string; stderr: string }> {
+function runClaude(args: string[], input: string, model?: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', args, {
-      env: (() => {
-        const env: Record<string, string> = {};
-        for (const [key, value] of Object.entries(process.env)) {
-          if (value !== undefined) env[key] = value;
-        }
-        delete env.MCP_SERVER_NAME;
-        return env;
-      })(),
-    });
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) env[key] = value;
+    }
+    delete env.MCP_SERVER_NAME;
+    if (model) {
+      env.ANTHROPIC_MODEL = model;
+      args = ['--model', model, ...args];
+    }
+
+    const proc = spawn('claude', args, { env });
 
     let stdout = '';
     let stderr = '';
@@ -284,9 +285,8 @@ async function generateDailySummary(channelName: string, date: Date): Promise<vo
     console.error(`[Summary] Generating summary for #${channelName} on ${dateStr}`);
     const { stdout } = await runClaude([
       '-p',
-      '--model', 'haiku',
       '--system-prompt', 'You are a conversation summarizer. Summarize the following Discord chat log into a concise paragraph (max 200 words). Focus on key topics discussed, decisions made, and important information shared. Do not include greetings, small talk, or filler. Output ONLY the summary, no preamble.',
-    ], log);
+    ], log, 'claude-haiku-4-5-20251001');
 
     if (stdout.trim()) {
       fs.writeFileSync(summaryPath, stdout.trim(), 'utf-8');
@@ -316,8 +316,7 @@ async function backgroundProfileUpdate(authorTag: string, authorId: string, ques
 
     const { stdout } = await runClaude([
       '-p',
-      '--model', 'haiku',
-    ], prompt);
+    ], prompt, 'claude-haiku-4-5-20251001');
 
     const newProfile = stdout.trim();
     if (newProfile && newProfile !== existingProfile.trim()) {
@@ -350,8 +349,7 @@ async function backgroundServerMemoryUpdate(guildId: string, guildName: string, 
 
     const { stdout } = await runClaude([
       '-p',
-      '--model', 'haiku',
-    ], prompt);
+    ], prompt, 'claude-haiku-4-5-20251001');
 
     const newMemory = stdout.trim();
     if (newMemory && newMemory !== existingMemory.trim()) {
@@ -463,12 +461,11 @@ async function askClaude(question: string, author: string, authorId: string, cha
 
     const { stdout, stderr } = await runClaude([
       '-p',
-      '--model', 'sonnet',
       '--system-prompt', getSystemPrompt(),
       '--allowedTools', 'WebSearch,WebFetch,Read,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages',
       '--add-dir', MESSAGES_DIR,
       '--mcp-config', MCP_CONFIG_PATH,
-    ], prompt);
+    ], prompt, 'claude-sonnet-4-6');
 
     if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
     console.error(`[Claude CLI] Response received (${stdout.length} chars)`);
