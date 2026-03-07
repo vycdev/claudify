@@ -198,7 +198,13 @@ function loadRecentHistory(channelName: string): string {
     }
   }
   if (fs.existsSync(today)) {
-    history += `--- Today ---\n${fs.readFileSync(today, 'utf-8')}`;
+    const content = fs.readFileSync(today, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > 100) {
+      history += `--- Today (last 100 of ${lines.length} messages) ---\n${lines.slice(-100).join('\n')}`;
+    } else {
+      history += `--- Today ---\n${content}`;
+    }
   }
 
   return history.trim() || 'No previous conversation history.';
@@ -230,8 +236,9 @@ function getSystemPrompt(): string {
     ``,
     `Memory:`,
     `- Conversation logs are in ${HISTORY_DIR}/ as daily files named #channel_YYYY-MM-DD.txt`,
-    `- User profiles are in ${PROFILES_DIR}/ as <user_id>.txt — update these when you learn something notable about a user (preferences, expertise, interests, etc.)`,
-    `- When you learn something new about a user, write it to their profile file so you remember next time.`,
+    `- User profiles are in ${PROFILES_DIR}/ as <user_id>.txt — these are provided to you automatically when a user talks to you.`,
+    `- When you learn something genuinely NEW about a user (not already in their profile), update their profile file. Always read the provided profile first to avoid writing duplicate info.`,
+    `- Only update profiles with lasting facts (preferences, expertise, interests, name, etc.), not transient conversation details.`,
   ].join('\n');
 }
 
@@ -255,10 +262,12 @@ async function askClaude(question: string, author: string, authorId: string, cha
     recentHistory,
   ];
 
+  promptParts.push('');
   if (userProfile) {
-    promptParts.push('');
-    promptParts.push(`Profile notes for ${author}:`);
+    promptParts.push(`Existing profile for ${author} (${authorId}) at ${PROFILES_DIR}/${authorId}.txt:`);
     promptParts.push(userProfile);
+  } else {
+    promptParts.push(`No profile exists yet for ${author} (${authorId}). If you learn something notable, save it to ${PROFILES_DIR}/${authorId}.txt`);
   }
 
   promptParts.push('');
