@@ -153,7 +153,8 @@ const SUMMARIES_DIR = path.join(MESSAGES_DIR, 'summaries');
 fs.mkdirSync(PROFILES_DIR, { recursive: true });
 fs.mkdirSync(SUMMARIES_DIR, { recursive: true });
 
-const PROFILE_MAX_CHARS = 500;
+const PROFILE_MAX_CHARS = 2000;
+const SERVER_MEMORY_MAX_CHARS = 10000;
 
 // Get the daily log filename for a channel: #general_2026-03-07.txt
 function getDailyLogPath(channelName: string, date: Date = new Date()): string {
@@ -231,6 +232,13 @@ function loadRecentHistory(channelName: string): string {
 // Load user profile
 function getUserProfile(userId: string): string {
   const filePath = path.join(PROFILES_DIR, `${userId}.txt`);
+  if (fs.existsSync(filePath)) return fs.readFileSync(filePath, 'utf-8');
+  return '';
+}
+
+// Load server memory (generic context not tied to any user)
+function getServerMemory(guildId: string): string {
+  const filePath = path.join(PROFILES_DIR, `server_${guildId}.txt`);
   if (fs.existsSync(filePath)) return fs.readFileSync(filePath, 'utf-8');
   return '';
 }
@@ -323,6 +331,39 @@ async function backgroundProfileUpdate(authorTag: string, authorId: string, ques
   }
 }
 
+// Background: update server memory after a conversation
+async function backgroundServerMemoryUpdate(guildId: string, guildName: string, channelName: string, authorTag: string, question: string, response: string): Promise<void> {
+  const memoryPath = path.join(PROFILES_DIR, `server_${guildId}.txt`);
+  const existingMemory = getServerMemory(guildId);
+
+  try {
+    const prompt = [
+      `Current server memory for "${guildName}" (may be empty):`,
+      existingMemory || '(no server memory yet)',
+      '',
+      `Latest exchange in #${channelName}:`,
+      `${authorTag}: ${question}`,
+      `Bot: ${response}`,
+      '',
+      `Task: Based on this exchange, output an updated server memory. Include general facts about the server, recurring topics, ongoing projects, inside jokes, server culture, important events, and anything worth remembering that isn't specific to a single user. Keep it under ${SERVER_MEMORY_MAX_CHARS} characters. If you learned nothing new about the server, output the existing memory unchanged. Output ONLY the memory text, no preamble or explanation.`,
+    ].join('\n');
+
+    const { stdout } = await runClaude([
+      '-p',
+      '--model', 'haiku',
+    ], prompt);
+
+    const newMemory = stdout.trim();
+    if (newMemory && newMemory !== existingMemory.trim()) {
+      const capped = newMemory.slice(0, SERVER_MEMORY_MAX_CHARS);
+      fs.writeFileSync(memoryPath, capped, 'utf-8');
+      console.error(`[ServerMemory] Updated memory for ${guildName} (${capped.length} chars)`);
+    }
+  } catch (err: any) {
+    console.error(`[ServerMemory] Failed to update memory for ${guildName}: ${err.message}`);
+  }
+}
+
 // Check and generate summaries for yesterday (called on bot activity)
 async function ensureYesterdaySummaries(): Promise<void> {
   const yesterday = new Date(Date.now() - 86400000);
@@ -354,7 +395,7 @@ function getSystemPrompt(): string {
     `- Don't be sycophantic. No "Great question!" or "That's a really interesting point!" Just answer.`,
     `- Don't try to mediate or play peacekeeper. If someone's wrong, say so.`,
     `- Keep responses under 2000 characters (Discord's limit).`,
-    `- You can read and write to the messages directory for memory across conversations.`,
+    `- You can read from the messages directory for memory across conversations.`,
     ``,
     `Memory:`,
     `- Conversation history (recent messages + past week summaries) is provided automatically in each prompt.`,
@@ -381,14 +422,21 @@ async function downloadAttachment(url: string, filename: string): Promise<string
   return filePath;
 }
 
-async function askClaude(question: string, author: string, authorId: string, channelName: string, serverName: string, imagePaths: string[] = []): Promise<string> {
+async function askClaude(question: string, author: string, authorId: string, channelName: string, serverName: string, guildId: string, imagePaths: string[] = []): Promise<string> {
   const recentHistory = loadRecentHistory(channelName);
   const userProfile = getUserProfile(authorId);
+  const serverMemory = getServerMemory(guildId);
 
   const promptParts = [
     `Recent conversation history in #${channelName}:`,
     recentHistory,
   ];
+
+  if (serverMemory) {
+    promptParts.push('');
+    promptParts.push(`Server memory for "${serverName}":`);
+    promptParts.push(serverMemory);
+  }
 
   promptParts.push('');
   if (userProfile) {
@@ -417,7 +465,7 @@ async function askClaude(question: string, author: string, authorId: string, cha
       '-p',
       '--model', 'sonnet',
       '--system-prompt', getSystemPrompt(),
-      '--allowedTools', 'WebSearch,WebFetch,Read,Write,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history',
+      '--allowedTools', 'WebSearch,WebFetch,Read,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages',
       '--add-dir', MESSAGES_DIR,
       '--mcp-config', MCP_CONFIG_PATH,
     ], prompt);
@@ -483,6 +531,21 @@ function createMcpServer(): Server {
         },
       },
       {
+        name: "fetch-messages",
+        description: "Fetch specific Discord messages by their message links (e.g. https://discord.com/channels/SERVER_ID/CHANNEL_ID/MESSAGE_ID)",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            links: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of Discord message links to fetch",
+            },
+          },
+          required: ["links"],
+        },
+      },
+      {
         name: "read-messages",
         description: "Read recent messages from a Discord channel (live from Discord API)",
         inputSchema: {
@@ -516,6 +579,62 @@ function createMcpServer(): Server {
           if (files.length === 0) return { content: [{ type: "text", text: `No ${type} messages found.` }] };
           const messages = files.map(f => fs.readFileSync(path.join(dir, f), 'utf-8'));
           return { content: [{ type: "text", text: messages.join('\n\n===\n\n') }] };
+        }
+        case "fetch-messages": {
+          const links = (args as any)?.links as string[];
+          if (!links || !Array.isArray(links) || links.length === 0) {
+            throw new Error('Please provide at least one Discord message link');
+          }
+          const linkPattern = /discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/;
+          const results = [];
+          for (const link of links) {
+            const match = link.match(linkPattern);
+            if (!match) {
+              results.push({ link, error: 'Invalid Discord message link format' });
+              continue;
+            }
+            const [, , channelId, messageId] = match;
+            try {
+              const channel = await client.channels.fetch(channelId);
+              if (!(channel instanceof TextChannel)) {
+                results.push({ link, error: 'Channel is not a text channel' });
+                continue;
+              }
+              const msg = await channel.messages.fetch(messageId);
+              const entry: any = {
+                link,
+                channel: `#${channel.name}`,
+                server: channel.guild.name,
+                author: msg.author.tag,
+                content: msg.content,
+                timestamp: msg.createdAt.toISOString(),
+              };
+              // Download image attachments
+              const images: string[] = [];
+              for (const att of msg.attachments.values()) {
+                if (att.contentType?.startsWith('image/')) {
+                  try {
+                    const filePath = await downloadAttachment(att.url, `mcp_${att.id}_${att.name || 'image.png'}`);
+                    images.push(filePath);
+                  } catch { /* skip */ }
+                }
+              }
+              if (images.length > 0) entry.images = images;
+              // Include embeds if present
+              if (msg.embeds.length > 0) {
+                entry.embeds = msg.embeds.map(e => ({
+                  title: e.title, description: e.description, url: e.url,
+                })).filter(e => e.title || e.description);
+              }
+              results.push(entry);
+            } catch (err: any) {
+              results.push({ link, error: `Failed to fetch: ${err.message}` });
+            }
+          }
+          const resultText = JSON.stringify(results, null, 2);
+          const hasImages = results.some((r: any) => r.images?.length);
+          const hint = hasImages ? '\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above.' : '';
+          return { content: [{ type: "text", text: resultText + hint }] };
         }
         case "read-messages": {
           const { channel: channelIdentifier, limit } = ReadMessagesSchema.parse(args);
@@ -563,7 +682,7 @@ function createMcpServer(): Server {
 const MCP_PORT = parseInt(process.env.MCP_PORT || '3100', 10);
 
 // MCP config file for Claude CLI
-const MCP_CONFIG_PATH = path.join(MESSAGES_DIR, '.mcp-config.json');
+const MCP_CONFIG_PATH = path.join(process.cwd(), '.mcp-config.json');
 
 function writeMcpConfig() {
   const config = {
@@ -683,6 +802,21 @@ client.on('messageCreate', async (msg: Message) => {
       return;
     }
 
+    // Handle !guild command
+    if (msg.content.trim() === '!guild') {
+      if (!msg.guild) {
+        await msg.reply('This command can only be used in a server.');
+        return;
+      }
+      const memory = getServerMemory(msg.guild.id);
+      if (memory) {
+        await msg.reply(`**Server memory for ${msg.guild.name}:**\n${memory}`);
+      } else {
+        await msg.reply(`No server memory found for ${msg.guild.name}. Server memory is built automatically as users interact with the bot.`);
+      }
+      return;
+    }
+
     // Handle !profile command
     if (msg.content.trim().startsWith('!profile')) {
       const mentioned = msg.mentions.users.first();
@@ -768,8 +902,11 @@ client.on('messageCreate', async (msg: Message) => {
       }
     }
 
-    // Show typing indicator while Claude thinks
+    // Show typing indicator while Claude thinks (re-send every 8s since it expires after ~10s)
     await msg.channel.sendTyping();
+    const typingInterval = setInterval(() => {
+      (msg.channel as TextChannel).sendTyping().catch(() => {});
+    }, 8000);
 
     // Get response from Claude CLI
     const response = await askClaude(
@@ -778,14 +915,29 @@ client.on('messageCreate', async (msg: Message) => {
       msg.author.id,
       msg.channel.name,
       msg.guild?.name || 'DM',
+      msg.guild?.id || 'unknown',
       imagePaths
     );
 
+    clearInterval(typingInterval);
     console.error(`[Bot] Sending response (${response.length} chars) to #${msg.channel.name}`);
 
     // Send the response (split if over 2000 chars)
+    // Fall back to channel.send() if the original message was deleted
+    const safeSend = async (text: string, reply: boolean) => {
+      if (reply) {
+        try {
+          await msg.reply(text);
+        } catch {
+          await (msg.channel as TextChannel).send(text);
+        }
+      } else {
+        await (msg.channel as TextChannel).send(text);
+      }
+    };
+
     if (response.length <= 2000) {
-      await msg.reply(response);
+      await safeSend(response, true);
     } else {
       const chunks: string[] = [];
       let current = '';
@@ -799,7 +951,7 @@ client.on('messageCreate', async (msg: Message) => {
       }
       if (current) chunks.push(current);
       for (const chunk of chunks) {
-        await msg.channel.send(chunk);
+        await safeSend(chunk, false);
       }
     }
 
@@ -814,6 +966,9 @@ client.on('messageCreate', async (msg: Message) => {
 
     // Background jobs (fire and forget — don't block the response)
     backgroundProfileUpdate(msg.author.tag, msg.author.id, rawQuestion, response).catch(() => {});
+    if (msg.guild) {
+      backgroundServerMemoryUpdate(msg.guild.id, msg.guild.name, msg.channel.name, msg.author.tag, rawQuestion, response).catch(() => {});
+    }
     ensureYesterdaySummaries().catch(() => {});
   } catch (error: any) {
     console.error(`[Bot] Unhandled error in messageCreate: ${error.message}`);
