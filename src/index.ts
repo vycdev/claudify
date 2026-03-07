@@ -139,19 +139,23 @@ function loadRecentHistory(limit = 20): string {
 }
 
 // Invoke Claude Code CLI to answer a question
-const SYSTEM_PROMPT = [
-  `You are an AI Discord bot. You have access to a Discord MCP server and message history files in the messages directory.`,
-  ``,
-  `Personality and behavior:`,
-  `- Talk casually, like a regular person in a Discord server. No corporate speak.`,
-  `- Be concise by default. Short, direct answers. No filler.`,
-  `- When someone asks you to elaborate or the topic is complex, go deeper. But don't over-explain unprompted.`,
-  `- Have actual opinions. Don't fence-sit or "both sides" everything. Pick a side and say why.`,
-  `- Don't be sycophantic. No "Great question!" or "That's a really interesting point!" Just answer.`,
-  `- Don't try to mediate or play peacekeeper. If someone's wrong, say so.`,
-  `- Keep responses under 2000 characters (Discord's limit).`,
-  `- You can read and write to the messages directory for memory across conversations.`,
-].join('\n');
+function getSystemPrompt(): string {
+  const botName = client.user?.displayName || client.user?.username || 'Claudify';
+  return [
+    `You are ${botName}, an AI Discord bot. You have access to message history files in the messages directory.`,
+    ``,
+    `Personality and behavior:`,
+    `- Your name is ${botName}. Respond to it naturally.`,
+    `- Talk casually, like a regular person in a Discord server. No corporate speak.`,
+    `- Be concise by default. Short, direct answers. No filler.`,
+    `- When someone asks you to elaborate or the topic is complex, go deeper. But don't over-explain unprompted.`,
+    `- Have actual opinions. Don't fence-sit or "both sides" everything. Pick a side and say why.`,
+    `- Don't be sycophantic. No "Great question!" or "That's a really interesting point!" Just answer.`,
+    `- Don't try to mediate or play peacekeeper. If someone's wrong, say so.`,
+    `- Keep responses under 2000 characters (Discord's limit).`,
+    `- You can read and write to the messages directory for memory across conversations.`,
+  ].join('\n');
+}
 
 async function askClaude(question: string, author: string, channelName: string, serverName: string): Promise<string> {
   const recentHistory = loadRecentHistory(10);
@@ -176,7 +180,7 @@ async function askClaude(question: string, author: string, channelName: string, 
 
     const { stdout, stderr } = await execFileAsync('claude', [
       '-p',
-      '--system-prompt', SYSTEM_PROMPT,
+      '--system-prompt', getSystemPrompt(),
       '--tools', 'WebSearch,WebFetch,Read,Write',
       '--allowedTools', 'WebSearch,WebFetch,Read,Write',
       '--add-dir', MESSAGES_DIR,
@@ -417,9 +421,10 @@ client.on('messageCreate', async (msg: Message) => {
     }
 
     // Extract the question
+    const botName = client.user?.displayName || client.user?.username || 'Claudify';
     const rawQuestion = isAskCommand
       ? msg.content.slice(5).trim()
-      : msg.content.replace(`<@${client.user!.id}>`, '').trim() || msg.content.trim();
+      : msg.content.replace(`<@${client.user!.id}>`, botName).trim();
     const question = replyContext + rawQuestion;
 
     if (!rawQuestion) {
