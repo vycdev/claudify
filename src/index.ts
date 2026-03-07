@@ -462,6 +462,45 @@ client.on('messageCreate', async (msg: Message) => {
       return;
     }
 
+    // Handle !storage command
+    if (msg.content.trim() === '!storage') {
+      console.error(`[Bot] Storage requested by ${msg.author.tag}`);
+      const countFiles = (dir: string) => {
+        try { return fs.readdirSync(dir).filter(f => f.endsWith('.txt')).length; } catch { return 0; }
+      };
+      const getDirSize = (dir: string): number => {
+        try {
+          return fs.readdirSync(dir).reduce((total, file) => {
+            const filePath = path.join(dir, file);
+            const stat = fs.statSync(filePath);
+            return total + (stat.isDirectory() ? getDirSize(filePath) : stat.size);
+          }, 0);
+        } catch { return 0; }
+      };
+      const formatSize = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      };
+
+      const historyCount = countFiles(HISTORY_DIR);
+      const pendingCount = countFiles(PENDING_DIR);
+      const historySize = getDirSize(HISTORY_DIR);
+      const pendingSize = getDirSize(PENDING_DIR);
+      const imagesSize = getDirSize(IMAGES_DIR);
+      const totalSize = getDirSize(MESSAGES_DIR);
+
+      const output = [
+        `History:  ${historyCount} files (${formatSize(historySize)})`,
+        `Pending:  ${pendingCount} files (${formatSize(pendingSize)})`,
+        `Images:   ${formatSize(imagesSize)}`,
+        `Total:    ${formatSize(totalSize)}`,
+      ].join('\n');
+
+      await msg.reply('```\n' + output + '\n```');
+      return;
+    }
+
     const isMention = msg.mentions.has(client.user!);
     const isAskCommand = msg.content.startsWith('!ask ');
     const isReplyToBot = msg.reference?.messageId
