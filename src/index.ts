@@ -840,7 +840,23 @@ client.on('messageCreate', async (msg: Message) => {
       const targetUser = mentioned || msg.author;
       const profile = getUserProfile(targetUser.id);
       if (profile) {
-        await msg.reply(`**Profile for ${targetUser.tag}:**\n${profile}`);
+        const header = `**Profile for ${targetUser.tag}:**\n`;
+        const full = header + profile;
+        if (full.length <= 2000) {
+          await msg.reply(full);
+        } else {
+          const chunks: string[] = [];
+          let remaining = profile;
+          const maxChunk = 2000 - 10;
+          while (remaining.length > 0) {
+            chunks.push(remaining.slice(0, maxChunk));
+            remaining = remaining.slice(maxChunk);
+          }
+          await msg.reply(header + chunks[0]);
+          for (let i = 1; i < chunks.length; i++) {
+            await (msg.channel as TextChannel).send(chunks[i]);
+          }
+        }
       } else {
         await msg.reply(`No profile found for ${targetUser.tag}. Profiles are built automatically as users interact with the bot.`);
       }
