@@ -7,10 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Client, GatewayIntentBits, TextChannel, Message } from 'discord.js';
 import { z } from 'zod';
-import { spawn, execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -444,35 +441,6 @@ client.on('messageCreate', async (msg: Message) => {
   try {
     if (msg.author.bot) return;
     if (!(msg.channel instanceof TextChannel)) return;
-
-    // Handle !usage command
-    if (msg.content.trim() === '!usage') {
-      console.error(`[Bot] Usage requested by ${msg.author.tag}`);
-      try {
-        // claude usage needs a TTY, use script to fake one
-        const { stdout } = await execFileAsync('script', ['-q', '-c', 'claude usage', '/dev/null'], {
-          timeout: 30000,
-          env: { ...process.env, TERM: 'dumb' },
-        });
-        console.error(`[Bot] Usage output length: ${stdout.length}`);
-        // Strip ANSI codes and carriage returns
-        const output = stdout
-          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-          .replace(/\r/g, '')
-          .trim() || 'Could not retrieve usage info.';
-        await msg.reply('```\n' + output + '\n```');
-      } catch (err: any) {
-        console.error(`[Bot] Usage error: ${err.message}`);
-        console.error(`[Bot] Usage error stdout: ${err.stdout}`);
-        console.error(`[Bot] Usage error stderr: ${err.stderr}`);
-        const output = ((err.stdout || '') + (err.stderr || ''))
-          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-          .replace(/\r/g, '')
-          .trim() || 'Could not retrieve usage info.';
-        await msg.reply('```\n' + output + '\n```');
-      }
-      return;
-    }
 
     // Handle !storage command
     if (msg.content.trim() === '!storage') {
