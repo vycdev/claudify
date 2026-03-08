@@ -1064,6 +1064,127 @@ client.on("messageCreate", async (msg: Message) => {
             return;
         }
 
+        // Handle !usage command
+        if (msg.content.trim().startsWith("!usage")) {
+            const args = msg.content.trim().split(/\s+/).slice(1);
+            const subcommand = args[0] || "today";
+
+            let ccArgs: string[];
+            let title: string;
+            const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
+
+            switch (subcommand) {
+                case "today":
+                    ccArgs = ["ccusage@latest", "daily", "--json", "--since", today];
+                    title = "Usage for today";
+                    break;
+                case "daily":
+                    ccArgs = ["ccusage@latest", "daily", "--json"];
+                    title = "Daily usage";
+                    break;
+                case "blocks":
+                    ccArgs = ["ccusage@latest", "blocks", "--json", "--since", today];
+                    title = "5-hour billing windows (today)";
+                    break;
+                case "monthly":
+                    ccArgs = ["ccusage@latest", "monthly", "--json"];
+                    title = "Monthly usage";
+                    break;
+                default:
+                    await msg.reply(
+                        "Usage: `!usage [today|daily|blocks|monthly]`\n" +
+                        "• `today` — Today's breakdown by model (default)\n" +
+                        "• `daily` — Daily breakdown\n" +
+                        "• `blocks` — 5-hour billing windows for today\n" +
+                        "• `monthly` — Monthly totals",
+                    );
+                    return;
+            }
+
+            await (msg.channel as TextChannel).sendTyping();
+
+            try {
+                const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                    const proc = spawn("npx", ccArgs, {
+                        env: { ...process.env },
+                        shell: true,
+                    });
+                    let stdout = "";
+                    let stderr = "";
+                    proc.stdout.on("data", (d) => (stdout += d.toString()));
+                    proc.stderr.on("data", (d) => (stderr += d.toString()));
+                    proc.on("close", (code) =>
+                        code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr || `exit ${code}`)),
+                    );
+                });
+
+                const data = JSON.parse(stdout);
+                const lines: string[] = [`**${title}**`];
+
+                const formatCost = (c: number) => `$${c.toFixed(2)}`;
+                const formatTokens = (t: number) =>
+                    t >= 1_000_000 ? `${(t / 1_000_000).toFixed(1)}M` : t >= 1_000 ? `${(t / 1_000).toFixed(1)}K` : `${t}`;
+
+                if (subcommand === "monthly") {
+                    for (const entry of data.monthly || []) {
+                        lines.push(`\n**${entry.month}** — ${formatCost(entry.totalCost)}`);
+                        lines.push("```");
+                        for (const m of entry.modelBreakdowns || []) {
+                            const name = m.modelName.replace("claude-", "");
+                            lines.push(`${name.padEnd(28)} ${formatCost(m.cost).padStart(8)}  (${formatTokens(m.inputTokens + m.outputTokens)} tokens)`);
+                        }
+                        lines.push("```");
+                    }
+                } else {
+                    const entries = data.daily || data.blocks || [];
+                    if (entries.length === 0) {
+                        lines.push("No usage data found.");
+                    }
+                    for (const entry of entries) {
+                        const label = entry.date || entry.block || entry.period || "?";
+                        lines.push(`\n**${label}** — ${formatCost(entry.totalCost)}`);
+                        lines.push("```");
+                        for (const m of entry.modelBreakdowns || []) {
+                            const name = m.modelName.replace("claude-", "");
+                            lines.push(`${name.padEnd(28)} ${formatCost(m.cost).padStart(8)}  (${formatTokens(m.inputTokens + m.outputTokens)} tokens)`);
+                        }
+                        lines.push("```");
+                    }
+                }
+
+                if (data.totals) {
+                    lines.push(`\n**Total: ${formatCost(data.totals.totalCost)}**`);
+                }
+
+                const output = lines.join("\n");
+                // Chunk for Discord 2000 char limit
+                if (output.length <= 2000) {
+                    await msg.reply(output);
+                } else {
+                    const chunks: string[] = [];
+                    let current = "";
+                    for (const line of output.split("\n")) {
+                        if (current.length + line.length + 1 > 2000) {
+                            chunks.push(current);
+                            current = line;
+                        } else {
+                            current += (current ? "\n" : "") + line;
+                        }
+                    }
+                    if (current) chunks.push(current);
+
+                    await msg.reply(chunks[0]);
+                    for (let i = 1; i < chunks.length; i++) {
+                        await (msg.channel as TextChannel).send(chunks[i]);
+                    }
+                }
+            } catch (error: any) {
+                console.error(`[Bot] ccusage error: ${error.message}`);
+                await msg.reply("Failed to fetch usage data. Make sure ccusage is available.");
+            }
+            return;
+        }
+
         // Handle !guild command
         if (msg.content.trim() === "!guild") {
             if (!msg.guild) {
