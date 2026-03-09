@@ -31,6 +31,30 @@ function getRemainingCooldown(userId: string): number {
     return Math.max(0, Math.ceil((COOLDOWN_MS - (Date.now() - last)) / 1000));
 }
 
+// React to a message with either a unicode emoji or a custom guild emoji by name
+async function reactWithEmoji(msg: Message, emoji: string): Promise<void> {
+    try {
+        await msg.react(emoji);
+    } catch {
+        // If unicode react failed, try finding a custom guild emoji by name
+        const guild = msg.guild;
+        if (guild) {
+            const customEmoji = guild.emojis.cache.find(
+                (e) => e.name?.toLowerCase() === emoji.toLowerCase(),
+            );
+            if (customEmoji) {
+                try {
+                    await msg.react(customEmoji);
+                    return;
+                } catch { /* fall through */ }
+            }
+        }
+        // Final fallback
+        console.error(`[Bot] Failed to react with "${emoji}", using 👍 fallback`);
+        await msg.react("👍").catch(() => {});
+    }
+}
+
 // Smart message splitting that respects code blocks and paragraph boundaries
 function smartSplit(text: string, maxLen: number = 2000): string[] {
     if (text.length <= maxLen) return [text];
@@ -307,13 +331,7 @@ export function registerHandler() {
             if (reactMatch) {
                 const emoji = reactMatch[1].trim();
                 console.error(`[Bot] React-only response with: ${emoji}`);
-                try {
-                    await msg.react(emoji);
-                } catch (err: any) {
-                    console.error(`[Bot] Failed to react with ${emoji}: ${err.message}`);
-                    // Fallback: try thumbs up
-                    await msg.react("👍").catch(() => {});
-                }
+                await reactWithEmoji(msg, emoji);
                 removePending(msg.id);
                 return;
             }
@@ -491,7 +509,7 @@ export function registerHandler() {
             const reactMatch = response.match(/^\[REACT:(.+?)\]\s*$/);
             if (reactMatch) {
                 const emoji = reactMatch[1].trim();
-                await msg.react(emoji).catch(() => msg.react("👍").catch(() => {}));
+                await reactWithEmoji(msg, emoji);
                 return;
             }
 

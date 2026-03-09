@@ -12,6 +12,16 @@ import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
 
+const ReactToMessageSchema = z.object({
+    server: z
+        .string()
+        .optional()
+        .describe("Server name or ID (optional if bot is only in one server)"),
+    channel: z.string().describe('Channel name (e.g., "general") or ID'),
+    messageId: z.string().describe("The Discord message ID to react to"),
+    emoji: z.string().describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
+});
+
 const SendMessageSchema = z.object({
     server: z
         .string()
@@ -59,6 +69,35 @@ export function createMcpServer(): Server {
                         },
                     },
                     required: ["channel", "message"],
+                },
+            },
+            {
+                name: "react-to-message",
+                description:
+                    "React to a Discord message with an emoji (unicode or custom guild emoji)",
+                inputSchema: {
+                    type: "object" as const,
+                    properties: {
+                        server: {
+                            type: "string",
+                            description:
+                                "Server name or ID (optional if bot is only in one server)",
+                        },
+                        channel: {
+                            type: "string",
+                            description: 'Channel name (e.g., "general") or ID',
+                        },
+                        messageId: {
+                            type: "string",
+                            description: "The Discord message ID to react to",
+                        },
+                        emoji: {
+                            type: "string",
+                            description:
+                                'Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")',
+                        },
+                    },
+                    required: ["channel", "messageId", "emoji"],
                 },
             },
             {
@@ -143,6 +182,37 @@ export function createMcpServer(): Server {
                             {
                                 type: "text",
                                 text: `Message sent to #${channel.name}. ID: ${sent.id}`,
+                            },
+                        ],
+                    };
+                }
+                case "react-to-message": {
+                    const { channel: chId, messageId, emoji } =
+                        ReactToMessageSchema.parse(args);
+                    const reactChannel = await findChannel(chId);
+                    const targetMsg = await reactChannel.messages.fetch(messageId);
+
+                    try {
+                        await targetMsg.react(emoji);
+                    } catch {
+                        // Try custom guild emoji by name
+                        const customEmoji = reactChannel.guild.emojis.cache.find(
+                            (e) => e.name?.toLowerCase() === emoji.toLowerCase(),
+                        );
+                        if (customEmoji) {
+                            await targetMsg.react(customEmoji);
+                        } else {
+                            throw new Error(
+                                `Could not find emoji "${emoji}". Use a unicode emoji or a custom emoji name from this server.`,
+                            );
+                        }
+                    }
+
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Reacted with ${emoji} to message ${messageId} in #${reactChannel.name}`,
                             },
                         ],
                     };
