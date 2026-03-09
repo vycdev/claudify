@@ -5,6 +5,7 @@ import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
 import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
+import { handleHelp } from "./commands/help.js";
 import { askClaude } from "../askClaude.js";
 import { appendToLog } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
@@ -121,6 +122,11 @@ export function registerHandler() {
             if (!(msg.channel instanceof TextChannel)) return;
 
             // Command routing
+            if (msg.content.trim() === "!help") {
+                await handleHelp(msg);
+                return;
+            }
+
             if (msg.content.trim() === "!storage") {
                 await handleStorage(msg);
                 return;

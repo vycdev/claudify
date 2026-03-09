@@ -110,6 +110,20 @@ export async function askClaude(
         promptParts.push("");
     }
 
+    // List available custom emojis from the guild
+    try {
+        const guild = client.guilds.cache.find((g) => g.id === guildId);
+        if (guild && guild.emojis.cache.size > 0) {
+            const emojiList = guild.emojis.cache
+                .map((e) => e.name)
+                .filter(Boolean)
+                .join(", ");
+            promptParts.push(`=== Custom emojis available in this server ===`);
+            promptParts.push(emojiList);
+            promptParts.push("");
+        }
+    } catch { /* ignore */ }
+
     promptParts.push(`=== Current message from ${author} in #${channelName} (${serverName}) ===`);
     promptParts.push(question);
 

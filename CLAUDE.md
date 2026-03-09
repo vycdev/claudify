@@ -40,6 +40,7 @@ src/
 │   ├── helpers.ts        → Guild/channel resolution utilities
 │   ├── handler.ts        → Event listeners (messageCreate, messageReactionAdd)
 │   └── commands/         → Command handlers (one file per command)
+│       ├── help.ts       → !help — command list and bot info
 │       ├── storage.ts    → !storage — file/directory stats
 │       ├── usage.ts      → !usage — token usage via ccusage (rich embeds)
 │       ├── guild.ts      → !guild — server memory display
@@ -129,6 +130,7 @@ messages/
 | Tool | Description |
 |------|-------------|
 | `send-message` | Send a message to a Discord channel |
+| `react-to-message` | React to a message with unicode or custom guild emoji |
 | `read-messages` | Fetch recent messages from Discord API (live) |
 | `read-message-history` | Read saved history/pending files from disk |
 | `fetch-messages` | Fetch specific messages by Discord message links |
