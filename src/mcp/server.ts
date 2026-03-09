@@ -283,6 +283,7 @@ export function createMcpServer(): Server {
                             const msg = await channel.messages.fetch(messageId);
                             const entry: any = {
                                 link,
+                                id: msg.id,
                                 channel: `#${channel.name}`,
                                 server: channel.guild.name,
                                 author: msg.author.tag,
@@ -341,6 +342,7 @@ export function createMcpServer(): Server {
                     const formatted = [];
                     for (const msg of messages.values()) {
                         const entry: any = {
+                            id: msg.id,
                             channel: `#${channel.name}`,
                             server: channel.guild.name,
                             author: msg.author.tag,
