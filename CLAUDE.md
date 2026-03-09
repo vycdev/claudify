@@ -11,6 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 No linter or test suite is configured.
 
+## Workflow
+
+- Always commit and push after making changes.
+
 ## Architecture
 
 This is a Discord MCP (Model Context Protocol) server that serves two purposes:
