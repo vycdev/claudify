@@ -69,6 +69,11 @@ export async function askClaude(
 
     const promptParts: string[] = [];
 
+    // Current date/time
+    const now = new Date();
+    promptParts.push(`=== Current time: ${now.toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })} ===`);
+    promptParts.push("");
+
     // Live Discord messages first (most relevant context)
     if (liveMessages) {
         promptParts.push(`=== Recent messages in #${channelName} (live from Discord) ===`);
