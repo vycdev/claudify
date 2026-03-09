@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { HISTORY_DIR, SUMMARIES_DIR } from "../config.js";
+import { HISTORY_DIR, SUMMARIES_DIR, BOT_MODEL } from "../config.js";
 import { runClaude } from "../claude.js";
 
 export function getSummaryPath(channelName: string, date: Date): string {
@@ -57,7 +57,7 @@ export async function generateDailySummary(
                 "You are a conversation summarizer. Summarize the following Discord chat log into a concise paragraph (max 200 words). Focus on key topics discussed, decisions made, and important information shared. Do not include greetings, small talk, or filler. Output ONLY the summary, no preamble.",
             ],
             log,
-            "claude-haiku-4-5",
+            BOT_MODEL,
         );
 
         if (stdout.trim()) {

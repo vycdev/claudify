@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { PROFILES_DIR, PROFILE_MAX_CHARS, SERVER_MEMORY_MAX_CHARS } from "../config.js";
+import { PROFILES_DIR, PROFILE_MAX_CHARS, SERVER_MEMORY_MAX_CHARS, BOT_MODEL } from "../config.js";
 import { runClaude } from "../claude.js";
 
 export function getUserProfile(userId: string): string {
@@ -56,7 +56,7 @@ export async function backgroundProfileUpdate(
             `If no profiles need updating, output exactly: NO_UPDATES`,
         ].join("\n");
 
-        const { stdout } = await runClaude(["-p"], prompt, "claude-haiku-4-5");
+        const { stdout } = await runClaude(["-p"], prompt, BOT_MODEL);
         const output = stdout.trim();
 
         if (output === "NO_UPDATES") {
@@ -119,7 +119,7 @@ export async function backgroundServerMemoryUpdate(
             `Task: Based on this conversation, output an updated server memory. Include ONLY server-wide context: channel purposes, recurring topics, ongoing projects, inside jokes, server culture, important events, and shared knowledge. Do NOT include any user-specific information (user descriptions, user preferences, user behavior patterns, who does what) — that belongs in individual user profiles which are managed separately. Keep it under ${SERVER_MEMORY_MAX_CHARS} characters. If you learned nothing new about the server, output the existing memory unchanged. Output ONLY the memory text, no preamble or explanation.`,
         ].join("\n");
 
-        const { stdout } = await runClaude(["-p"], prompt, "claude-haiku-4-5");
+        const { stdout } = await runClaude(["-p"], prompt, BOT_MODEL);
 
         const newMemory = stdout.trim();
         if (newMemory && newMemory !== existingMemory.trim()) {

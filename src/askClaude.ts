@@ -1,4 +1,4 @@
-import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH } from "./config.js";
+import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH, BOT_MODEL } from "./config.js";
 import { runClaude } from "./claude.js";
 import { client } from "./discord/client.js";
 import { loadRecentHistory } from "./storage/history.js";
@@ -8,7 +8,7 @@ function getSystemPrompt(): string {
     const botName =
         client.user?.displayName || client.user?.username || "Claudify";
     return [
-        `You are ${botName}, a Discord bot. You talk like a normal person in a group chat.`,
+        `You are ${botName}, a Discord bot powered by ${BOT_MODEL}. You talk like a normal person in a group chat.`,
         ``,
         `## RESPONSE LENGTH — THIS IS CRITICAL`,
         `Most responses should be 1-3 sentences. Aim for under 300 characters.`,
@@ -141,7 +141,7 @@ export async function askClaude(
                 MCP_CONFIG_PATH,
             ],
             prompt,
-            "claude-haiku-4-5",
+            BOT_MODEL,
         );
 
         if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
