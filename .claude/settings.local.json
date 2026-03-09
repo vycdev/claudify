@@ -3,7 +3,13 @@
     "allow": [
       "Bash(npx tsc --noEmit)",
       "Bash(npx tsc)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx ccusage@latest monthly --json)",
+      "Bash(git add CLAUDE.md src/index.ts)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git add CLAUDE.md src/askClaude.ts src/config.ts src/discord/client.ts src/discord/handler.ts .claude/settings.local.json)"
     ]
   }
 }

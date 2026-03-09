@@ -16,6 +16,8 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 
+export const COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || "10000", 10);
+
 export const MCP_PORT = parseInt(process.env.MCP_PORT || "3100", 10);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 
