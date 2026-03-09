@@ -1,4 +1,4 @@
-import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH, BOT_MODEL } from "./config.js";
+import { HISTORY_DIR, MCP_CONFIG_PATH, BOT_MODEL } from "./config.js";
 import { runClaude } from "./claude.js";
 import { client } from "./discord/client.js";
 import { loadRecentHistory } from "./storage/history.js";
@@ -151,8 +151,6 @@ export async function askClaude(
                 getSystemPrompt(),
                 "--allowedTools",
                 "WebSearch,WebFetch,Read,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages,mcp__discord__react-to-message",
-                "--add-dir",
-                MESSAGES_DIR,
                 "--mcp-config",
                 MCP_CONFIG_PATH,
             ],
