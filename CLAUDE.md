@@ -19,36 +19,56 @@ No linter or test suite is configured.
 
 This is a Discord MCP (Model Context Protocol) server that serves two purposes:
 
-1. **MCP Server (stdio transport):** Exposes tools (`send-message`, `read-messages`, `read-message-history`) that an MCP client (Claude Desktop, Claude Code) can call to interact with Discord.
+1. **MCP Server (HTTP transport):** Exposes tools (`send-message`, `read-messages`, `read-message-history`, `fetch-messages`) that an MCP client (Claude Desktop, Claude Code) can call to interact with Discord.
 
-2. **Auto-response bot:** Listens for `!ask <question>` commands and `@bot` mentions in Discord, invokes the `claude` CLI (`claude -p`) to generate a response, and replies in the channel.
+2. **Auto-response bot:** Listens for `!ask <question>` commands, `@bot` mentions, and replies to bot messages in Discord, invokes the `claude` CLI (`claude -p`) to generate a response, and replies in the channel.
 
-### Single file: `src/index.ts`
+### File structure
 
-Everything lives in one file. Key sections:
-
-- **Discord.js client** with `Guilds`, `GuildMessages`, `MessageContent` intents
-- **`findGuild` / `findChannel` helpers** — resolve servers/channels by name or ID
-- **`saveMessage` / `loadRecentHistory`** — persist messages as text files in `messages/history/` and `messages/pending/`
-- **`askClaude`** — spawns `claude -p` with the question and recent history context, captures stdout
-- **MCP server setup** — `ListToolsRequestSchema` and `CallToolRequestSchema` handlers
-- **`messageCreate` listener** — the auto-response loop that ties Discord messages to Claude CLI
+```
+src/
+  index.ts                    — Entry point: boots Discord client, registers handler, starts MCP HTTP server
+  config.ts                   — Environment variables, directory paths, constants
+  claude.ts                   — runClaude() wrapper for spawning the Claude CLI
+  askClaude.ts                — getSystemPrompt() + askClaude() orchestration (assembles prompts from history/profiles/memory)
+  discord/
+    client.ts                 — Discord.js Client singleton
+    helpers.ts                — findGuild(), findChannel() resolution helpers
+    handler.ts                — messageCreate listener: routes commands and handles !ask/@mention/reply flow
+    commands/
+      storage.ts              — !storage command
+      usage.ts                — !usage command (rich embeds via ccusage)
+      guild.ts                — !guild command (server memory)
+      profile.ts              — !profile command (user profiles)
+  storage/
+    history.ts                — getDailyLogPath, appendToLog, loadRecentHistory
+    pending.ts                — savePending, removePending
+    profiles.ts               — getUserProfile, getServerMemory, backgroundProfileUpdate, backgroundServerMemoryUpdate
+    summaries.ts              — getSummaryPath, loadRecentSummaries, generateDailySummary, ensureYesterdaySummaries
+    images.ts                 — downloadAttachment
+  mcp/
+    server.ts                 — createMcpServer() factory, tool schemas, ListTools/CallTool handlers
+    http.ts                   — writeMcpConfig(), startMcpHttpServer()
+```
 
 ### Message flow (auto-response)
 
 ```
-Discord user (!ask or @mention)
-  → saveMessage to pending/
-  → askClaude (spawns claude CLI with history context)
+Discord user (!ask or @mention or reply)
+  → savePending()
+  → askClaude (spawns claude CLI with history + profile + server memory context)
   → reply in Discord
-  → save question + response to history/
-  → remove from pending/
+  → appendToLog() question + response
+  → removePending()
+  → background: update user profile, server memory, generate summaries
 ```
 
 ### Environment
 
 - `DISCORD_TOKEN` — required, Discord bot token
-- `MESSAGES_DIR` — optional, defaults to `./messages/` (contains `history/` and `pending/` subdirs)
+- `MESSAGES_DIR` — optional, defaults to `./messages/` (contains `history/`, `pending/`, `profiles/`, `summaries/`, `images/` subdirs)
+- `REQUIRED_ROLE_ID` — optional, restrict bot usage to a specific Discord role
+- `MCP_PORT` — optional, HTTP MCP server port (default 3100)
 
 ### MCP Tools
 
@@ -57,6 +77,7 @@ Discord user (!ask or @mention)
 | `send-message` | Send a message to a Discord channel |
 | `read-messages` | Read recent messages from a Discord channel via Discord API |
 | `read-message-history` | Read saved message text files from disk (history or pending) |
+| `fetch-messages` | Fetch specific messages by Discord message links |
 
 ### Key dependencies
 
