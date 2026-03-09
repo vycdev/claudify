@@ -261,21 +261,36 @@ export function registerHandler() {
 
             removePending(msg.id);
 
-            // Background jobs
+            // Background jobs — use live messages as context for all participants
+            const conversationContext = liveMessages || `${msg.author.tag}: ${rawQuestion}\n${botName} (bot): ${response}`;
+
+            // Collect all human users from the live messages
+            const participantUsers: { tag: string; id: string }[] = [];
+            try {
+                const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
+                for (const m of recent.values()) {
+                    if (!m.author.bot) {
+                        participantUsers.push({
+                            tag: m.author.tag,
+                            id: m.author.id,
+                        });
+                    }
+                }
+            } catch {
+                // Fallback to just the triggering user
+                participantUsers.push({ tag: msg.author.tag, id: msg.author.id });
+            }
+
             backgroundProfileUpdate(
-                msg.author.tag,
-                msg.author.id,
-                rawQuestion,
-                response,
+                participantUsers,
+                conversationContext,
             ).catch(() => {});
             if (msg.guild) {
                 backgroundServerMemoryUpdate(
                     msg.guild.id,
                     msg.guild.name,
                     msg.channel.name,
-                    msg.author.tag,
-                    rawQuestion,
-                    response,
+                    conversationContext,
                 ).catch(() => {});
             }
             ensureYesterdaySummaries().catch(() => {});
