@@ -175,6 +175,33 @@ export function registerHandler() {
                 (msg.channel as TextChannel).sendTyping().catch(() => {});
             }, 8000);
 
+            // Fetch live channel messages for context
+            let liveMessages = "";
+            try {
+                const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
+                const sorted = Array.from(recent.values()).reverse();
+                liveMessages = sorted.map((m) => {
+                    const time = m.createdAt.toTimeString().split(" ")[0];
+                    const authorLabel = m.author.id === client.user!.id
+                        ? `${botName} (bot)`
+                        : m.author.displayName || m.author.username;
+                    let content = m.content;
+                    if (m.attachments.size > 0) {
+                        content += ` [${m.attachments.size} attachment(s)]`;
+                    }
+                    if (m.embeds.length > 0) {
+                        const embedSummary = m.embeds
+                            .map((e) => [e.title, e.description].filter(Boolean).join(": "))
+                            .filter(Boolean)
+                            .join("; ");
+                        if (embedSummary) content += ` [Embed: ${embedSummary}]`;
+                    }
+                    return `[${time}] ${authorLabel}: ${content}`;
+                }).join("\n");
+            } catch (err: any) {
+                console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
+            }
+
             const response = await askClaude(
                 question,
                 msg.author.tag,
@@ -183,6 +210,7 @@ export function registerHandler() {
                 msg.guild?.name || "DM",
                 msg.guild?.id || "unknown",
                 imagePaths,
+                liveMessages,
             );
 
             clearInterval(typingInterval);
