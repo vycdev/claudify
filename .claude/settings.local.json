@@ -9,7 +9,14 @@
       "Bash(git add CLAUDE.md src/index.ts)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(git add CLAUDE.md src/askClaude.ts src/config.ts src/discord/client.ts src/discord/handler.ts .claude/settings.local.json)"
+      "Bash(git add CLAUDE.md src/askClaude.ts src/config.ts src/discord/client.ts src/discord/handler.ts .claude/settings.local.json)",
+      "Bash(git add src/config.ts src/askClaude.ts src/storage/profiles.ts src/storage/summaries.ts CLAUDE.md)",
+      "Bash(git add src/discord/handler.ts src/mcp/server.ts src/askClaude.ts)",
+      "Bash(git add src/askClaude.ts src/discord/handler.ts src/discord/commands/help.ts CLAUDE.md)",
+      "Bash(git add src/askClaude.ts)",
+      "WebSearch",
+      "Bash(git add src/claude.ts)",
+      "Bash(git add src/discord/handler.ts)"
     ]
   }
 }
