@@ -291,11 +291,13 @@ export function registerHandler() {
                 (msg.channel as TextChannel).sendTyping().catch(() => {});
             }, 8000);
 
-            // Fetch live channel messages for context
+            // Fetch live channel messages for context (reused later for participant collection)
             let liveMessages = "";
+            let recentMessages: Message[] = [];
             try {
                 const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
-                const sorted = Array.from(recent.values()).reverse();
+                recentMessages = Array.from(recent.values());
+                const sorted = recentMessages.slice().reverse();
                 liveMessages = sorted.map((m) => {
                     const time = m.createdAt.toTimeString().split(" ")[0];
                     const authorLabel = m.author.id === client.user!.id
@@ -378,11 +380,10 @@ export function registerHandler() {
             // Background jobs — use live messages as context for all participants
             const conversationContext = liveMessages || `${msg.author.tag}: ${rawQuestion}\n${botName} (bot): ${response}`;
 
-            // Collect all human users from the live messages
+            // Collect all human users from the already-fetched live messages
             const participantUsers: { tag: string; id: string }[] = [];
-            try {
-                const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
-                for (const m of recent.values()) {
+            if (recentMessages.length > 0) {
+                for (const m of recentMessages) {
                     if (!m.author.bot) {
                         participantUsers.push({
                             tag: m.author.tag,
@@ -390,8 +391,7 @@ export function registerHandler() {
                         });
                     }
                 }
-            } catch {
-                // Fallback to just the triggering user
+            } else {
                 participantUsers.push({ tag: msg.author.tag, id: msg.author.id });
             }
 
