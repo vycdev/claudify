@@ -19,7 +19,7 @@ function authorLabel(user: { displayName?: string; globalName?: string | null; u
         const botName = client.user?.displayName || client.user?.username || "Claudify";
         return `${botName} (bot)`;
     }
-    return user.displayName || user.globalName || user.username;
+    return user.globalName || user.displayName || user.username;
 }
 
 // Per-user cooldown tracking
