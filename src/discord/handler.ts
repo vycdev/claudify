@@ -334,18 +334,25 @@ export function registerHandler() {
             clearInterval(typingInterval);
             setCooldown(msg.author.id);
 
-            // Check if Claude chose to just react instead of responding
-            const reactMatch = response.match(/^\[REACT:(.+?)\]\s*$/);
-            if (reactMatch) {
-                const emoji = reactMatch[1].trim();
-                console.error(`[Bot] React-only response with: ${emoji}`);
+            // Extract any [REACT:emoji] tags and apply them as reactions
+            const reactTags = [...response.matchAll(/\[REACT:(.+?)\]/g)];
+            const textResponse = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
+
+            for (const match of reactTags) {
+                const emoji = match[1].trim();
+                console.error(`[Bot] Reacting with: ${emoji}`);
                 await reactWithEmoji(msg, emoji);
+            }
+
+            if (!textResponse) {
+                // React-only, no text to send
                 removePending(msg.id);
                 return;
             }
 
+            const response_ = textResponse;
             console.error(
-                `[Bot] Sending response (${response.length} chars) to #${msg.channel.name}`,
+                `[Bot] Sending response (${response_.length} chars) to #${msg.channel.name}`,
             );
 
             const safeSend = async (text: string, reply: boolean) => {
@@ -360,7 +367,7 @@ export function registerHandler() {
                 }
             };
 
-            const chunks = smartSplit(response);
+            const chunks = smartSplit(response_);
             for (let i = 0; i < chunks.length; i++) {
                 await safeSend(chunks[i], i === 0);
             }
@@ -373,7 +380,7 @@ export function registerHandler() {
                 msg.channel.name,
                 msg.createdAt,
             );
-            appendToLog(botName + " (bot)", response, msg.channel.name);
+            appendToLog(botName + " (bot)", response_, msg.channel.name);
 
             removePending(msg.id);
 
@@ -511,21 +518,24 @@ export function registerHandler() {
             clearInterval(typingInterval);
             setCooldown(user.id);
 
-            // Check for react-only response
-            const reactMatch = response.match(/^\[REACT:(.+?)\]\s*$/);
-            if (reactMatch) {
-                const emoji = reactMatch[1].trim();
+            // Extract any [REACT:emoji] tags and apply them as reactions
+            const reactTags2 = [...response.matchAll(/\[REACT:(.+?)\]/g)];
+            const textResponse2 = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
+
+            for (const match of reactTags2) {
+                const emoji = match[1].trim();
                 await reactWithEmoji(msg, emoji);
-                return;
             }
 
-            const chunks = smartSplit(response);
-            for (const chunk of chunks) {
-                await msg.channel.send(chunk);
+            if (textResponse2) {
+                const chunks = smartSplit(textResponse2);
+                for (const chunk of chunks) {
+                    await msg.channel.send(chunk);
+                }
             }
 
             appendToLog(user.tag || "Unknown", `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`, msg.channel.name);
-            appendToLog(botName + " (bot)", response, msg.channel.name);
+            appendToLog(botName + " (bot)", textResponse2 || `[reacted: ${reactTags2.map(m => m[1]).join(", ")}]`, msg.channel.name);
 
             console.error(`[Bot] Reaction-triggered response sent successfully`);
         } catch (error: any) {
