@@ -13,6 +13,15 @@ import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 
+// Consistent display name for a user — used in logs, prompts, and history
+function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
+    if (user.id === client.user?.id) {
+        const botName = client.user?.displayName || client.user?.username || "Claudify";
+        return `${botName} (bot)`;
+    }
+    return user.displayName || user.globalName || user.username;
+}
+
 // Per-user cooldown tracking
 const userCooldowns = new Map<string, number>();
 
@@ -224,7 +233,7 @@ export function registerHandler() {
                                 embedTexts.join("\n---\n");
                         }
                     }
-                    replyContext = `[Replying to ${refMsg.author.tag}: "${refText}"]\n`;
+                    replyContext = `[Replying to ${authorLabel(refMsg.author)}: "${refText}"]\n`;
                     console.error(
                         `[Bot] Reply context from ${refMsg.author.tag}: ${refText.slice(0, 200)}`,
                     );
@@ -300,9 +309,7 @@ export function registerHandler() {
                 const sorted = recentMessages.slice().reverse();
                 liveMessages = sorted.map((m) => {
                     const time = m.createdAt.toTimeString().split(" ")[0];
-                    const authorLabel = m.author.id === client.user!.id
-                        ? `${botName} (bot)`
-                        : m.author.displayName || m.author.username;
+                    const label = authorLabel(m.author);
                     let content = m.content;
                     if (m.attachments.size > 0) {
                         content += ` [${m.attachments.size} attachment(s)]`;
@@ -314,7 +321,7 @@ export function registerHandler() {
                             .join("; ");
                         if (embedSummary) content += ` [Embed: ${embedSummary}]`;
                     }
-                    return `[${time}] ${authorLabel}: ${content}`;
+                    return `[${time}] ${label}: ${content}`;
                 }).join("\n");
             } catch (err: any) {
                 console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
@@ -322,7 +329,7 @@ export function registerHandler() {
 
             const response = await askClaude(
                 question,
-                msg.author.tag,
+                authorLabel(msg.author),
                 msg.author.id,
                 msg.channel.name,
                 msg.guild?.name || "DM",
@@ -375,7 +382,7 @@ export function registerHandler() {
             console.error(`[Bot] Response sent successfully`);
 
             appendToLog(
-                msg.author.tag,
+                authorLabel(msg.author),
                 rawQuestion,
                 msg.channel.name,
                 msg.createdAt,
@@ -385,7 +392,7 @@ export function registerHandler() {
             removePending(msg.id);
 
             // Background jobs — use live messages as context for all participants
-            const conversationContext = liveMessages || `${msg.author.tag}: ${rawQuestion}\n${botName} (bot): ${response}`;
+            const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;
 
             // Collect all human users from the already-fetched live messages
             const participantUsers: { tag: string; id: string }[] = [];
@@ -393,13 +400,13 @@ export function registerHandler() {
                 for (const m of recentMessages) {
                     if (!m.author.bot) {
                         participantUsers.push({
-                            tag: m.author.tag,
+                            tag: authorLabel(m.author),
                             id: m.author.id,
                         });
                     }
                 }
             } else {
-                participantUsers.push({ tag: msg.author.tag, id: msg.author.id });
+                participantUsers.push({ tag: authorLabel(msg.author), id: msg.author.id });
             }
 
             backgroundProfileUpdate(
@@ -463,7 +470,9 @@ export function registerHandler() {
             console.error(`[Bot] 🤖 reaction trigger by ${user.tag} on message from ${msg.author?.tag} in #${msg.channel.name}`);
 
             const botName = client.user?.displayName || client.user?.username || "Claudify";
-            const question = `[${msg.author?.tag} said this, and ${user.tag} wants you to respond to it]: ${msg.content}`;
+            const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
+            const userLabel = authorLabel(user as any);
+            const question = `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${msg.content}`;
 
             // Fetch live messages for context
             let liveMessages = "";
@@ -472,9 +481,7 @@ export function registerHandler() {
                 const sorted = Array.from(recent.values()).reverse();
                 liveMessages = sorted.map((m) => {
                     const time = m.createdAt.toTimeString().split(" ")[0];
-                    const authorLabel = m.author.id === client.user!.id
-                        ? `${botName} (bot)`
-                        : m.author.displayName || m.author.username;
+                    const label = authorLabel(m.author);
                     let content = m.content;
                     if (m.attachments.size > 0) content += ` [${m.attachments.size} attachment(s)]`;
                     if (m.embeds.length > 0) {
@@ -484,7 +491,7 @@ export function registerHandler() {
                             .join("; ");
                         if (embedSummary) content += ` [Embed: ${embedSummary}]`;
                     }
-                    return `[${time}] ${authorLabel}: ${content}`;
+                    return `[${time}] ${label}: ${content}`;
                 }).join("\n");
             } catch { /* ignore */ }
 
@@ -506,7 +513,7 @@ export function registerHandler() {
 
             const response = await askClaude(
                 question,
-                user.tag || "Unknown",
+                userLabel,
                 user.id,
                 msg.channel.name,
                 msg.guild.name,
@@ -534,7 +541,7 @@ export function registerHandler() {
                 }
             }
 
-            appendToLog(user.tag || "Unknown", `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`, msg.channel.name);
+            appendToLog(userLabel, `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`, msg.channel.name);
             appendToLog(botName + " (bot)", textResponse2 || `[reacted: ${reactTags2.map(m => m[1]).join(", ")}]`, msg.channel.name);
 
             console.error(`[Bot] Reaction-triggered response sent successfully`);
