@@ -22,23 +22,43 @@ function authorLabel(user: { displayName?: string; globalName?: string | null; u
     return user.globalName || user.displayName || user.username;
 }
 
-// Per-user cooldown tracking
+// Per-user message queue with cooldown
+const MAX_QUEUED_PER_USER = 5;
+const userQueues = new Map<string, Message[]>();
+const userProcessing = new Set<string>();
 const userCooldowns = new Map<string, number>();
-
-function isOnCooldown(userId: string): boolean {
-    const last = userCooldowns.get(userId);
-    if (!last) return false;
-    return Date.now() - last < COOLDOWN_MS;
-}
 
 function setCooldown(userId: string): void {
     userCooldowns.set(userId, Date.now());
 }
 
-function getRemainingCooldown(userId: string): number {
+function getCooldownRemaining(userId: string): number {
     const last = userCooldowns.get(userId);
     if (!last) return 0;
-    return Math.max(0, Math.ceil((COOLDOWN_MS - (Date.now() - last)) / 1000));
+    return Math.max(0, COOLDOWN_MS - (Date.now() - last));
+}
+
+function enqueueUserMessage(msg: Message): boolean {
+    const userId = msg.author.id;
+    const queue = userQueues.get(userId) || [];
+    if (queue.length >= MAX_QUEUED_PER_USER) {
+        return false; // queue full
+    }
+    queue.push(msg);
+    userQueues.set(userId, queue);
+    return true;
+}
+
+function dequeueUserMessage(userId: string): Message | undefined {
+    const queue = userQueues.get(userId);
+    if (!queue || queue.length === 0) return undefined;
+    const msg = queue.shift()!;
+    if (queue.length === 0) userQueues.delete(userId);
+    return msg;
+}
+
+function getUserQueueSize(userId: string): number {
+    return userQueues.get(userId)?.length || 0;
 }
 
 // React to a message with either a unicode emoji or a custom guild emoji by name
@@ -169,271 +189,31 @@ export function registerHandler() {
 
             if (!isMention && !isAskCommand && !isReplyToBot) return;
 
-            // Per-user cooldown check
-            if (isOnCooldown(msg.author.id)) {
-                const remaining = getRemainingCooldown(msg.author.id);
-                console.error(`[Bot] Cooldown active for ${msg.author.tag} (${remaining}s remaining)`);
+            // Per-user queue — if queue is full, reject with ⏳
+            if (getUserQueueSize(msg.author.id) >= MAX_QUEUED_PER_USER) {
+                console.error(`[Bot] Queue full for ${msg.author.tag} (${MAX_QUEUED_PER_USER} queued)`);
                 await msg.react("⏳").catch(() => {});
                 return;
             }
 
-            const triggerType = isAskCommand
-                ? "!ask"
-                : isReplyToBot
-                  ? "reply"
-                  : "@mention";
-            console.error(
-                `[Bot] Received ${triggerType} from ${msg.author.tag} in #${(msg.channel as TextChannel).name}: ${msg.content}`,
-            );
-
-            // Check role permission
-            if (
-                REQUIRED_ROLE_ID &&
-                msg.member &&
-                !msg.member.roles.cache.has(REQUIRED_ROLE_ID)
-            ) {
-                console.error(
-                    `[Bot] Rejected: ${msg.author.tag} missing role ${REQUIRED_ROLE_ID}`,
-                );
-                await msg.reply(
-                    "You can't use this command because you don't have the required role.",
-                );
+            // If user is already being processed or on cooldown, queue the message
+            if (userProcessing.has(msg.author.id) || getCooldownRemaining(msg.author.id) > 0) {
+                enqueueUserMessage(msg);
+                console.error(`[Bot] Queued message from ${msg.author.tag} (queue size: ${getUserQueueSize(msg.author.id)})`);
+                await msg.react("📬").catch(() => {});
+                if (!userProcessing.has(msg.author.id)) {
+                    // Not currently processing, schedule drain after cooldown
+                    scheduleQueueDrain(msg.author.id);
+                }
                 return;
             }
 
-            // Fetch referenced message if this is a reply
-            let replyContext = "";
-            const allAttachments: { url: string; name: string }[] = [];
-            if (msg.reference?.messageId) {
-                const refMsg = await msg.channel.messages
-                    .fetch(msg.reference.messageId)
-                    .catch(() => null);
-                if (refMsg) {
-                    let refText = refMsg.content;
-                    if (refMsg.embeds.length > 0) {
-                        const embedTexts = refMsg.embeds
-                            .map((e) => {
-                                const parts: string[] = [];
-                                if (e.title) parts.push(e.title);
-                                if (e.description) parts.push(e.description);
-                                if (e.fields?.length)
-                                    parts.push(
-                                        ...e.fields.map(
-                                            (f) => `${f.name}: ${f.value}`,
-                                        ),
-                                    );
-                                if (e.footer?.text) parts.push(e.footer.text);
-                                return parts.join("\n");
-                            })
-                            .filter((t) => t);
-                        if (embedTexts.length > 0) {
-                            refText +=
-                                (refText ? "\n" : "") +
-                                "[Embeds]\n" +
-                                embedTexts.join("\n---\n");
-                        }
-                    }
-                    replyContext = `[Replying to ${authorLabel(refMsg.author)}: "${refText}"]\n`;
-                    console.error(
-                        `[Bot] Reply context from ${refMsg.author.tag}: ${refText.slice(0, 200)}`,
-                    );
-                    for (const att of refMsg.attachments.values()) {
-                        if (att.contentType?.startsWith("image/")) {
-                            allAttachments.push({
-                                url: att.url,
-                                name: `ref_${att.id}_${att.name || "image.png"}`,
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Collect attachments from current message
-            for (const att of msg.attachments.values()) {
-                if (att.contentType?.startsWith("image/")) {
-                    allAttachments.push({
-                        url: att.url,
-                        name: `${att.id}_${att.name || "image.png"}`,
-                    });
-                }
-            }
-
-            // Extract the question
-            const botName =
-                client.user?.displayName || client.user?.username || "Claudify";
-            const rawQuestion = isAskCommand
-                ? msg.content.slice(5).trim()
-                : msg.content.replace(`<@${client.user!.id}>`, botName).trim();
-            const question = replyContext + rawQuestion;
-
-            if (!rawQuestion) {
-                console.error(`[Bot] Empty question from ${msg.author.tag}`);
-                await msg.reply(
-                    "Please provide a question! Usage: `!ask <your question>` or mention me with a question.",
-                );
-                return;
-            }
-
-            console.error(
-                `[Bot] Processing question: "${question}" (${allAttachments.length} images)`,
-            );
-
-            savePending(msg);
-
-            // Download attachments
-            const imagePaths: string[] = [];
-            for (const att of allAttachments) {
-                try {
-                    const filePath = await downloadAttachment(att.url, att.name);
-                    imagePaths.push(filePath);
-                    console.error(`[Bot] Downloaded image: ${att.name}`);
-                } catch (err: any) {
-                    console.error(
-                        `[Bot] Failed to download image ${att.name}: ${err.message}`,
-                    );
-                }
-            }
-
-            // Show typing indicator
-            await msg.channel.sendTyping();
-            const typingInterval = setInterval(() => {
-                (msg.channel as TextChannel).sendTyping().catch(() => {});
-            }, 8000);
-
-            // Fetch live channel messages for context (reused later for participant collection)
-            let liveMessages = "";
-            let recentMessages: Message[] = [];
-            try {
-                const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
-                recentMessages = Array.from(recent.values());
-                const sorted = recentMessages.slice().reverse();
-                liveMessages = sorted.map((m) => {
-                    const time = m.createdAt.toTimeString().split(" ")[0];
-                    const label = authorLabel(m.author);
-                    let content = m.content;
-                    if (m.attachments.size > 0) {
-                        content += ` [${m.attachments.size} attachment(s)]`;
-                    }
-                    if (m.embeds.length > 0) {
-                        const embedSummary = m.embeds
-                            .map((e) => [e.title, e.description].filter(Boolean).join(": "))
-                            .filter(Boolean)
-                            .join("; ");
-                        if (embedSummary) content += ` [Embed: ${embedSummary}]`;
-                    }
-                    return `[${time}] ${label}: ${content}`;
-                }).join("\n");
-            } catch (err: any) {
-                console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
-            }
-
-            const response = await askClaude(
-                question,
-                authorLabel(msg.author),
-                msg.author.id,
-                msg.channel.name,
-                msg.guild?.name || "DM",
-                msg.guild?.id || "unknown",
-                imagePaths,
-                liveMessages,
-            );
-
-            clearInterval(typingInterval);
-            setCooldown(msg.author.id);
-
-            // Extract any [REACT:emoji] tags and apply them as reactions
-            const reactTags = [...response.matchAll(/\[REACT:(.+?)\]/g)];
-            const textResponse = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
-
-            for (const match of reactTags) {
-                const emoji = match[1].trim();
-                console.error(`[Bot] Reacting with: ${emoji}`);
-                await reactWithEmoji(msg, emoji);
-            }
-
-            if (!textResponse) {
-                // React-only, no text to send
-                removePending(msg.id);
-                return;
-            }
-
-            const response_ = textResponse;
-            console.error(
-                `[Bot] Sending response (${response_.length} chars) to #${msg.channel.name}`,
-            );
-
-            const safeSend = async (text: string, reply: boolean) => {
-                if (reply) {
-                    try {
-                        await msg.reply(text);
-                    } catch {
-                        await (msg.channel as TextChannel).send(text);
-                    }
-                } else {
-                    await (msg.channel as TextChannel).send(text);
-                }
-            };
-
-            const chunks = smartSplit(response_);
-            for (let i = 0; i < chunks.length; i++) {
-                await safeSend(chunks[i], i === 0);
-            }
-
-            console.error(`[Bot] Response sent successfully`);
-
-            appendToLog(
-                authorLabel(msg.author),
-                rawQuestion,
-                msg.channel.name,
-                msg.createdAt,
-            );
-            appendToLog(botName + " (bot)", response_, msg.channel.name);
-
-            removePending(msg.id);
-
-            // Background jobs — use live messages as context for all participants
-            const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;
-
-            // Collect all human users from the already-fetched live messages
-            const participantUsers: { tag: string; id: string }[] = [];
-            if (recentMessages.length > 0) {
-                for (const m of recentMessages) {
-                    if (!m.author.bot) {
-                        participantUsers.push({
-                            tag: authorLabel(m.author),
-                            id: m.author.id,
-                        });
-                    }
-                }
-            } else {
-                participantUsers.push({ tag: authorLabel(msg.author), id: msg.author.id });
-            }
-
-            backgroundProfileUpdate(
-                participantUsers,
-                conversationContext,
-            ).catch(() => {});
-            if (msg.guild) {
-                backgroundServerMemoryUpdate(
-                    msg.guild.id,
-                    msg.guild.name,
-                    msg.channel.name,
-                    conversationContext,
-                ).catch(() => {});
-            }
-            ensureYesterdaySummaries().catch(() => {});
+            await processMessage(msg);
         } catch (error: any) {
             console.error(
                 `[Bot] Unhandled error in messageCreate: ${error.message}`,
             );
             console.error(error.stack);
-            try {
-                await msg.reply(
-                    "Sorry, something went wrong while processing your request.",
-                );
-            } catch {
-                /* ignore reply failure */
-            }
         }
     });
 
@@ -462,7 +242,7 @@ export function registerHandler() {
             if (msg.author?.id === client.user!.id) return;
 
             // Cooldown check for the reacting user
-            if (isOnCooldown(user.id)) {
+            if (getCooldownRemaining(user.id) > 0) {
                 console.error(`[Bot] Reaction trigger cooldown for ${user.tag}`);
                 return;
             }
@@ -549,4 +329,281 @@ export function registerHandler() {
             console.error(`[Bot] Error in reaction handler: ${error.message}`);
         }
     });
+}
+
+function scheduleQueueDrain(userId: string): void {
+    const remaining = getCooldownRemaining(userId);
+    const delay = Math.max(remaining, 100);
+    setTimeout(async () => {
+        const next = dequeueUserMessage(userId);
+        if (next) {
+            await processMessage(next);
+        }
+    }, delay);
+}
+
+async function processMessage(msg: Message): Promise<void> {
+    const userId = msg.author.id;
+    userProcessing.add(userId);
+
+    try {
+        if (!(msg.channel instanceof TextChannel)) return;
+
+        const isAskCommand = msg.content.startsWith("!ask ");
+        console.error(
+            `[Bot] Processing message from ${msg.author.tag} in #${msg.channel.name}: ${msg.content.slice(0, 100)}`,
+        );
+
+        // Check role permission
+        if (
+            REQUIRED_ROLE_ID &&
+            msg.member &&
+            !msg.member.roles.cache.has(REQUIRED_ROLE_ID)
+        ) {
+            console.error(
+                `[Bot] Rejected: ${msg.author.tag} missing role ${REQUIRED_ROLE_ID}`,
+            );
+            await msg.reply(
+                "You can't use this command because you don't have the required role.",
+            );
+            return;
+        }
+
+        // Fetch referenced message if this is a reply
+        let replyContext = "";
+        const allAttachments: { url: string; name: string }[] = [];
+        if (msg.reference?.messageId) {
+            const refMsg = await msg.channel.messages
+                .fetch(msg.reference.messageId)
+                .catch(() => null);
+            if (refMsg) {
+                let refText = refMsg.content;
+                if (refMsg.embeds.length > 0) {
+                    const embedTexts = refMsg.embeds
+                        .map((e) => {
+                            const parts: string[] = [];
+                            if (e.title) parts.push(e.title);
+                            if (e.description) parts.push(e.description);
+                            if (e.fields?.length)
+                                parts.push(
+                                    ...e.fields.map(
+                                        (f) => `${f.name}: ${f.value}`,
+                                    ),
+                                );
+                            if (e.footer?.text) parts.push(e.footer.text);
+                            return parts.join("\n");
+                        })
+                        .filter((t) => t);
+                    if (embedTexts.length > 0) {
+                        refText +=
+                            (refText ? "\n" : "") +
+                            "[Embeds]\n" +
+                            embedTexts.join("\n---\n");
+                    }
+                }
+                replyContext = `[Replying to ${authorLabel(refMsg.author)}: "${refText}"]\n`;
+                console.error(
+                    `[Bot] Reply context from ${refMsg.author.tag}: ${refText.slice(0, 200)}`,
+                );
+                for (const att of refMsg.attachments.values()) {
+                    if (att.contentType?.startsWith("image/")) {
+                        allAttachments.push({
+                            url: att.url,
+                            name: `ref_${att.id}_${att.name || "image.png"}`,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Collect attachments from current message
+        for (const att of msg.attachments.values()) {
+            if (att.contentType?.startsWith("image/")) {
+                allAttachments.push({
+                    url: att.url,
+                    name: `${att.id}_${att.name || "image.png"}`,
+                });
+            }
+        }
+
+        // Extract the question
+        const botName =
+            client.user?.displayName || client.user?.username || "Claudify";
+        const rawQuestion = isAskCommand
+            ? msg.content.slice(5).trim()
+            : msg.content.replace(`<@${client.user!.id}>`, botName).trim();
+        const question = replyContext + rawQuestion;
+
+        if (!rawQuestion) {
+            console.error(`[Bot] Empty question from ${msg.author.tag}`);
+            await msg.reply(
+                "Please provide a question! Usage: `!ask <your question>` or mention me with a question.",
+            );
+            return;
+        }
+
+        console.error(
+            `[Bot] Processing question: "${question}" (${allAttachments.length} images)`,
+        );
+
+        savePending(msg);
+
+        // Download attachments
+        const imagePaths: string[] = [];
+        for (const att of allAttachments) {
+            try {
+                const filePath = await downloadAttachment(att.url, att.name);
+                imagePaths.push(filePath);
+                console.error(`[Bot] Downloaded image: ${att.name}`);
+            } catch (err: any) {
+                console.error(
+                    `[Bot] Failed to download image ${att.name}: ${err.message}`,
+                );
+            }
+        }
+
+        // Show typing indicator
+        await msg.channel.sendTyping();
+        const typingInterval = setInterval(() => {
+            (msg.channel as TextChannel).sendTyping().catch(() => {});
+        }, 8000);
+
+        // Fetch live channel messages for context (reused later for participant collection)
+        let liveMessages = "";
+        let recentMessages: Message[] = [];
+        try {
+            const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
+            recentMessages = Array.from(recent.values());
+            const sorted = recentMessages.slice().reverse();
+            liveMessages = sorted.map((m) => {
+                const time = m.createdAt.toTimeString().split(" ")[0];
+                const label = authorLabel(m.author);
+                let content = m.content;
+                if (m.attachments.size > 0) {
+                    content += ` [${m.attachments.size} attachment(s)]`;
+                }
+                if (m.embeds.length > 0) {
+                    const embedSummary = m.embeds
+                        .map((e) => [e.title, e.description].filter(Boolean).join(": "))
+                        .filter(Boolean)
+                        .join("; ");
+                    if (embedSummary) content += ` [Embed: ${embedSummary}]`;
+                }
+                return `[${time}] ${label}: ${content}`;
+            }).join("\n");
+        } catch (err: any) {
+            console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
+        }
+
+        const response = await askClaude(
+            question,
+            authorLabel(msg.author),
+            msg.author.id,
+            msg.channel.name,
+            msg.guild?.name || "DM",
+            msg.guild?.id || "unknown",
+            imagePaths,
+            liveMessages,
+        );
+
+        clearInterval(typingInterval);
+        setCooldown(userId);
+
+        // Extract any [REACT:emoji] tags and apply them as reactions
+        const reactTags = [...response.matchAll(/\[REACT:(.+?)\]/g)];
+        const textResponse = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
+
+        for (const match of reactTags) {
+            const emoji = match[1].trim();
+            console.error(`[Bot] Reacting with: ${emoji}`);
+            await reactWithEmoji(msg, emoji);
+        }
+
+        if (!textResponse) {
+            removePending(msg.id);
+            return;
+        }
+
+        console.error(
+            `[Bot] Sending response (${textResponse.length} chars) to #${msg.channel.name}`,
+        );
+
+        const safeSend = async (text: string, reply: boolean) => {
+            if (reply) {
+                try {
+                    await msg.reply(text);
+                } catch {
+                    await (msg.channel as TextChannel).send(text);
+                }
+            } else {
+                await (msg.channel as TextChannel).send(text);
+            }
+        };
+
+        const chunks = smartSplit(textResponse);
+        for (let i = 0; i < chunks.length; i++) {
+            await safeSend(chunks[i], i === 0);
+        }
+
+        console.error(`[Bot] Response sent successfully`);
+
+        appendToLog(
+            authorLabel(msg.author),
+            rawQuestion,
+            msg.channel.name,
+            msg.createdAt,
+        );
+        appendToLog(botName + " (bot)", textResponse, msg.channel.name);
+
+        removePending(msg.id);
+
+        // Background jobs
+        const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;
+
+        const participantUsers: { tag: string; id: string }[] = [];
+        if (recentMessages.length > 0) {
+            for (const m of recentMessages) {
+                if (!m.author.bot) {
+                    participantUsers.push({
+                        tag: authorLabel(m.author),
+                        id: m.author.id,
+                    });
+                }
+            }
+        } else {
+            participantUsers.push({ tag: authorLabel(msg.author), id: msg.author.id });
+        }
+
+        backgroundProfileUpdate(
+            participantUsers,
+            conversationContext,
+        ).catch(() => {});
+        if (msg.guild) {
+            backgroundServerMemoryUpdate(
+                msg.guild.id,
+                msg.guild.name,
+                msg.channel.name,
+                conversationContext,
+            ).catch(() => {});
+        }
+        ensureYesterdaySummaries().catch(() => {});
+    } catch (error: any) {
+        console.error(
+            `[Bot] Error processing message: ${error.message}`,
+        );
+        console.error(error.stack);
+        try {
+            await msg.reply(
+                "Sorry, something went wrong while processing your request.",
+            );
+        } catch {
+            /* ignore reply failure */
+        }
+    } finally {
+        userProcessing.delete(userId);
+        // Drain next queued message for this user after cooldown
+        if (getUserQueueSize(userId) > 0) {
+            scheduleQueueDrain(userId);
+        }
+    }
 }
