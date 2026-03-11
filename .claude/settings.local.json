@@ -16,7 +16,8 @@
       "Bash(git add src/askClaude.ts)",
       "WebSearch",
       "Bash(git add src/claude.ts)",
-      "Bash(git add src/discord/handler.ts)"
+      "Bash(git add src/discord/handler.ts)",
+      "Bash(git add src/mcp/server.ts)"
     ]
   }
 }
