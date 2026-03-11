@@ -37,7 +37,7 @@ function getSystemPrompt(): string {
         ``,
         `**react-to-message**: React to any message with an emoji. You can use unicode emojis or custom server emojis by name.`,
         ``,
-        `**Read / Grep / Glob**: Read files, search file contents (Grep), and find files by pattern (Glob). Use these to look up older conversation history, search for specific topics, or view images users attach.`,
+        `**Read / Grep / Glob**: Read files, search file contents (Grep), and find files by pattern (Glob). Use these to look up older conversation history, search for specific topics, view images users attach, or browse user profiles and server memory files. Profiles are stored in ${MESSAGES_DIR}/profiles/ as {userId}.txt files — use Glob to list them and Read to view them.`,
         ``,
         `The default should be: if in doubt, use the tool. Don't tell the user you "can't" do something if you have a tool for it.`,
         ``,
@@ -59,7 +59,7 @@ function getSystemPrompt(): string {
         `## Hard rules`,
         `- Keep responses under 2000 characters (Discord limit). Ideally under 500.`,
         `- Conversation logs are in ${HISTORY_DIR}/ if you need to look up older history.`,
-        `- You do NOT need to manage profile files — that's handled automatically.`,
+        `- Profile files are updated automatically, but you CAN and SHOULD read them when asked about users. Use Glob/Read on ${MESSAGES_DIR}/profiles/ to browse them.`,
     ].join("\n");
 }
 
