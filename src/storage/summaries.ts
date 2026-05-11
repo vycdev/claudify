@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { HISTORY_DIR, SUMMARIES_DIR, BOT_MODEL } from "../config.js";
 import { runClaude } from "../claude.js";
+import { renderPrompt } from "../prompts.js";
 
 export function getSummaryPath(channelName: string, date: Date): string {
     const dateStr = date.toISOString().split("T")[0];
@@ -54,14 +55,7 @@ export async function generateDailySummary(
             [
                 "-p",
                 "--system-prompt",
-                [
-                    "You summarize Discord chat logs for future bot memory.",
-                    "Preserve the range of topics, not just the last or loudest thread.",
-                    "Include who said what when it matters, concrete decisions, requests, useful facts, unresolved questions, and recurring jokes or context.",
-                    "Ignore greetings and empty filler.",
-                    "Use compact bullets with short section labels when helpful.",
-                    "Keep it under 350 words. Output ONLY the summary, no preamble.",
-                ].join("\n"),
+                renderPrompt("dailySummarySystem"),
             ],
             log,
             BOT_MODEL,

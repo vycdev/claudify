@@ -20,6 +20,7 @@ RUN npm ci --omit=dev
 RUN npm install -g @anthropic-ai/claude-code
 
 COPY --from=build /app/build ./build
+COPY prompts/ ./prompts/
 
 RUN mkdir -p /app/messages/history /app/messages/pending
 

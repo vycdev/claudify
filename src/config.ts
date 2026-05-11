@@ -29,6 +29,8 @@ export const HISTORY_SEARCH_CONTEXT_LINES = parseInt(process.env.HISTORY_SEARCH_
 
 export const MCP_PORT = parseInt(process.env.MCP_PORT || "3100", 10);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
+export const PROMPTS_PATH =
+    process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");
 
 // Ensure directories exist
 fs.mkdirSync(HISTORY_DIR, { recursive: true });

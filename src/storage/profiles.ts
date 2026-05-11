@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { PROFILES_DIR, PROFILE_MAX_CHARS, SERVER_MEMORY_MAX_CHARS, BOT_MODEL } from "../config.js";
 import { runClaude } from "../claude.js";
+import { renderPrompt } from "../prompts.js";
 
 export function getUserProfile(userId: string): string {
     const filePath = path.join(PROFILES_DIR, `${userId}.txt`);
@@ -31,31 +32,11 @@ export async function backgroundProfileUpdate(
     }).join("\n\n");
 
     try {
-        const prompt = [
-            "Current user profiles:",
-            profileSections,
-            "",
-            "Recent conversation:",
+        const prompt = renderPrompt("profileUpdate", {
             conversationContext,
-            "",
-            "Task: Based on this conversation, output updated profiles for users who revealed NEW lasting information about themselves (name, preferences, expertise, interests, projects, durable opinions, ongoing work, communication style, etc).",
-            "",
-            "Rules:",
-            "- Only output profiles for users where you learned something new. Skip users with no new info.",
-            "- Store durable facts, not one-off moods, jokes, insults, or temporary reactions.",
-            "- Keep attribution straight. Never copy facts from one user into another user's profile.",
-            "- If new info contradicts old info, prefer the newest explicit statement and keep the profile internally consistent.",
-            "- Do NOT include information about the bot itself.",
-            `- Each profile must be under ${PROFILE_MAX_CHARS} characters.`,
-            "- If a user already has a profile, output the full merged profile, not just the new sentence.",
-            "",
-            "Output format (strictly follow this, one block per user that needs updating):",
-            "===PROFILE USER_ID_HERE===",
-            "(profile text here)",
-            "===END===",
-            "",
-            "If no profiles need updating, output exactly: NO_UPDATES",
-        ].join("\n");
+            profileMaxChars: PROFILE_MAX_CHARS,
+            profileSections,
+        });
 
         const { stdout } = await runClaude(["-p"], prompt, BOT_MODEL);
         const output = stdout.trim();
@@ -108,19 +89,13 @@ export async function backgroundServerMemoryUpdate(
     const existingMemory = getServerMemory(guildId);
 
     try {
-        const prompt = [
-            `Current server memory for "${guildName}" (may be empty):`,
-            existingMemory || "(no server memory yet)",
-            "",
-            `Recent conversation in #${channelName}:`,
+        const prompt = renderPrompt("serverMemoryUpdate", {
+            channelName,
             conversationContext,
-            "",
-            "Task: Based on this conversation, output an updated server memory.",
-            "Include ONLY server-wide context: channel purposes, recurring topics, ongoing projects, inside jokes, server culture, important events, shared knowledge, and standing preferences for how the bot should respond in this server.",
-            "Do NOT include user-specific descriptions, user preferences, behavior patterns, or who does what. Those belong in individual user profiles.",
-            "Store durable context, not one-off chatter. If you learned nothing durable about the server, output the existing memory unchanged.",
-            `Keep it under ${SERVER_MEMORY_MAX_CHARS} characters. Output ONLY the memory text, no preamble or explanation.`,
-        ].join("\n");
+            existingMemory: existingMemory || "(no server memory yet)",
+            guildName,
+            serverMemoryMaxChars: SERVER_MEMORY_MAX_CHARS,
+        });
 
         const { stdout } = await runClaude(["-p"], prompt, BOT_MODEL);
 
