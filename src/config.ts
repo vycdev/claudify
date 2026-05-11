@@ -19,6 +19,14 @@ export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || "10000", 10);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 
+export const LIVE_CONTEXT_LIMIT = parseInt(process.env.LIVE_CONTEXT_LIMIT || "35", 10);
+export const DEEP_LIVE_CONTEXT_LIMIT = parseInt(process.env.DEEP_LIVE_CONTEXT_LIMIT || "500", 10);
+export const HISTORY_RECENT_LINES = parseInt(process.env.HISTORY_RECENT_LINES || "80", 10);
+export const HISTORY_RECAP_MAX_LINES = parseInt(process.env.HISTORY_RECAP_MAX_LINES || "1000", 10);
+export const HISTORY_RECAP_MAX_CHARS = parseInt(process.env.HISTORY_RECAP_MAX_CHARS || "140000", 10);
+export const HISTORY_SEARCH_MAX_BLOCKS = parseInt(process.env.HISTORY_SEARCH_MAX_BLOCKS || "10", 10);
+export const HISTORY_SEARCH_CONTEXT_LINES = parseInt(process.env.HISTORY_SEARCH_CONTEXT_LINES || "2", 10);
+
 export const MCP_PORT = parseInt(process.env.MCP_PORT || "3100", 10);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 

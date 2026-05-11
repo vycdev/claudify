@@ -1,5 +1,5 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
-import { REQUIRED_ROLE_ID, COOLDOWN_MS } from "../config.js";
+import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
@@ -7,7 +7,7 @@ import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { askClaude } from "../askClaude.js";
-import { appendToLog } from "../storage/history.js";
+import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
@@ -20,6 +20,92 @@ function authorLabel(user: { displayName?: string; globalName?: string | null; u
         return `${botName} (bot)`;
     }
     return user.globalName || user.displayName || user.username;
+}
+
+function summarizeEmbeds(msg: Message): string {
+    if (msg.embeds.length === 0) return "";
+
+    const embedSummary = msg.embeds
+        .map((e) => {
+            const parts: string[] = [];
+            if (e.title) parts.push(e.title);
+            if (e.description) parts.push(e.description);
+            if (e.fields?.length) {
+                parts.push(...e.fields.map((f) => `${f.name}: ${f.value}`));
+            }
+            return parts.join(": ");
+        })
+        .filter(Boolean)
+        .join("; ");
+
+    return embedSummary ? ` [Embed: ${embedSummary}]` : "";
+}
+
+function messageContentForMemory(msg: Message): string {
+    let content = msg.content.trim();
+    if (msg.attachments.size > 0) {
+        content += `${content ? " " : ""}[${msg.attachments.size} attachment(s)]`;
+    }
+    content += summarizeEmbeds(msg);
+    return content.trim();
+}
+
+function formatMessageForContext(msg: Message): string {
+    const time = msg.createdAt.toTimeString().split(" ")[0];
+    const label = authorLabel(msg.author);
+    return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
+}
+
+async function fetchChannelMessages(channel: TextChannel, limit: number): Promise<Message[]> {
+    const collected: Message[] = [];
+    let before: string | undefined;
+
+    while (collected.length < limit) {
+        const batchLimit = Math.min(100, limit - collected.length);
+        const batch = await channel.messages.fetch(
+            before ? { limit: batchLimit, before } : { limit: batchLimit },
+        );
+
+        if (batch.size === 0) break;
+
+        const messages = Array.from(batch.values());
+        collected.push(...messages);
+        const oldest = messages.reduce((currentOldest, message) =>
+            message.createdTimestamp < currentOldest.createdTimestamp ? message : currentOldest,
+        );
+        before = oldest.id;
+
+        if (batch.size < batchLimit) break;
+    }
+
+    return collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+}
+
+async function buildLiveMessagesContext(
+    channel: TextChannel,
+    question: string,
+): Promise<{ text: string; messages: Message[] }> {
+    const limit = isDeepHistoryRequest(question)
+        ? DEEP_LIVE_CONTEXT_LIMIT
+        : LIVE_CONTEXT_LIMIT;
+    const messages = await fetchChannelMessages(channel, limit);
+
+    if (messages.length === 0) return { text: "", messages };
+
+    const oldest = messages[0].createdAt.toISOString();
+    const newest = messages[messages.length - 1].createdAt.toISOString();
+    const text = [
+        `Fetched ${messages.length} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${limit}.`,
+        ...messages.map(formatMessageForContext),
+    ].join("\n");
+
+    return { text, messages };
+}
+
+function logIncomingMessage(msg: Message): void {
+    const content = messageContentForMemory(msg);
+    if (!content) return;
+    appendToLog(authorLabel(msg.author), content, msg.channel instanceof TextChannel ? msg.channel.name : "unknown", msg.createdAt);
 }
 
 // Per-user message queue with cooldown
@@ -150,6 +236,8 @@ export function registerHandler() {
             if (msg.author.bot) return;
             if (!(msg.channel instanceof TextChannel)) return;
 
+            logIncomingMessage(msg);
+
             // Command routing
             if (msg.content.trim() === "!help") {
                 await handleHelp(msg);
@@ -257,22 +345,8 @@ export function registerHandler() {
             // Fetch live messages for context
             let liveMessages = "";
             try {
-                const recent = await msg.channel.messages.fetch({ limit: 25 });
-                const sorted = Array.from(recent.values()).reverse();
-                liveMessages = sorted.map((m) => {
-                    const time = m.createdAt.toTimeString().split(" ")[0];
-                    const label = authorLabel(m.author);
-                    let content = m.content;
-                    if (m.attachments.size > 0) content += ` [${m.attachments.size} attachment(s)]`;
-                    if (m.embeds.length > 0) {
-                        const embedSummary = m.embeds
-                            .map((e) => [e.title, e.description].filter(Boolean).join(": "))
-                            .filter(Boolean)
-                            .join("; ");
-                        if (embedSummary) content += ` [Embed: ${embedSummary}]`;
-                    }
-                    return `[${time}] ${label}: ${content}`;
-                }).join("\n");
+                const liveContext = await buildLiveMessagesContext(msg.channel, question);
+                liveMessages = liveContext.text;
             } catch { /* ignore */ }
 
             // Download images from the reacted message
@@ -472,25 +546,10 @@ async function processMessage(msg: Message): Promise<void> {
         let liveMessages = "";
         let recentMessages: Message[] = [];
         try {
-            const recent = await (msg.channel as TextChannel).messages.fetch({ limit: 25 });
-            recentMessages = Array.from(recent.values());
-            const sorted = recentMessages.slice().reverse();
-            liveMessages = sorted.map((m) => {
-                const time = m.createdAt.toTimeString().split(" ")[0];
-                const label = authorLabel(m.author);
-                let content = m.content;
-                if (m.attachments.size > 0) {
-                    content += ` [${m.attachments.size} attachment(s)]`;
-                }
-                if (m.embeds.length > 0) {
-                    const embedSummary = m.embeds
-                        .map((e) => [e.title, e.description].filter(Boolean).join(": "))
-                        .filter(Boolean)
-                        .join("; ");
-                    if (embedSummary) content += ` [Embed: ${embedSummary}]`;
-                }
-                return `[${time}] ${label}: ${content}`;
-            }).join("\n");
+            const liveContext = await buildLiveMessagesContext(msg.channel as TextChannel, question);
+            recentMessages = liveContext.messages;
+            liveMessages = liveContext.text;
+            console.error(`[Bot] Added ${recentMessages.length} live messages to context`);
         } catch (err: any) {
             console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
         }
@@ -547,12 +606,6 @@ async function processMessage(msg: Message): Promise<void> {
 
         console.error(`[Bot] Response sent successfully`);
 
-        appendToLog(
-            authorLabel(msg.author),
-            rawQuestion,
-            msg.channel.name,
-            msg.createdAt,
-        );
         appendToLog(botName + " (bot)", textResponse, msg.channel.name);
 
         removePending(msg.id);

@@ -40,6 +40,15 @@ const ReadMessagesSchema = z.object({
     limit: z.number().min(1).max(100).default(50),
 });
 
+const ReadMessageHistorySchema = z.object({
+    limit: z.number().min(1).max(100).default(20),
+    type: z.enum(["history", "pending"]).default("history"),
+    channel: z.string().optional(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    search: z.string().min(1).optional(),
+    maxLines: z.number().min(1).max(2000).default(300),
+});
+
 export function createMcpServer(): Server {
     const mcpServer = new Server(
         { name: "discord", version: "1.0.0" },
@@ -103,14 +112,14 @@ export function createMcpServer(): Server {
             {
                 name: "read-message-history",
                 description:
-                    "Read saved message history files from disk (messages exchanged via !ask or bot mentions)",
+                    "Read saved channel history files from disk. Use channel/date/search for older context and recaps.",
                 inputSchema: {
                     type: "object" as const,
                     properties: {
                         limit: {
                             type: "number",
                             description:
-                                "Number of recent history entries to read (default 20)",
+                                "Number of matching history files to read (default 20)",
                             default: 20,
                         },
                         type: {
@@ -118,6 +127,27 @@ export function createMcpServer(): Server {
                             enum: ["history", "pending"],
                             description: "Read from history or pending",
                             default: "history",
+                        },
+                        channel: {
+                            type: "string",
+                            description:
+                                "Optional channel name to narrow history files",
+                        },
+                        date: {
+                            type: "string",
+                            description:
+                                "Optional date in YYYY-MM-DD format",
+                        },
+                        search: {
+                            type: "string",
+                            description:
+                                "Optional case-insensitive text filter",
+                        },
+                        maxLines: {
+                            type: "number",
+                            description:
+                                "Maximum lines returned per file (default 300, max 2000)",
+                            default: 300,
                         },
                     },
                 },
@@ -218,17 +248,24 @@ export function createMcpServer(): Server {
                     };
                 }
                 case "read-message-history": {
-                    const limit = (args as any)?.limit ?? 20;
-                    const type =
-                        (args as any)?.type === "pending"
-                            ? "pending"
-                            : "history";
+                    const { limit, type, channel, date, search, maxLines } =
+                        ReadMessageHistorySchema.parse(args ?? {});
                     const dir = type === "pending" ? PENDING_DIR : HISTORY_DIR;
-                    const files = fs
+                    const safeChannel = channel?.replace(/[^a-zA-Z0-9-_]/g, "_");
+                    let files = fs
                         .readdirSync(dir)
                         .filter((f) => f.endsWith(".txt"))
-                        .sort()
-                        .slice(-limit);
+                        .sort();
+
+                    if (safeChannel) {
+                        files = files.filter((f) => f.startsWith(`${safeChannel}_`));
+                    }
+                    if (date) {
+                        files = files.filter((f) => f.includes(`_${date}`));
+                    }
+
+                    files = files.slice(-limit);
+
                     if (files.length === 0)
                         return {
                             content: [
@@ -238,9 +275,30 @@ export function createMcpServer(): Server {
                                 },
                             ],
                         };
-                    const messages = files.map((f) =>
-                        fs.readFileSync(path.join(dir, f), "utf-8"),
-                    );
+
+                    const searchLower = search?.toLowerCase();
+                    const messages = files.map((f) => {
+                        let lines = fs
+                            .readFileSync(path.join(dir, f), "utf-8")
+                            .split("\n")
+                            .map((line) => line.trim())
+                            .filter(Boolean);
+
+                        if (searchLower) {
+                            lines = lines.filter((line) =>
+                                line.toLowerCase().includes(searchLower),
+                            );
+                        }
+
+                        const omitted = Math.max(0, lines.length - maxLines);
+                        const selected = lines.slice(-maxLines);
+                        const note = omitted > 0
+                            ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
+                            : ` (${selected.length} matching lines)`;
+
+                        return `=== ${f}${note} ===\n${selected.join("\n")}`;
+                    });
+
                     return {
                         content: [
                             {

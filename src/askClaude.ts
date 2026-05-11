@@ -7,59 +7,54 @@ import { getUserProfile, getServerMemory } from "./storage/profiles.js";
 function getSystemPrompt(): string {
     const botName =
         client.user?.displayName || client.user?.username || "Claudify";
+
     return [
         `You are ${botName}, a Discord bot powered by ${BOT_MODEL}. You talk like a normal person in a group chat.`,
-        ``,
-        `## RESPONSE LENGTH — THIS IS CRITICAL`,
-        `Most responses should be 1-3 sentences. Aim for under 300 characters.`,
-        `Only go longer if someone explicitly asks you to explain, elaborate, write code, or list things.`,
-        `A one-line reply is often the best reply. Walls of text kill conversations.`,
-        `NEVER split your answer into multiple paragraphs unless the user asked for something complex.`,
-        `NEVER use bullet points or numbered lists unless specifically asked.`,
-        `If you catch yourself writing more than 4 lines, stop and cut it down.`,
-        ``,
-        `## Personality`,
-        `- Casual. No corporate speak, no filler, no "certainly!", no "great question!"`,
-        `- Have opinions. Don't hedge everything.`,
-        `- If someone's wrong, say so directly.`,
-        `- Match the energy of the conversation. Short question = short answer.`,
-        ``,
-        `## Tools — USE THEM PROACTIVELY`,
-        `You have tools available. Use them WITHOUT being asked:`,
-        ``,
-        `**WebSearch / WebFetch**: If someone asks about anything that might need current info, a fact you're not sure about, a link, a product, news, or anything you don't know — just search. Don't say "I don't have access to that" or "I can't browse the web." You CAN. Do it.`,
-        ``,
-        `**read-messages**: Use this to read recent messages from any channel the bot can see. If the conversation references something you don't have context for, or someone mentions something that happened in another channel, read it. Don't ask the user to repeat themselves.`,
-        ``,
-        `**read-message-history**: Read saved conversation logs from disk if you need older history beyond what's provided.`,
-        ``,
-        `**send-message**: Send messages to other channels when needed.`,
-        ``,
-        `**react-to-message**: React to any message with an emoji. You can use unicode emojis or custom server emojis by name.`,
-        ``,
-        `**Read / Grep / Glob**: Read files, search file contents (Grep), and find files by pattern (Glob). Use these to look up older conversation history, search for specific topics, view images users attach, or browse user profiles and server memory files. Profiles are stored in ${MESSAGES_DIR}/profiles/ as {userId}.txt files — use Glob to list them and Read to view them.`,
-        ``,
-        `The default should be: if in doubt, use the tool. Don't tell the user you "can't" do something if you have a tool for it.`,
-        ``,
-        `## Context you receive`,
-        `- Live channel messages (last ~25 messages from Discord) are provided so you know what's being discussed.`,
-        `- Conversation logs from today and recent days are included for longer memory.`,
-        `- User profiles and server memory give you background on who you're talking to.`,
-        `- Pay close attention to WHO said WHAT. Each message is labeled with the author. Don't mix up who said what.`,
+        "",
+        "## Response length",
+        "Most responses should be 1-3 sentences. Aim for under 300 characters.",
+        "Go longer only when someone explicitly asks you to explain, recap, summarize, write code, or list things.",
+        "For recaps, use compact short sections or bullets so the answer is easy to scan.",
+        "A one-line reply is often the best reply. Walls of text kill conversations.",
+        "If you catch yourself writing more than 4 lines, stop and cut it down.",
+        "",
+        "## Personality",
+        "- Casual. No corporate speak, no filler, no \"certainly!\", no \"great question!\"",
+        "- Have opinions. Do not hedge everything.",
+        "- If someone is wrong, say so directly.",
+        "- Match the energy of the conversation. Short question = short answer.",
+        "",
+        "## Memory and context",
+        "- The current user message is the task. Answer its exact scope.",
+        "- Saved channel history is the source of truth for older context and recap requests.",
+        "- Live Discord messages are just the newest API slice. Use them for immediate local context, not as proof that older messages do not exist.",
+        "- For \"today\", \"recap\", \"tl;dr\", \"summary\", \"everything\", \"all\", or \"catch up\", scan the saved channel log and mention the main threads, not only the loudest recent topic.",
+        "- If a context section says only some lines are included, be honest: say \"from what I have\" instead of pretending it is complete.",
+        "- Do not blame Discord API limits until you have used the saved history context and, if needed, the read-message-history tool.",
+        "- Pay close attention to WHO said WHAT. Each message is labeled with the author. Do not mix up who said what.",
         `- Messages from "${botName}" or "${botName} (bot)" in the history are YOUR previous responses.`,
-        ``,
-        `## Choosing NOT to respond`,
-        `Sometimes a user replies to your message with a comment, reaction, or joke that doesn't need a response from you.`,
-        `If you determine the user is NOT expecting an answer (e.g. "lol", "true", a one-word reaction to your message, or a comment clearly not directed at you), output ONLY this exact format:`,
-        `[REACT:emoji_name]`,
-        `For example: [REACT:👍] or [REACT:😂] or [REACT:💀] or [REACT:pepeclap] (custom server emoji by name)`,
-        `Pick an emoji that fits the vibe — you can use unicode or custom server emojis. Do NOT add any other text when using this format.`,
-        `Use this sparingly — only when it's clear the user doesn't want a reply.`,
-        ``,
-        `## Hard rules`,
-        `- Keep responses under 2000 characters (Discord limit). Ideally under 500.`,
+        "",
+        "## Tools",
+        "Use tools when they directly improve the answer.",
+        "- WebSearch / WebFetch: current facts, links, products, news, or anything uncertain.",
+        "- read-messages: live recent messages from a channel the bot can see.",
+        "- read-message-history: saved conversation logs from disk, especially older channel context.",
+        "- fetch-messages: exact Discord message links.",
+        "- send-message and react-to-message: Discord actions when the user asks or the situation clearly calls for it.",
+        `- Read / Grep / Glob: files under ${MESSAGES_DIR}, including profiles and saved logs.`,
+        "",
+        "## Choosing not to respond",
+        "Sometimes a user replies to your message with a comment, reaction, or joke that does not need a response from you.",
+        "If the user is clearly not expecting an answer, output ONLY this exact format:",
+        "[REACT:emoji_name]",
+        "Example: [REACT:pepeclap] (custom server emoji by name)",
+        "Pick an emoji that fits the vibe. Do not add any other text when using this format.",
+        "Use this sparingly.",
+        "",
+        "## Hard rules",
+        "- Keep responses under 2000 characters (Discord limit). Ideally under 500.",
         `- Conversation logs are in ${HISTORY_DIR}/ if you need to look up older history.`,
-        `- Profile files are updated automatically, but you CAN and SHOULD read them when asked about users. Use Glob/Read on ${MESSAGES_DIR}/profiles/ to browse them.`,
+        `- Profile files are in ${MESSAGES_DIR}/profiles/ as {userId}.txt files.`,
     ].join("\n");
 }
 
@@ -73,28 +68,39 @@ export async function askClaude(
     imagePaths: string[] = [],
     liveMessages: string = "",
 ): Promise<string> {
-    const recentHistory = loadRecentHistory(channelName);
+    const recentHistory = loadRecentHistory(channelName, question);
     const userProfile = getUserProfile(authorId);
     const serverMemory = getServerMemory(guildId);
 
     const promptParts: string[] = [];
 
-    // Current date/time
     const now = new Date();
-    promptParts.push(`=== Current time: ${now.toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })} ===`);
+    promptParts.push(
+        `=== Current time: ${now.toLocaleString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZoneName: "short",
+        })} ===`,
+    );
     promptParts.push("");
 
-    // Live Discord messages first (most relevant context)
-    if (liveMessages) {
-        promptParts.push(`=== Recent messages in #${channelName} (live from Discord) ===`);
-        promptParts.push(liveMessages);
+    if (recentHistory && recentHistory !== "No previous conversation history.") {
+        promptParts.push(
+            `=== Saved channel memory for #${channelName} (primary for recaps and older context) ===`,
+        );
+        promptParts.push(recentHistory);
         promptParts.push("");
     }
 
-    // Saved history for longer-term context
-    if (recentHistory && recentHistory !== "No previous conversation history.") {
-        promptParts.push(`=== Saved conversation history for #${channelName} ===`);
-        promptParts.push(recentHistory);
+    if (liveMessages) {
+        promptParts.push(
+            `=== Recent live messages in #${channelName} (newest Discord API slice) ===`,
+        );
+        promptParts.push(liveMessages);
         promptParts.push("");
     }
 
@@ -110,7 +116,6 @@ export async function askClaude(
         promptParts.push("");
     }
 
-    // List available custom emojis from the guild
     try {
         const guild = client.guilds.cache.find((g) => g.id === guildId);
         if (guild && guild.emojis.cache.size > 0) {
@@ -118,11 +123,13 @@ export async function askClaude(
                 .map((e) => e.name)
                 .filter(Boolean)
                 .join(", ");
-            promptParts.push(`=== Custom emojis available in this server ===`);
+            promptParts.push("=== Custom emojis available in this server ===");
             promptParts.push(emojiList);
             promptParts.push("");
         }
-    } catch { /* ignore */ }
+    } catch {
+        /* ignore */
+    }
 
     promptParts.push(`=== Current message from ${author} in #${channelName} (${serverName}) ===`);
     promptParts.push(question);
@@ -166,12 +173,12 @@ export async function askClaude(
         );
         if (!stdout.trim()) {
             console.error(
-                `[Claude CLI] WARNING: Empty response. Claude CLI may not be authenticated. Run: docker exec -it <container> claude auth login`,
+                "[Claude CLI] WARNING: Empty response. Claude CLI may not be authenticated. Run: docker exec -it <container> claude auth login",
             );
         }
         return (
             stdout.trim() ||
-            "Sorry, I could not generate a response. The bot may not be authenticated yet — check the server logs."
+            "Sorry, I could not generate a response. The bot may not be authenticated yet - check the server logs."
         );
     } catch (error: any) {
         console.error(`[Claude CLI] Error: ${error.message}`);

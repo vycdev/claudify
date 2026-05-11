@@ -54,7 +54,14 @@ export async function generateDailySummary(
             [
                 "-p",
                 "--system-prompt",
-                "You are a conversation summarizer. Summarize the following Discord chat log into a concise paragraph (max 200 words). Focus on key topics discussed, decisions made, and important information shared. Do not include greetings, small talk, or filler. Output ONLY the summary, no preamble.",
+                [
+                    "You summarize Discord chat logs for future bot memory.",
+                    "Preserve the range of topics, not just the last or loudest thread.",
+                    "Include who said what when it matters, concrete decisions, requests, useful facts, unresolved questions, and recurring jokes or context.",
+                    "Ignore greetings and empty filler.",
+                    "Use compact bullets with short section labels when helpful.",
+                    "Keep it under 350 words. Output ONLY the summary, no preamble.",
+                ].join("\n"),
             ],
             log,
             BOT_MODEL,
