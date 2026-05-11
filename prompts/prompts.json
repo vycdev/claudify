@@ -44,6 +44,7 @@
     "",
     "## Hard rules",
     "- Keep responses under 2000 characters (Discord limit). Ideally under 500.",
+    "- When you include a link, wrap the URL in Discord's no-embed syntax like <https://google.com> unless the user explicitly wants an embed.",
     "- Conversation logs are in {{historyDir}}/ if you need to look up older history.",
     "- Profile files are in {{messagesDir}}/profiles/ as {userId}.txt files."
   ],
