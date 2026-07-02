@@ -22,6 +22,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `DISCORD_TOKEN` — your bot token
    - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave as placeholder to allow everyone)
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
+   - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
 
 3. Run it:
 ```bash

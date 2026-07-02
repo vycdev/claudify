@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { HISTORY_DIR, SUMMARIES_DIR, BOT_MODEL } from "../config.js";
+import { HISTORY_DIR, SUMMARIES_DIR, BOT_EFFORT, BOT_MODEL } from "../config.js";
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
 
@@ -59,6 +59,7 @@ export async function generateDailySummary(
             ],
             log,
             BOT_MODEL,
+            BOT_EFFORT,
         );
 
         if (stdout.trim()) {

@@ -45,6 +45,7 @@ function spawnClaude(
     args: string[],
     input: string,
     model?: string,
+    effort?: string,
 ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         const env: Record<string, string> = {};
@@ -56,9 +57,12 @@ function spawnClaude(
             env.ANTHROPIC_MODEL = model;
             args = ["--model", model, ...args];
         }
+        if (effort) {
+            args = ["--effort", effort, ...args];
+        }
 
         console.error(
-            `[Claude CLI] Spawning with model=${model || "default"}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || "unset"} (active: ${activeCount}/${MAX_CONCURRENT}, queued: ${queue.length})`,
+            `[Claude CLI] Spawning with model=${model || "default"}, effort=${effort || "default"}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || "unset"} (active: ${activeCount}/${MAX_CONCURRENT}, queued: ${queue.length})`,
         );
         const proc = spawn("claude", args, { env });
 
@@ -101,6 +105,7 @@ export function runClaude(
     args: string[],
     input: string,
     model?: string,
+    effort?: string,
 ): Promise<{ stdout: string; stderr: string }> {
-    return enqueue(() => spawnClaude(args, input, model));
+    return enqueue(() => spawnClaude(args, input, model, effort));
 }

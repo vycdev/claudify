@@ -18,6 +18,7 @@ export const SERVER_MEMORY_MAX_CHARS = 10000;
 
 export const COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || "10000", 10);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
+export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
 
 export const LIVE_CONTEXT_LIMIT = parseInt(process.env.LIVE_CONTEXT_LIMIT || "35", 10);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseInt(process.env.DEEP_LIVE_CONTEXT_LIMIT || "500", 10);

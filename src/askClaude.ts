@@ -1,4 +1,4 @@
-import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH, BOT_MODEL } from "./config.js";
+import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH, BOT_EFFORT, BOT_MODEL } from "./config.js";
 import { runClaude } from "./claude.js";
 import { client } from "./discord/client.js";
 import { loadRecentHistory } from "./storage/history.js";
@@ -124,6 +124,7 @@ export async function askClaude(
             ],
             prompt,
             BOT_MODEL,
+            BOT_EFFORT,
         );
 
         if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
