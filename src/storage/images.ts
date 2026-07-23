@@ -7,6 +7,12 @@ export async function downloadAttachment(
     filename: string,
 ): Promise<string> {
     const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(
+            `Failed to download attachment: HTTP ${response.status} ${response.statusText}`,
+        );
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
     const filePath = path.join(IMAGES_DIR, filename);
     fs.writeFileSync(filePath, buffer);
