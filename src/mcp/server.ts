@@ -203,9 +203,9 @@ export function createMcpServer(): Server {
         try {
             switch (name) {
                 case "send-message": {
-                    const { channel: channelIdentifier, message } =
+                    const { server, channel: channelIdentifier, message } =
                         SendMessageSchema.parse(args);
-                    const channel = await findChannel(channelIdentifier);
+                    const channel = await findChannel(channelIdentifier, server);
                     const sent = await channel.send(message);
                     return {
                         content: [
@@ -217,9 +217,9 @@ export function createMcpServer(): Server {
                     };
                 }
                 case "react-to-message": {
-                    const { channel: chId, messageId, emoji } =
+                    const { server, channel: chId, messageId, emoji } =
                         ReactToMessageSchema.parse(args);
-                    const reactChannel = await findChannel(chId);
+                    const reactChannel = await findChannel(chId, server);
                     const targetMsg = await reactChannel.messages.fetch(messageId);
 
                     try {
@@ -393,9 +393,9 @@ export function createMcpServer(): Server {
                     };
                 }
                 case "read-messages": {
-                    const { channel: channelIdentifier, limit } =
+                    const { server, channel: channelIdentifier, limit } =
                         ReadMessagesSchema.parse(args);
-                    const channel = await findChannel(channelIdentifier);
+                    const channel = await findChannel(channelIdentifier, server);
                     const messages = await channel.messages.fetch({ limit });
                     const formatted = [];
                     for (const msg of messages.values()) {
