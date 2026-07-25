@@ -12,22 +12,22 @@ export async function handleUsage(msg: Message): Promise<void> {
 
     switch (subcommand) {
         case "today":
-            ccArgs = ["ccusage@latest", "daily", "--json", "--since", today];
+            ccArgs = ["ccusage@latest", "claude", "daily", "--json", "--since", today];
             title = "📊 Today's Usage";
             embedColor = 0x5865f2;
             break;
         case "daily":
-            ccArgs = ["ccusage@latest", "daily", "--json"];
+            ccArgs = ["ccusage@latest", "claude", "daily", "--json"];
             title = "📅 Daily Usage";
             embedColor = 0x57f287;
             break;
         case "blocks":
-            ccArgs = ["ccusage@latest", "blocks", "--json", "--since", today];
+            ccArgs = ["ccusage@latest", "claude", "blocks", "--json", "--since", today];
             title = "⏱️ Billing Windows (Today)";
             embedColor = 0xfee75c;
             break;
         case "monthly":
-            ccArgs = ["ccusage@latest", "monthly", "--json"];
+            ccArgs = ["ccusage@latest", "claude", "monthly", "--json"];
             title = "📆 Monthly Usage";
             embedColor = 0xeb459e;
             break;
@@ -155,7 +155,17 @@ export async function handleUsage(msg: Message): Promise<void> {
                 embeds.push(embed);
             }
         } else if (subcommand === "monthly") {
-            for (const entry of data.monthly || []) {
+            const entries = data.monthly || [];
+            if (entries.length === 0) {
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setColor(embedColor)
+                    .setDescription("No usage data found for this period.")
+                    .setTimestamp();
+                embeds.push(embed);
+            }
+
+            for (const entry of entries) {
                 const embed = new EmbedBuilder()
                     .setTitle(`${title} — ${entry.month}`)
                     .setColor(embedColor);
