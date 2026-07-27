@@ -76,7 +76,13 @@ function spawnClaude(
             stderr += data.toString();
         });
 
+        const timeout = setTimeout(() => {
+            proc.kill();
+            reject(new Error("Claude CLI timed out after 120 seconds"));
+        }, 120000);
+
         proc.on("close", (code) => {
+            clearTimeout(timeout);
             if (code === 0) {
                 resolve({ stdout, stderr });
             } else {
@@ -89,15 +95,13 @@ function spawnClaude(
             }
         });
 
-        proc.on("error", reject);
+        proc.on("error", (error) => {
+            clearTimeout(timeout);
+            reject(error);
+        });
 
         proc.stdin.write(input);
         proc.stdin.end();
-
-        setTimeout(() => {
-            proc.kill();
-            reject(new Error("Claude CLI timed out after 120 seconds"));
-        }, 120000);
     });
 }
 
