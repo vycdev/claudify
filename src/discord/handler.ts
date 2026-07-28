@@ -329,6 +329,30 @@ export function registerHandler() {
             // Don't respond to reactions on bot's own messages
             if (msg.author?.id === client.user!.id) return;
 
+            // Enforce the same role restriction as message-based triggers
+            if (REQUIRED_ROLE_ID) {
+                let member;
+                try {
+                    member = await msg.guild.members.fetch({
+                        user: user.id,
+                        force: true,
+                        cache: false,
+                    });
+                } catch (error: any) {
+                    console.error(
+                        `[Bot] Failed to verify role for reaction trigger by ${user.tag}: ${error.message}`,
+                    );
+                    return;
+                }
+
+                if (!member.roles.cache.has(REQUIRED_ROLE_ID)) {
+                    console.error(
+                        `[Bot] Rejected reaction trigger: ${user.tag} missing role ${REQUIRED_ROLE_ID}`,
+                    );
+                    return;
+                }
+            }
+
             // Cooldown check for the reacting user
             if (getCooldownRemaining(user.id) > 0) {
                 console.error(`[Bot] Reaction trigger cooldown for ${user.tag}`);
