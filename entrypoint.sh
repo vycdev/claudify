@@ -11,12 +11,13 @@ fi
 
 # Check if Claude CLI is authenticated
 echo "[Entrypoint] Checking Claude CLI auth status..."
-AUTH_OUTPUT=$(claude -p "hello" 2>&1)
-if echo "$AUTH_OUTPUT" | grep -qi "auth\|login\|sign in\|unauthorized\|API key"; then
+if ! claude auth status >/dev/null 2>&1; then
   echo ""
   echo "============================================"
   echo "  Claude CLI is NOT authenticated!"
-  echo "  Run this command to log in:"
+  echo "  Configure AUTH_ADMIN_USER_IDS to log in"
+  echo "  privately with /auth login in Discord,"
+  echo "  or run this command:"
   echo ""
   echo "  docker exec -it \$(hostname) claude auth login"
   echo ""

@@ -7,6 +7,12 @@ dotenv.config();
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
 export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
+export const AUTH_ADMIN_USER_IDS = new Set(
+    (process.env.AUTH_ADMIN_USER_IDS || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+);
 export const HISTORY_DIR = path.join(MESSAGES_DIR, "history");
 export const PENDING_DIR = path.join(MESSAGES_DIR, "pending");
 export const PROFILES_DIR = path.join(MESSAGES_DIR, "profiles");
@@ -19,6 +25,10 @@ export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || "10000", 10);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
+export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parseInt(
+    process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS || "300000",
+    10,
+);
 
 export const LIVE_CONTEXT_LIMIT = parseInt(process.env.LIVE_CONTEXT_LIMIT || "35", 10);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseInt(process.env.DEEP_LIVE_CONTEXT_LIMIT || "500", 10);
