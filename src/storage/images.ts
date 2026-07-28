@@ -6,6 +6,16 @@ export async function downloadAttachment(
     url: string,
     filename: string,
 ): Promise<string> {
+    const filePath = path.resolve(IMAGES_DIR, filename);
+    const relativePath = path.relative(IMAGES_DIR, filePath);
+    if (
+        relativePath === ".." ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+    ) {
+        throw new Error("Attachment filename resolves outside the images directory");
+    }
+
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(
@@ -14,7 +24,6 @@ export async function downloadAttachment(
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
-    const filePath = path.join(IMAGES_DIR, filename);
     fs.writeFileSync(filePath, buffer);
     return filePath;
 }
