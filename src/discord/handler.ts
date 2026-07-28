@@ -618,7 +618,6 @@ async function processMessage(msg: Message): Promise<void> {
         }
 
         if (!textResponse) {
-            removePending(msg.id);
             return;
         }
 
@@ -646,8 +645,6 @@ async function processMessage(msg: Message): Promise<void> {
         console.error(`[Bot] Response sent successfully`);
 
         appendToLog(botName + " (bot)", textResponse, msg.channel.name);
-
-        removePending(msg.id);
 
         // Background jobs
         const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;
@@ -692,6 +689,13 @@ async function processMessage(msg: Message): Promise<void> {
             /* ignore reply failure */
         }
     } finally {
+        try {
+            removePending(msg.id);
+        } catch (error: any) {
+            console.error(
+                `[Bot] Failed to remove pending message ${msg.id}: ${error.message}`,
+            );
+        }
         userProcessing.delete(userId);
         // Drain next queued message for this user after cooldown
         if (getUserQueueSize(userId) > 0) {
