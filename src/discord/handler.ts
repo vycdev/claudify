@@ -108,6 +108,23 @@ function logIncomingMessage(msg: Message): void {
     appendToLog(authorLabel(msg.author), content, msg.channel instanceof TextChannel ? msg.channel.name : "unknown", msg.createdAt);
 }
 
+async function enforceRequiredRole(msg: Message): Promise<boolean> {
+    if (
+        !REQUIRED_ROLE_ID ||
+        msg.member?.roles.cache.has(REQUIRED_ROLE_ID)
+    ) {
+        return true;
+    }
+
+    console.error(
+        `[Bot] Rejected: ${msg.author.tag} missing role ${REQUIRED_ROLE_ID}`,
+    );
+    await msg.reply(
+        "You can't use this command because you don't have the required role.",
+    );
+    return false;
+}
+
 // Per-user message queue with cooldown
 const MAX_QUEUED_PER_USER = 5;
 const userQueues = new Map<string, Message[]>();
@@ -239,27 +256,37 @@ export function registerHandler() {
             logIncomingMessage(msg);
 
             // Command routing
-            if (msg.content.trim() === "!help") {
+            const command = msg.content.trim();
+            const isCommand =
+                command === "!help" ||
+                command === "!storage" ||
+                command.startsWith("!usage") ||
+                command === "!guild" ||
+                command.startsWith("!profile");
+
+            if (isCommand && !(await enforceRequiredRole(msg))) return;
+
+            if (command === "!help") {
                 await handleHelp(msg);
                 return;
             }
 
-            if (msg.content.trim() === "!storage") {
+            if (command === "!storage") {
                 await handleStorage(msg);
                 return;
             }
 
-            if (msg.content.trim().startsWith("!usage")) {
+            if (command.startsWith("!usage")) {
                 await handleUsage(msg);
                 return;
             }
 
-            if (msg.content.trim() === "!guild") {
+            if (command === "!guild") {
                 await handleGuild(msg);
                 return;
             }
 
-            if (msg.content.trim().startsWith("!profile")) {
+            if (command.startsWith("!profile")) {
                 await handleProfile(msg);
                 return;
             }
@@ -453,19 +480,7 @@ async function processMessage(msg: Message): Promise<void> {
         );
 
         // Check role permission
-        if (
-            REQUIRED_ROLE_ID &&
-            msg.member &&
-            !msg.member.roles.cache.has(REQUIRED_ROLE_ID)
-        ) {
-            console.error(
-                `[Bot] Rejected: ${msg.author.tag} missing role ${REQUIRED_ROLE_ID}`,
-            );
-            await msg.reply(
-                "You can't use this command because you don't have the required role.",
-            );
-            return;
-        }
+        if (!(await enforceRequiredRole(msg))) return;
 
         // Fetch referenced message if this is a reply
         let replyContext = "";
