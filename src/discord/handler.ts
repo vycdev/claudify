@@ -257,12 +257,14 @@ export function registerHandler() {
 
             // Command routing
             const command = msg.content.trim();
+            const isUsageCommand = /^!usage(?:\s|$)/.test(command);
+            const isProfileCommand = /^!profile(?:\s|$)/.test(command);
             const isCommand =
                 command === "!help" ||
                 command === "!storage" ||
-                command.startsWith("!usage") ||
+                isUsageCommand ||
                 command === "!guild" ||
-                command.startsWith("!profile");
+                isProfileCommand;
 
             if (isCommand && !(await enforceRequiredRole(msg))) return;
 
@@ -276,7 +278,7 @@ export function registerHandler() {
                 return;
             }
 
-            if (command.startsWith("!usage")) {
+            if (isUsageCommand) {
                 await handleUsage(msg);
                 return;
             }
@@ -286,7 +288,7 @@ export function registerHandler() {
                 return;
             }
 
-            if (command.startsWith("!profile")) {
+            if (isProfileCommand) {
                 await handleProfile(msg);
                 return;
             }
