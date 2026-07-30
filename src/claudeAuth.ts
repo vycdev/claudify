@@ -208,6 +208,11 @@ export class ClaudeAuthManager {
                             ),
                         );
                     }
+                    session.resolveCompletion({
+                        code: null,
+                        timedOut: true,
+                    });
+                    this.finishSession(session);
                     child.kill();
                 }, this.loginTimeoutMs),
                 timedOut: false,

@@ -114,6 +114,36 @@ test("runs a private login session and verifies its final status", async (t) => 
     assert.equal(closedInputManager.hasActiveLogin(), false);
 });
 
+test("clears a timed-out login session even if the CLI ignores SIGTERM", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
+    const markerPath = path.join(tempDir, "authenticated");
+    const fakeCliPath = path.join(tempDir, "fake-claude.mjs");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeAuth.mjs");
+    fs.copyFileSync(fixturePath, fakeCliPath);
+    t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+    const manager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        loginTimeoutMs: 500,
+        env: {
+            ...process.env,
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM: "1",
+        },
+    });
+
+    await manager.startLogin("owner");
+    assert.equal(manager.hasActiveLogin(), true);
+    const submission = assert.rejects(
+        () => manager.submitCode("owner", "pending-code"),
+        /timed out/,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    assert.equal(manager.hasActiveLogin(), false);
+    await submission;
+});
+
 test("falls back for invalid Claude login timeout environment values", () => {
     const configUrl = new URL("../build/config.js", import.meta.url).href;
     const readTimeout = (value) => {

@@ -27,6 +27,10 @@ if (action === "login") {
     process.stdout.write(
         `\u001b]8;;${loginUrl}\u0007${loginUrl}\u001b]8;;\u0007\n`,
     );
+    if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM === "1") {
+        process.on("SIGTERM", () => {});
+        setTimeout(() => process.exit(1), 1_500);
+    }
     if (process.env.CLAUDIFY_AUTH_TEST_CLOSE_STDIN === "1") {
         process.stdin.destroy();
         setTimeout(() => process.exit(1), 100);
@@ -40,6 +44,9 @@ if (action === "login") {
             for (const line of lines) {
                 const code = line.trim();
                 if (!code) continue;
+                if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM === "1") {
+                    continue;
+                }
                 if (code === "valid-code") {
                     fs.writeFileSync(markerPath, "authenticated", {
                         encoding: "utf8",
