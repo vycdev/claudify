@@ -4,6 +4,8 @@ import { HISTORY_DIR, SUMMARIES_DIR, BOT_EFFORT, BOT_MODEL } from "../config.js"
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
 
+const summariesInProgress = new Set<string>();
+
 export function getSummaryPath(channelName: string, date: Date): string {
     const dateStr = date.toISOString().split("T")[0];
     const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, "_");
@@ -38,38 +40,49 @@ export async function generateDailySummary(
     const logPath = getLogPath(channelName, date);
     const summaryPath = getSummaryPath(channelName, date);
 
-    if (!fs.existsSync(logPath) || fs.existsSync(summaryPath)) return;
-
-    const log = fs.readFileSync(logPath, "utf-8").trim();
-    if (!log || log.split("\n").length < 3) {
-        fs.writeFileSync(summaryPath, log, "utf-8");
+    if (
+        !fs.existsSync(logPath) ||
+        fs.existsSync(summaryPath) ||
+        summariesInProgress.has(summaryPath)
+    ) {
         return;
     }
 
+    summariesInProgress.add(summaryPath);
     try {
-        const dateStr = date.toISOString().split("T")[0];
-        console.error(
-            `[Summary] Generating summary for #${channelName} on ${dateStr}`,
-        );
-        const { stdout } = await runClaude(
-            [
-                "-p",
-                "--system-prompt",
-                renderPrompt("dailySummarySystem"),
-            ],
-            log,
-            BOT_MODEL,
-            BOT_EFFORT,
-        );
-
-        if (stdout.trim()) {
-            fs.writeFileSync(summaryPath, stdout.trim(), "utf-8");
-            console.error(
-                `[Summary] Saved summary for #${channelName} on ${dateStr}`,
-            );
+        const log = fs.readFileSync(logPath, "utf-8").trim();
+        if (!log || log.split("\n").length < 3) {
+            fs.writeFileSync(summaryPath, log, "utf-8");
+            return;
         }
-    } catch (err: any) {
-        console.error(`[Summary] Failed to generate summary: ${err.message}`);
+
+        try {
+            const dateStr = date.toISOString().split("T")[0];
+            console.error(
+                `[Summary] Generating summary for #${channelName} on ${dateStr}`,
+            );
+            const { stdout } = await runClaude(
+                [
+                    "-p",
+                    "--system-prompt",
+                    renderPrompt("dailySummarySystem"),
+                ],
+                log,
+                BOT_MODEL,
+                BOT_EFFORT,
+            );
+
+            if (stdout.trim()) {
+                fs.writeFileSync(summaryPath, stdout.trim(), "utf-8");
+                console.error(
+                    `[Summary] Saved summary for #${channelName} on ${dateStr}`,
+                );
+            }
+        } catch (err: any) {
+            console.error(`[Summary] Failed to generate summary: ${err.message}`);
+        }
+    } finally {
+        summariesInProgress.delete(summaryPath);
     }
 }
 
