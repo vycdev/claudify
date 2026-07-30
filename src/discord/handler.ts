@@ -6,6 +6,7 @@ import { handleUsage } from "./commands/usage.js";
 import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
+import { handleAuthTextMessage } from "./commands/auth.js";
 import { askClaude } from "../askClaude.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
@@ -252,6 +253,7 @@ export function registerHandler() {
     client.on("messageCreate", async (msg: Message) => {
         try {
             if (msg.author.bot) return;
+            if (await handleAuthTextMessage(msg)) return;
             if (!(msg.channel instanceof TextChannel)) return;
 
             logIncomingMessage(msg);

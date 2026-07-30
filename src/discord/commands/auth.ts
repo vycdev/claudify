@@ -1,6 +1,7 @@
 import {
     ChatInputCommandInteraction,
     Events,
+    Message,
     SlashCommandBuilder,
 } from "discord.js";
 import {
@@ -84,6 +85,182 @@ function safeErrorMessage(error: unknown): string {
     return error instanceof Error
         ? error.message
         : "Claude authentication failed.";
+}
+
+export type AuthTextCommand =
+    | { subcommand: "help" | "status" | "cancel" }
+    | { subcommand: "login"; method: "subscription" | "console" }
+    | { subcommand: "code"; code: string }
+    | { subcommand: "invalid"; error: string };
+
+export function parseAuthTextCommand(
+    content: string,
+): AuthTextCommand | null {
+    const trimmed = content.trim();
+    if (!/^!auth(?:\s|$)/i.test(trimmed)) {
+        return null;
+    }
+
+    const rest = trimmed.slice("!auth".length).trim();
+    if (!rest || rest.toLowerCase() === "help") {
+        return { subcommand: "help" };
+    }
+
+    const separator = rest.search(/\s/);
+    const action = (
+        separator === -1 ? rest : rest.slice(0, separator)
+    ).toLowerCase();
+    const argument =
+        separator === -1 ? "" : rest.slice(separator).trim();
+
+    if (action === "status" || action === "cancel") {
+        if (argument) {
+            return {
+                subcommand: "invalid",
+                error: `\`!auth ${action}\` does not accept an argument.`,
+            };
+        }
+        return { subcommand: action };
+    }
+
+    if (action === "login") {
+        const method = argument.toLowerCase();
+        if (!method || method === "subscription") {
+            return { subcommand: "login", method: "subscription" };
+        }
+        if (method === "console") {
+            return { subcommand: "login", method: "console" };
+        }
+        return {
+            subcommand: "invalid",
+            error: "Use `!auth login subscription` or `!auth login console`.",
+        };
+    }
+
+    if (action === "code") {
+        if (!argument) {
+            return {
+                subcommand: "invalid",
+                error: "Use `!auth code <one-time-code>`.",
+            };
+        }
+        return { subcommand: "code", code: argument };
+    }
+
+    return {
+        subcommand: "invalid",
+        error: "Unknown auth command. Use `!auth help`.",
+    };
+}
+
+function authTextHelp(): string {
+    return [
+        "**Claudify authentication commands**",
+        "`!auth status` — Check Claude CLI authentication",
+        "`!auth login [subscription|console]` — Start a login",
+        "`!auth code <one-time-code>` — Complete the login",
+        "`!auth cancel` — Cancel the active login",
+        "",
+        "These commands only work in this private DM.",
+    ].join("\n");
+}
+
+export async function handleAuthTextMessage(msg: Message): Promise<boolean> {
+    const command = parseAuthTextCommand(msg.content);
+    if (!command) {
+        return false;
+    }
+
+    if (!AUTH_ADMIN_USER_IDS.has(msg.author.id)) {
+        await msg.reply("You are not allowed to manage Claude authentication.");
+        return true;
+    }
+
+    if (msg.guildId !== null) {
+        await msg.reply(
+            "For security, send this command to me in a private DM. Start with `!auth help`.",
+        );
+        return true;
+    }
+
+    try {
+        if (command.subcommand === "invalid") {
+            await msg.reply(command.error);
+            return true;
+        }
+
+        if (command.subcommand === "help") {
+            await msg.reply(authTextHelp());
+            return true;
+        }
+
+        if (command.subcommand === "status") {
+            await msg.reply(formatStatus(await authManager.getStatus()));
+            return true;
+        }
+
+        if (command.subcommand === "login") {
+            const loginUrl = await authManager.startLogin(
+                msg.author.id,
+                command.method,
+            );
+            const timeoutMinutes = Math.ceil(
+                CLAUDE_AUTH_LOGIN_TIMEOUT_MS / 60_000,
+            );
+            const instructions = [
+                "After authorizing, reply here with `!auth code <one-time-code>`.",
+                `This private session expires in about ${timeoutMinutes} minute(s).`,
+                "",
+                "**Do not submit an API key or long-lived OAuth token.**",
+            ].join("\n");
+            const content = [
+                "Open this Claude login URL:",
+                `<${loginUrl}>`,
+                "",
+                instructions,
+            ].join("\n");
+
+            if (content.length <= 2000) {
+                await msg.reply(content);
+            } else {
+                await msg.reply({
+                    content: [
+                        "Claude's login URL is attached because it is too long for a Discord message.",
+                        instructions,
+                    ].join("\n"),
+                    files: [
+                        {
+                            attachment: Buffer.from(`${loginUrl}\n`, "utf8"),
+                            name: "claude-login-url.txt",
+                        },
+                    ],
+                });
+            }
+            return true;
+        }
+
+        if (command.subcommand === "code") {
+            const status = await authManager.submitCode(
+                msg.author.id,
+                command.code,
+            );
+            await msg.reply(
+                `${formatStatus(status)}\nThe one-time code was not logged or stored by Claudify.`,
+            );
+            return true;
+        }
+
+        authManager.cancelLogin(msg.author.id);
+        await msg.reply(
+            "The active Claude authentication session was cancelled.",
+        );
+    } catch (error) {
+        const message = safeErrorMessage(error);
+        console.error(`[Claude Auth] Text command failed: ${message}`);
+        await msg.reply(`Authentication error: ${message}`);
+    }
+
+    return true;
 }
 
 async function handleAuthInteraction(
