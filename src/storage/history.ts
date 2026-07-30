@@ -103,6 +103,10 @@ function trimLinesToBudget(
     let selected = [...lines];
     let omitted = 0;
 
+    if (maxLines === 0) {
+        return { lines: [], omitted: selected.length };
+    }
+
     if (selected.length > maxLines) {
         omitted = selected.length - maxLines;
         selected = selected.slice(-maxLines);
