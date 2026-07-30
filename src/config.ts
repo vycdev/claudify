@@ -11,6 +11,18 @@ function parseNonNegativeInteger(value: string | undefined, fallback: number): n
     return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function parsePort(value: string | undefined, fallback: number): number {
+    if (value === undefined) return fallback;
+
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return fallback;
+
+    const port = Number(normalized);
+    return Number.isSafeInteger(port) && port >= 1 && port <= 65535
+        ? port
+        : fallback;
+}
+
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
 export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
@@ -26,6 +38,8 @@ export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const COOLDOWN_MS = parseNonNegativeInteger(process.env.COOLDOWN_MS, 10000);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
+export const SUPPRESS_MENTIONS =
+    process.env.SUPPRESS_MENTIONS?.trim().toLowerCase() === "true";
 
 export const LIVE_CONTEXT_LIMIT = parseInt(process.env.LIVE_CONTEXT_LIMIT || "35", 10);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseInt(process.env.DEEP_LIVE_CONTEXT_LIMIT || "500", 10);
@@ -35,7 +49,7 @@ export const HISTORY_RECAP_MAX_CHARS = parseInt(process.env.HISTORY_RECAP_MAX_CH
 export const HISTORY_SEARCH_MAX_BLOCKS = parseInt(process.env.HISTORY_SEARCH_MAX_BLOCKS || "10", 10);
 export const HISTORY_SEARCH_CONTEXT_LINES = parseInt(process.env.HISTORY_SEARCH_CONTEXT_LINES || "2", 10);
 
-export const MCP_PORT = parseInt(process.env.MCP_PORT || "3100", 10);
+export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");

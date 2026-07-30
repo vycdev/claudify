@@ -111,6 +111,7 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `COOLDOWN_MS` | No | `10000` | Per-user cooldown in ms |
 | `BOT_MODEL` | No | `claude-haiku-4-5` | Claude model for all CLI calls |
 | `BOT_EFFORT` | No | `""` | Claude Code `--effort` level (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
 
 ## Storage layout

@@ -32,10 +32,7 @@ export function startMcpHttpServer(): http.Server {
             });
             try {
                 await mcpServer.connect(transport);
-                const chunks: Buffer[] = [];
-                for await (const chunk of req) chunks.push(chunk as Buffer);
-                const body = JSON.parse(Buffer.concat(chunks).toString());
-                await transport.handleRequest(req, res, body);
+                await transport.handleRequest(req, res);
             } catch (error: any) {
                 console.error(`[MCP HTTP] Error: ${error.message}`);
                 if (!res.headersSent) {
