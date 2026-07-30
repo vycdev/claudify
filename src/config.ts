@@ -4,6 +4,13 @@ import path from "path";
 
 dotenv.config();
 
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+    if (value === undefined || value.trim() === "") return fallback;
+
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 function parsePort(value: string | undefined, fallback: number): number {
     if (value === undefined) return fallback;
 
@@ -28,7 +35,7 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 
-export const COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || "10000", 10);
+export const COOLDOWN_MS = parseNonNegativeInteger(process.env.COOLDOWN_MS, 10000);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
 export const SUPPRESS_MENTIONS =
