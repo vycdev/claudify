@@ -126,7 +126,7 @@ async function enforceRequiredRole(msg: Message): Promise<boolean> {
 }
 
 // Per-user message queue with cooldown
-const MAX_QUEUED_PER_USER = 5;
+const MAX_QUEUED_PER_USER = 10;
 const userQueues = new Map<string, Message[]>();
 const userProcessing = new Set<string>();
 const userCooldowns = new Map<string, number>();
