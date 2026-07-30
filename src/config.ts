@@ -70,13 +70,13 @@ export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
 export const SUPPRESS_MENTIONS =
     process.env.SUPPRESS_MENTIONS?.trim().toLowerCase() === "true";
 
-export const LIVE_CONTEXT_LIMIT = parseInt(process.env.LIVE_CONTEXT_LIMIT || "35", 10);
-export const DEEP_LIVE_CONTEXT_LIMIT = parseInt(process.env.DEEP_LIVE_CONTEXT_LIMIT || "500", 10);
-export const HISTORY_RECENT_LINES = parseInt(process.env.HISTORY_RECENT_LINES || "80", 10);
-export const HISTORY_RECAP_MAX_LINES = parseInt(process.env.HISTORY_RECAP_MAX_LINES || "1000", 10);
-export const HISTORY_RECAP_MAX_CHARS = parseInt(process.env.HISTORY_RECAP_MAX_CHARS || "140000", 10);
-export const HISTORY_SEARCH_MAX_BLOCKS = parseInt(process.env.HISTORY_SEARCH_MAX_BLOCKS || "10", 10);
-export const HISTORY_SEARCH_CONTEXT_LINES = parseInt(process.env.HISTORY_SEARCH_CONTEXT_LINES || "2", 10);
+export const LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.LIVE_CONTEXT_LIMIT, 35);
+export const DEEP_LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.DEEP_LIVE_CONTEXT_LIMIT, 500);
+export const HISTORY_RECENT_LINES = parseNonNegativeInteger(process.env.HISTORY_RECENT_LINES, 80);
+export const HISTORY_RECAP_MAX_LINES = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_LINES, 1000);
+export const HISTORY_RECAP_MAX_CHARS = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_CHARS, 140000);
+export const HISTORY_SEARCH_MAX_BLOCKS = parseNonNegativeInteger(process.env.HISTORY_SEARCH_MAX_BLOCKS, 10);
+export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.HISTORY_SEARCH_CONTEXT_LINES, 2);
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
