@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
+import { SUPPRESS_MENTIONS } from "../config.js";
 
 export const client = new Client({
     intents: [
@@ -7,5 +8,5 @@ export const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
     ],
-    allowedMentions: { parse: [] },
+    allowedMentions: SUPPRESS_MENTIONS ? { parse: [] } : undefined,
 });
