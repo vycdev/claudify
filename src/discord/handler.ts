@@ -339,6 +339,7 @@ export function registerHandler() {
 
     // Reaction trigger: respond to messages when someone adds a 🤖 reaction
     client.on("messageReactionAdd", async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
+        let acquiredProcessing = false;
         try {
             // Fetch partial reaction/message if needed
             if (reaction.partial) {
@@ -385,11 +386,13 @@ export function registerHandler() {
                 }
             }
 
-            // Cooldown check for the reacting user
-            if (getCooldownRemaining(user.id) > 0) {
-                console.error(`[Bot] Reaction trigger cooldown for ${user.tag}`);
+            // Serialize reaction and message triggers for the same user
+            if (userProcessing.has(user.id) || getCooldownRemaining(user.id) > 0) {
+                console.error(`[Bot] Reaction trigger busy or on cooldown for ${user.tag}`);
                 return;
             }
+            userProcessing.add(user.id);
+            acquiredProcessing = true;
 
             console.error(`[Bot] 🤖 reaction trigger by ${user.tag} on message from ${msg.author?.tag} in #${msg.channel.name}`);
 
@@ -460,6 +463,13 @@ export function registerHandler() {
             console.error(`[Bot] Reaction-triggered response sent successfully`);
         } catch (error: any) {
             console.error(`[Bot] Error in reaction handler: ${error.message}`);
+        } finally {
+            if (acquiredProcessing) {
+                userProcessing.delete(user.id);
+                if (getUserQueueSize(user.id) > 0) {
+                    scheduleQueueDrain(user.id);
+                }
+            }
         }
     });
 }
