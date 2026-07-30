@@ -170,12 +170,7 @@ export function loadRecentHistory(channelName: string, question: string = ""): s
     const yesterday = new Date(Date.now() - 86400000);
     const yesterdaySummary = getSummaryPath(channelName, yesterday);
     const yesterdayLog = getDailyLogPath(channelName, yesterday);
-    if (fs.existsSync(yesterdaySummary)) {
-        const dateStr = yesterday.toISOString().split("T")[0];
-        parts.push(
-            `--- Yesterday (${dateStr}) summary ---\n${fs.readFileSync(yesterdaySummary, "utf-8").trim()}`,
-        );
-    } else if (fs.existsSync(yesterdayLog)) {
+    if (!fs.existsSync(yesterdaySummary) && fs.existsSync(yesterdayLog)) {
         const lines = readLogLines(yesterdayLog);
         if (lines.length > 0) {
             const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
