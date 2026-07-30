@@ -7,4 +7,5 @@ export const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
     ],
+    allowedMentions: { parse: [] },
 });
