@@ -56,19 +56,25 @@ When used as an MCP server (e.g., with Claude Desktop or Claude Code), these too
 
 ### MCP Configuration
 
+After Claudify successfully logs in to Discord, configure an MCP client in the
+same network environment to connect to its Streamable HTTP endpoint:
+
 ```json
 {
   "mcpServers": {
     "discord": {
-      "command": "node",
-      "args": ["path/to/claudify/build/index.js"],
-      "env": {
-        "DISCORD_TOKEN": "your_token"
-      }
+      "type": "http",
+      "url": "http://localhost:3100/mcp"
     }
   }
 }
 ```
+
+Set `DISCORD_TOKEN` in Claudify's environment, not in the MCP client
+configuration. If you change `MCP_PORT`, update the URL to match. Claudify also
+writes this configuration to `.mcp-config.json` when it starts. The server is
+loopback-only and has no request authentication; the Docker setup therefore
+does not expose it to host-side MCP clients by default.
 
 ## Development
 
@@ -81,8 +87,13 @@ npm start        # run
 
 Test with the MCP Inspector:
 ```bash
-npx @modelcontextprotocol/inspector node build/index.js
+npm start
+# In another terminal:
+npx @modelcontextprotocol/inspector
 ```
+
+In the Inspector, select **Streamable HTTP** and connect to
+`http://localhost:3100/mcp` (or your configured `MCP_PORT`).
 
 ## Security
 
