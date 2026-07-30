@@ -24,6 +24,14 @@ if (action === "status") {
 
 if (action === "login") {
     const loginUrl = "https://claude.com/cai/oauth/authorize?test=1";
+    if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM === "1") {
+        process.on("SIGTERM", () => {});
+        const pidPath = process.env.CLAUDIFY_AUTH_TEST_PID_PATH;
+        if (pidPath) {
+            fs.writeFileSync(pidPath, String(process.pid), "utf8");
+        }
+        setInterval(() => {}, 1_000);
+    }
     process.stdout.write(
         `\u001b]8;;${loginUrl}\u0007${loginUrl}\u001b]8;;\u0007\n`,
     );
@@ -40,6 +48,9 @@ if (action === "login") {
             for (const line of lines) {
                 const code = line.trim();
                 if (!code) continue;
+                if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM === "1") {
+                    continue;
+                }
                 if (code === "valid-code") {
                     fs.writeFileSync(markerPath, "authenticated", {
                         encoding: "utf8",

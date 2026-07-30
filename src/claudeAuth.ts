@@ -7,6 +7,7 @@ const MAX_CAPTURED_OUTPUT = 64 * 1024;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 const DEFAULT_LOGIN_TIMEOUT_MS = 5 * 60_000;
+const FORCE_KILL_GRACE_MS = 1_000;
 const REJECTED_CODE_PATTERN =
     /\binvalid code\b|\bcode (?:has )?expired\b|\bauthentication code (?:was )?rejected\b/i;
 
@@ -46,6 +47,7 @@ interface LoginSession {
     completion: Promise<LoginCompletion>;
     resolveCompletion: (result: LoginCompletion) => void;
     timeout: NodeJS.Timeout;
+    forceKillTimeout?: NodeJS.Timeout;
     timedOut: boolean;
     codeSubmitted: boolean;
     codeAttempt?: CodeAttempt;
@@ -208,7 +210,11 @@ export class ClaudeAuthManager {
                             ),
                         );
                     }
-                    child.kill();
+                    session.resolveCompletion({
+                        code: null,
+                        timedOut: true,
+                    });
+                    this.terminateSession(session);
                 }, this.loginTimeoutMs),
                 timedOut: false,
                 codeSubmitted: false,
@@ -386,7 +392,30 @@ export class ClaudeAuthManager {
     cancelLogin(ownerId: string): void {
         const session = this.requireOwnedSession(ownerId);
         this.finishSession(session);
-        session.child.kill();
+        this.terminateSession(session);
+    }
+
+    private terminateSession(session: LoginSession): void {
+        const child = session.child;
+        if (child.exitCode !== null || child.signalCode !== null) return;
+
+        try {
+            child.kill();
+        } catch {
+            // The close/error handlers will finalize an already-ended process.
+        }
+        if (session.forceKillTimeout) return;
+
+        session.forceKillTimeout = setTimeout(() => {
+            session.forceKillTimeout = undefined;
+            if (child.exitCode !== null || child.signalCode !== null) return;
+            try {
+                child.kill("SIGKILL");
+            } catch {
+                // Process termination is best-effort; close/error owns cleanup.
+            }
+        }, FORCE_KILL_GRACE_MS);
+        session.forceKillTimeout.unref();
     }
 
     private requireOwnedSession(ownerId: string): LoginSession {
@@ -404,6 +433,10 @@ export class ClaudeAuthManager {
 
     private finishSession(session: LoginSession): void {
         clearTimeout(session.timeout);
+        if (session.forceKillTimeout) {
+            clearTimeout(session.forceKillTimeout);
+            session.forceKillTimeout = undefined;
+        }
         session.output = "";
         session.codeAttempt = undefined;
         if (this.activeSession === session) {
