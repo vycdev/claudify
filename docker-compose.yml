@@ -5,6 +5,8 @@ services:
     environment:
       - DISCORD_TOKEN=your_discord_bot_token_here
       - REQUIRED_ROLE_ID=your_discord_role_id_here
+      - AUTH_ADMIN_USER_IDS=
+      - CLAUDE_AUTH_LOGIN_TIMEOUT_MS=300000
       - MESSAGES_DIR=/app/messages
       - BOT_EFFORT=
     volumes:

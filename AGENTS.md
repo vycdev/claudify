@@ -108,6 +108,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `DISCORD_TOKEN` | Yes | — | Discord bot token |
 | `MESSAGES_DIR` | No | `./messages/` | Root storage directory |
 | `REQUIRED_ROLE_ID` | No | `""` (anyone) | Discord role ID for access control |
+| `AUTH_ADMIN_USER_IDS` | No | `""` (disabled) | Comma-separated Discord user IDs allowed to manage Claude CLI authentication |
+| `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` | No | `300000` | Timeout for an interactive Discord authentication session |
 | `COOLDOWN_MS` | No | `10000` | Per-user cooldown in ms |
 | `BOT_MODEL` | No | `claude-haiku-4-5` | Claude model for all CLI calls |
 | `BOT_EFFORT` | No | `""` | Claude Code `--effort` level (`low`, `medium`, `high`, `xhigh`, `max`) |

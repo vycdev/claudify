@@ -2,14 +2,27 @@ import "./config.js";
 import { MESSAGES_DIR } from "./config.js";
 import { client } from "./discord/client.js";
 import { registerHandler } from "./discord/handler.js";
+import {
+    registerAuthCommand,
+    registerAuthInteractionHandler,
+} from "./discord/commands/auth.js";
 import { writeMcpConfig, startMcpHttpServer } from "./mcp/http.js";
 
-client.once("ready", () => {
+client.once("ready", async () => {
     console.error("Discord bot is ready!");
     console.error(`Messages will be saved to: ${MESSAGES_DIR}`);
+    try {
+        await registerAuthCommand();
+    } catch (error) {
+        console.error(
+            "[Claude Auth] Failed to register Discord command:",
+            error,
+        );
+    }
 });
 
 registerHandler();
+registerAuthInteractionHandler();
 
 async function main() {
     const token = process.env.DISCORD_TOKEN;

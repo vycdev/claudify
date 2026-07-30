@@ -21,6 +21,8 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 2. Set your environment variables in `docker-compose.yml`:
    - `DISCORD_TOKEN` — your bot token
    - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave as placeholder to allow everyone)
+   - `AUTH_ADMIN_USER_IDS` — comma-separated Discord user IDs allowed to manage Claude authentication (leave empty to disable)
+   - `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` — optional Discord login-session timeout (default: `300000`)
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
    - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
@@ -34,16 +36,34 @@ docker compose up -d
 
 Claude Code CLI needs to be authenticated inside the container before the bot can respond. On first run (or after clearing volumes), you need to log in:
 
-1. Exec into the running container:
+### Private Discord login
+
+Set `AUTH_ADMIN_USER_IDS` to your Discord user ID and restart the bot. Claudify registers owner-only slash commands with ephemeral responses:
+
+- `/auth status` checks the CLI's authentication state without making a model request.
+- `/auth login` returns Claude's browser login URL.
+- `/auth code` privately submits the short-lived code shown after browser authorization.
+- `/auth cancel` stops an unfinished login.
+
+Only explicitly listed user IDs can execute these commands. Discord roles and Administrator status are not used for authorization. Claudify never logs or stores the one-time code. Never submit an API key or long-lived OAuth token through Discord.
+
+The Discord application must be installed with the `applications.commands` scope for slash commands to appear.
+
+### Terminal login
+
+You can also exec into the running container:
+
 ```bash
 docker exec -it <container_name> claude auth login
 ```
 
-2. The CLI will display a URL. Open it in your browser and complete the login.
+The CLI will display a URL. Open it in your browser and complete the login.
 
-3. Once authenticated, the bot is ready — no restart needed. Auth persists across container restarts via the `claude-home` volume.
+Once authenticated, the bot is ready — no restart needed. Auth persists across container restarts via the `claude-home` volume.
 
 If the bot sends "Sorry, I could not generate a response", it's most likely an auth issue. Check the logs with `docker logs <container_name>` and re-run the auth command above.
+
+For deployed products or services, prefer `ANTHROPIC_API_KEY` or a supported cloud provider rather than relaying Claude subscription authentication.
 
 ## MCP Server Tools
 
@@ -101,6 +121,8 @@ In the Inspector, select **Streamable HTTP** and connect to
 - Claude CLI is restricted to `WebSearch`, `WebFetch`, `Read`, and `Write` tools only
 - File access is scoped to the messages directory
 - Role-based access control limits who can interact with the bot
+- Claude authentication commands use the explicit user-ID allowlist; Discord roles are not used
+- Authentication responses are ephemeral, and login codes are never logged or persisted
 - Runs in Docker for isolation
 
 ## License

@@ -1,5 +1,9 @@
 import { Message } from "discord.js";
-import { BOT_MODEL, COOLDOWN_MS } from "../../config.js";
+import {
+    AUTH_ADMIN_USER_IDS,
+    BOT_MODEL,
+    COOLDOWN_MS,
+} from "../../config.js";
 import { client } from "../client.js";
 
 export async function handleHelp(msg: Message): Promise<void> {
@@ -22,6 +26,16 @@ export async function handleHelp(msg: Message): Promise<void> {
         `\`!profile [@user]\` — View a user's profile`,
         `\`!guild\` — View server memory`,
         `\`!storage\` — Storage stats`,
+        ...(AUTH_ADMIN_USER_IDS.has(msg.author.id)
+            ? [
+                  ``,
+                  `**Owner administration**`,
+                  `\`/auth status\` — Check Claude CLI authentication`,
+                  `\`/auth login\` — Start a private Claude login`,
+                  `\`/auth code\` — Submit the one-time login code`,
+                  `\`/auth cancel\` — Cancel an active login`,
+              ]
+            : []),
         ``,
         `**Notes**`,
         `• ${cooldownSec}s cooldown between responses per user`,
