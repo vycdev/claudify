@@ -416,18 +416,21 @@ export function registerHandler() {
                 (msg.channel as TextChannel).sendTyping().catch(() => {});
             }, 8000);
 
-            const response = await askClaude(
-                question,
-                userLabel,
-                user.id,
-                msg.channel.name,
-                msg.guild.name,
-                msg.guild.id,
-                imagePaths,
-                liveMessages,
-            );
-
-            clearInterval(typingInterval);
+            let response: string;
+            try {
+                response = await askClaude(
+                    question,
+                    userLabel,
+                    user.id,
+                    msg.channel.name,
+                    msg.guild.name,
+                    msg.guild.id,
+                    imagePaths,
+                    liveMessages,
+                );
+            } finally {
+                clearInterval(typingInterval);
+            }
             setCooldown(user.id);
 
             // Extract any [REACT:emoji] tags and apply them as reactions
@@ -593,18 +596,21 @@ async function processMessage(msg: Message): Promise<void> {
             console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
         }
 
-        const response = await askClaude(
-            question,
-            authorLabel(msg.author),
-            msg.author.id,
-            msg.channel.name,
-            msg.guild?.name || "DM",
-            msg.guild?.id || "unknown",
-            imagePaths,
-            liveMessages,
-        );
-
-        clearInterval(typingInterval);
+        let response: string;
+        try {
+            response = await askClaude(
+                question,
+                authorLabel(msg.author),
+                msg.author.id,
+                msg.channel.name,
+                msg.guild?.name || "DM",
+                msg.guild?.id || "unknown",
+                imagePaths,
+                liveMessages,
+            );
+        } finally {
+            clearInterval(typingInterval);
+        }
         setCooldown(userId);
 
         // Extract any [REACT:emoji] tags and apply them as reactions
