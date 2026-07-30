@@ -68,6 +68,7 @@ function spawnClaude(
 
         let stdout = "";
         let stderr = "";
+        let stdinError: Error | undefined;
 
         proc.stdout.on("data", (data) => {
             stdout += data.toString();
@@ -83,7 +84,9 @@ function spawnClaude(
 
         proc.on("close", (code) => {
             clearTimeout(timeout);
-            if (code === 0) {
+            if (stdinError) {
+                reject(stdinError);
+            } else if (code === 0) {
                 resolve({ stdout, stderr });
             } else {
                 const err: any = new Error(
@@ -100,6 +103,10 @@ function spawnClaude(
             reject(error);
         });
 
+        proc.stdin.on("error", (error) => {
+            stdinError = error;
+            proc.kill();
+        });
         proc.stdin.write(input);
         proc.stdin.end();
     });
