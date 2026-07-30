@@ -4,6 +4,18 @@ import path from "path";
 
 dotenv.config();
 
+function parsePort(value: string | undefined, fallback: number): number {
+    if (value === undefined) return fallback;
+
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return fallback;
+
+    const port = Number(normalized);
+    return Number.isSafeInteger(port) && port >= 1 && port <= 65535
+        ? port
+        : fallback;
+}
+
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
 export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
@@ -28,7 +40,7 @@ export const HISTORY_RECAP_MAX_CHARS = parseInt(process.env.HISTORY_RECAP_MAX_CH
 export const HISTORY_SEARCH_MAX_BLOCKS = parseInt(process.env.HISTORY_SEARCH_MAX_BLOCKS || "10", 10);
 export const HISTORY_SEARCH_CONTEXT_LINES = parseInt(process.env.HISTORY_SEARCH_CONTEXT_LINES || "2", 10);
 
-export const MCP_PORT = parseInt(process.env.MCP_PORT || "3100", 10);
+export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");
