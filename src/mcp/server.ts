@@ -264,9 +264,33 @@ export function createMcpServer(): Server {
                         files = files.filter((f) => f.includes(`_${date}`));
                     }
 
-                    files = files.slice(-limit);
+                    const searchLower = search?.toLowerCase();
+                    const candidateFiles = searchLower
+                        ? files
+                        : files.slice(-limit);
+                    let matchingFiles = candidateFiles
+                        .map((file) => {
+                            let lines = fs
+                                .readFileSync(path.join(dir, file), "utf-8")
+                                .split("\n")
+                                .map((line) => line.trim())
+                                .filter(Boolean);
 
-                    if (files.length === 0)
+                            if (searchLower) {
+                                lines = lines.filter((line) =>
+                                    line.toLowerCase().includes(searchLower),
+                                );
+                            }
+
+                            return { file, lines };
+                        })
+                        .filter(({ lines }) => !searchLower || lines.length > 0);
+
+                    if (searchLower) {
+                        matchingFiles = matchingFiles.slice(-limit);
+                    }
+
+                    if (matchingFiles.length === 0)
                         return {
                             content: [
                                 {
@@ -276,27 +300,14 @@ export function createMcpServer(): Server {
                             ],
                         };
 
-                    const searchLower = search?.toLowerCase();
-                    const messages = files.map((f) => {
-                        let lines = fs
-                            .readFileSync(path.join(dir, f), "utf-8")
-                            .split("\n")
-                            .map((line) => line.trim())
-                            .filter(Boolean);
-
-                        if (searchLower) {
-                            lines = lines.filter((line) =>
-                                line.toLowerCase().includes(searchLower),
-                            );
-                        }
-
+                    const messages = matchingFiles.map(({ file, lines }) => {
                         const omitted = Math.max(0, lines.length - maxLines);
                         const selected = lines.slice(-maxLines);
                         const note = omitted > 0
                             ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
                             : ` (${selected.length} matching lines)`;
 
-                        return `=== ${f}${note} ===\n${selected.join("\n")}`;
+                        return `=== ${file}${note} ===\n${selected.join("\n")}`;
                     });
 
                     return {

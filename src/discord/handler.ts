@@ -126,10 +126,11 @@ async function enforceRequiredRole(msg: Message): Promise<boolean> {
 }
 
 // Per-user message queue with cooldown
-const MAX_QUEUED_PER_USER = 5;
+const MAX_QUEUED_PER_USER = 10;
 const userQueues = new Map<string, Message[]>();
 const userProcessing = new Set<string>();
 const userCooldowns = new Map<string, number>();
+const queueDrainTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function setCooldown(userId: string): void {
     userCooldowns.set(userId, Date.now());
@@ -257,12 +258,14 @@ export function registerHandler() {
 
             // Command routing
             const command = msg.content.trim();
+            const isUsageCommand = /^!usage(?:\s|$)/.test(command);
+            const isProfileCommand = /^!profile(?:\s|$)/.test(command);
             const isCommand =
                 command === "!help" ||
                 command === "!storage" ||
-                command.startsWith("!usage") ||
+                isUsageCommand ||
                 command === "!guild" ||
-                command.startsWith("!profile");
+                isProfileCommand;
 
             if (isCommand && !(await enforceRequiredRole(msg))) return;
 
@@ -276,7 +279,7 @@ export function registerHandler() {
                 return;
             }
 
-            if (command.startsWith("!usage")) {
+            if (isUsageCommand) {
                 await handleUsage(msg);
                 return;
             }
@@ -286,7 +289,7 @@ export function registerHandler() {
                 return;
             }
 
-            if (command.startsWith("!profile")) {
+            if (isProfileCommand) {
                 await handleProfile(msg);
                 return;
             }
@@ -416,18 +419,21 @@ export function registerHandler() {
                 (msg.channel as TextChannel).sendTyping().catch(() => {});
             }, 8000);
 
-            const response = await askClaude(
-                question,
-                userLabel,
-                user.id,
-                msg.channel.name,
-                msg.guild.name,
-                msg.guild.id,
-                imagePaths,
-                liveMessages,
-            );
-
-            clearInterval(typingInterval);
+            let response: string;
+            try {
+                response = await askClaude(
+                    question,
+                    userLabel,
+                    user.id,
+                    msg.channel.name,
+                    msg.guild.name,
+                    msg.guild.id,
+                    imagePaths,
+                    liveMessages,
+                );
+            } finally {
+                clearInterval(typingInterval);
+            }
             setCooldown(user.id);
 
             // Extract any [REACT:emoji] tags and apply them as reactions
@@ -457,14 +463,28 @@ export function registerHandler() {
 }
 
 function scheduleQueueDrain(userId: string): void {
+    if (queueDrainTimers.has(userId)) return;
+
     const remaining = getCooldownRemaining(userId);
     const delay = Math.max(remaining, 100);
-    setTimeout(async () => {
+    const timer = setTimeout(async () => {
+        queueDrainTimers.delete(userId);
+
+        // An active request will schedule the next drain in its finally block.
+        if (userProcessing.has(userId)) return;
+
+        // A stale timer may fire after another request restarted the cooldown.
+        if (getCooldownRemaining(userId) > 0) {
+            scheduleQueueDrain(userId);
+            return;
+        }
+
         const next = dequeueUserMessage(userId);
         if (next) {
             await processMessage(next);
         }
     }, delay);
+    queueDrainTimers.set(userId, timer);
 }
 
 async function processMessage(msg: Message): Promise<void> {
@@ -593,18 +613,21 @@ async function processMessage(msg: Message): Promise<void> {
             console.error(`[Bot] Failed to fetch live messages: ${err.message}`);
         }
 
-        const response = await askClaude(
-            question,
-            authorLabel(msg.author),
-            msg.author.id,
-            msg.channel.name,
-            msg.guild?.name || "DM",
-            msg.guild?.id || "unknown",
-            imagePaths,
-            liveMessages,
-        );
-
-        clearInterval(typingInterval);
+        let response: string;
+        try {
+            response = await askClaude(
+                question,
+                authorLabel(msg.author),
+                msg.author.id,
+                msg.channel.name,
+                msg.guild?.name || "DM",
+                msg.guild?.id || "unknown",
+                imagePaths,
+                liveMessages,
+            );
+        } finally {
+            clearInterval(typingInterval);
+        }
         setCooldown(userId);
 
         // Extract any [REACT:emoji] tags and apply them as reactions
