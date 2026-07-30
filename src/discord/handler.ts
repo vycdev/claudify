@@ -126,10 +126,11 @@ async function enforceRequiredRole(msg: Message): Promise<boolean> {
 }
 
 // Per-user message queue with cooldown
-const MAX_QUEUED_PER_USER = 5;
+const MAX_QUEUED_PER_USER = 10;
 const userQueues = new Map<string, Message[]>();
 const userProcessing = new Set<string>();
 const userCooldowns = new Map<string, number>();
+const queueDrainTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function setCooldown(userId: string): void {
     userCooldowns.set(userId, Date.now());
@@ -462,14 +463,28 @@ export function registerHandler() {
 }
 
 function scheduleQueueDrain(userId: string): void {
+    if (queueDrainTimers.has(userId)) return;
+
     const remaining = getCooldownRemaining(userId);
     const delay = Math.max(remaining, 100);
-    setTimeout(async () => {
+    const timer = setTimeout(async () => {
+        queueDrainTimers.delete(userId);
+
+        // An active request will schedule the next drain in its finally block.
+        if (userProcessing.has(userId)) return;
+
+        // A stale timer may fire after another request restarted the cooldown.
+        if (getCooldownRemaining(userId) > 0) {
+            scheduleQueueDrain(userId);
+            return;
+        }
+
         const next = dequeueUserMessage(userId);
         if (next) {
             await processMessage(next);
         }
     }, delay);
+    queueDrainTimers.set(userId, timer);
 }
 
 async function processMessage(msg: Message): Promise<void> {
