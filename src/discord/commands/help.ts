@@ -30,10 +30,7 @@ export async function handleHelp(msg: Message): Promise<void> {
             ? [
                   ``,
                   `**Owner administration**`,
-                  `\`/auth status\` — Check Claude CLI authentication`,
-                  `\`/auth login\` — Start a private Claude login`,
-                  `\`/auth code\` — Submit the one-time login code`,
-                  `\`/auth cancel\` — Cancel an active login`,
+                  `DM me \`!auth help\` — Manage Claude CLI authentication privately`,
               ]
             : []),
         ``,
