@@ -4,8 +4,11 @@ import {
 } from "child_process";
 
 const MAX_CAPTURED_OUTPUT = 64 * 1024;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 const DEFAULT_LOGIN_TIMEOUT_MS = 5 * 60_000;
+const REJECTED_CODE_PATTERN =
+    /\binvalid code\b|\bcode (?:has )?expired\b|\bauthentication code (?:was )?rejected\b/i;
 
 export interface ClaudeAuthStatus {
     loggedIn: boolean;
@@ -27,6 +30,12 @@ interface LoginCompletion {
     timedOut: boolean;
 }
 
+interface CodeAttempt {
+    output: string;
+    rejection: Promise<never>;
+    reject: (error: Error) => void;
+}
+
 interface LoginSession {
     ownerId: string;
     child: ChildProcessWithoutNullStreams;
@@ -39,6 +48,7 @@ interface LoginSession {
     timeout: NodeJS.Timeout;
     timedOut: boolean;
     codeSubmitted: boolean;
+    codeAttempt?: CodeAttempt;
 }
 
 function appendBounded(current: string, chunk: string): string {
@@ -48,8 +58,37 @@ function appendBounded(current: string, chunk: string): string {
         : combined.slice(-MAX_CAPTURED_OUTPUT);
 }
 
-function stripAnsi(text: string): string {
-    return text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
+function stripTerminalSequences(text: string): string {
+    return text
+        .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+        .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function validTimeout(value: number | undefined, fallback: number): number {
+    return Number.isSafeInteger(value)
+        && value !== undefined
+        && value > 0
+        && value <= MAX_TIMER_DELAY_MS
+        ? value
+        : fallback;
+}
+
+function isTrustedClaudeLoginUrl(value: string): boolean {
+    try {
+        const url = new URL(value);
+        const trustedHost =
+            url.hostname === "claude.com"
+            || url.hostname.endsWith(".claude.com")
+            || url.hostname === "claude.ai"
+            || url.hostname.endsWith(".claude.ai")
+            || url.hostname === "anthropic.com"
+            || url.hostname.endsWith(".anthropic.com");
+        return url.protocol === "https:"
+            && trustedHost
+            && /oauth|authorize|login/i.test(url.pathname);
+    } catch {
+        return false;
+    }
 }
 
 function optionalString(
@@ -86,22 +125,11 @@ export function parseClaudeAuthStatus(
 }
 
 export function extractClaudeLoginUrl(output: string): string | undefined {
-    const urls = stripAnsi(output).match(/https:\/\/[^\s<>"']+/g) || [];
-    const candidates = urls
+    const urls =
+        stripTerminalSequences(output).match(/https:\/\/[^\s<>"']+/g) || [];
+    return urls
         .map((url) => url.replace(/[.,;]+$/, ""))
-        .filter((url) => {
-            try {
-                return new URL(url).protocol === "https:";
-            } catch {
-                return false;
-            }
-        });
-
-    return candidates.find((url) => /oauth|authorize/i.test(url))
-        || candidates.find((url) =>
-            /login|claude\.ai|anthropic\.com/i.test(url),
-        )
-        || candidates[0];
+        .find(isTrustedClaudeLoginUrl);
 }
 
 export class ClaudeAuthManager {
@@ -115,10 +143,14 @@ export class ClaudeAuthManager {
     constructor(options: ClaudeAuthManagerOptions = {}) {
         this.command = options.command || "claude";
         this.prefixArgs = options.prefixArgs || [];
-        this.commandTimeoutMs =
-            options.commandTimeoutMs || DEFAULT_COMMAND_TIMEOUT_MS;
-        this.loginTimeoutMs =
-            options.loginTimeoutMs || DEFAULT_LOGIN_TIMEOUT_MS;
+        this.commandTimeoutMs = validTimeout(
+            options.commandTimeoutMs,
+            DEFAULT_COMMAND_TIMEOUT_MS,
+        );
+        this.loginTimeoutMs = validTimeout(
+            options.loginTimeoutMs,
+            DEFAULT_LOGIN_TIMEOUT_MS,
+        );
         this.env = options.env || process.env;
     }
 
@@ -186,7 +218,7 @@ export class ClaudeAuthManager {
             const capture = (data: Buffer) => {
                 session.output = appendBounded(
                     session.output,
-                    stripAnsi(data.toString()),
+                    data.toString(),
                 );
                 if (!session.urlResolved) {
                     const loginUrl = extractClaudeLoginUrl(session.output);
@@ -195,10 +227,42 @@ export class ClaudeAuthManager {
                         session.resolveUrl(loginUrl);
                     }
                 }
+
+                const attempt = session.codeAttempt;
+                if (attempt) {
+                    attempt.output = appendBounded(
+                        attempt.output,
+                        data.toString(),
+                    );
+                    if (
+                        REJECTED_CODE_PATTERN.test(
+                            stripTerminalSequences(attempt.output),
+                        )
+                    ) {
+                        session.codeAttempt = undefined;
+                        session.codeSubmitted = false;
+                        attempt.reject(
+                            new Error(
+                                "Claude rejected the authentication code. Check it and try again.",
+                            ),
+                        );
+                    }
+                }
             };
 
             child.stdout.on("data", capture);
             child.stderr.on("data", capture);
+            child.stdin.on("error", () => {
+                const attempt = session.codeAttempt;
+                if (!attempt) return;
+                session.codeAttempt = undefined;
+                session.codeSubmitted = false;
+                attempt.reject(
+                    new Error(
+                        "The Claude authentication process could not accept the code.",
+                    ),
+                );
+            });
 
             child.on("error", (error) => {
                 if (!session.urlResolved) {
@@ -260,8 +324,47 @@ export class ClaudeAuthManager {
         }
 
         session.codeSubmitted = true;
-        session.child.stdin.write(`${normalizedCode}\n\n`);
-        const result = await session.completion;
+        let rejectAttempt!: (error: Error) => void;
+        const rejection = new Promise<never>((_, reject) => {
+            rejectAttempt = reject;
+        });
+        const attempt: CodeAttempt = {
+            output: "",
+            rejection,
+            reject: rejectAttempt,
+        };
+        session.codeAttempt = attempt;
+        const attemptResult = Promise.race([
+            session.completion,
+            attempt.rejection,
+        ]);
+
+        try {
+            await new Promise<void>((resolve, reject) => {
+                session.child.stdin.write(
+                    `${normalizedCode}\n\n`,
+                    (error?: Error | null) => {
+                        if (error) {
+                            reject(
+                                new Error(
+                                    "The Claude authentication process could not accept the code.",
+                                ),
+                            );
+                            return;
+                        }
+                        resolve();
+                    },
+                );
+            });
+        } catch (error) {
+            if (session.codeAttempt === attempt) {
+                session.codeAttempt = undefined;
+                session.codeSubmitted = false;
+            }
+            throw error;
+        }
+
+        const result = await attemptResult;
         if (result.error) {
             throw new Error("The Claude authentication process failed.");
         }
@@ -293,7 +396,7 @@ export class ClaudeAuthManager {
         }
         if (session.ownerId !== ownerId) {
             throw new Error(
-                "The active Claude authentication session belongs to another administrator.",
+                "The active Claude authentication session belongs to another allowed user.",
             );
         }
         return session;
@@ -302,6 +405,7 @@ export class ClaudeAuthManager {
     private finishSession(session: LoginSession): void {
         clearTimeout(session.timeout);
         session.output = "";
+        session.codeAttempt = undefined;
         if (this.activeSession === session) {
             this.activeSession = undefined;
         }

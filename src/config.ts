@@ -4,11 +4,29 @@ import path from "path";
 
 dotenv.config();
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
     if (value === undefined || value.trim() === "") return fallback;
 
     const parsed = Number(value);
     return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parsePositiveInteger(
+    value: string | undefined,
+    fallback: number,
+    maximum = Number.MAX_SAFE_INTEGER,
+): number {
+    if (value === undefined) return fallback;
+
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return fallback;
+
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= maximum
+        ? parsed
+        : fallback;
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -44,9 +62,10 @@ export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const COOLDOWN_MS = parseNonNegativeInteger(process.env.COOLDOWN_MS, 10000);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
-export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parseInt(
-    process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS || "300000",
-    10,
+export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
+    process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS,
+    300_000,
+    MAX_TIMER_DELAY_MS,
 );
 export const SUPPRESS_MENTIONS =
     process.env.SUPPRESS_MENTIONS?.trim().toLowerCase() === "true";

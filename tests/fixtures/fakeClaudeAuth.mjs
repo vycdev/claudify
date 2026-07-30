@@ -23,18 +23,35 @@ if (action === "status") {
 }
 
 if (action === "login") {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?test=1";
     process.stdout.write(
-        "\u001b[36mOpen https://claude.ai/oauth/authorize?test=1\u001b[0m\n",
+        `\u001b]8;;${loginUrl}\u0007${loginUrl}\u001b]8;;\u0007\n`,
     );
-    process.stdin.setEncoding("utf8");
-    process.stdin.once("data", (input) => {
-        if (input.trim().startsWith("valid-code")) {
-            fs.writeFileSync(markerPath, "authenticated", {
-                encoding: "utf8",
-                mode: 0o600,
-            });
-            process.exit(0);
-        }
-        process.exit(1);
-    });
+    if (process.env.CLAUDIFY_AUTH_TEST_CLOSE_STDIN === "1") {
+        process.stdin.destroy();
+        setTimeout(() => process.exit(1), 100);
+    } else {
+        process.stdin.setEncoding("utf8");
+        let bufferedInput = "";
+        process.stdin.on("data", (input) => {
+            bufferedInput += input;
+            const lines = bufferedInput.split(/\r?\n/);
+            bufferedInput = lines.pop() || "";
+            for (const line of lines) {
+                const code = line.trim();
+                if (!code) continue;
+                if (code === "valid-code") {
+                    fs.writeFileSync(markerPath, "authenticated", {
+                        encoding: "utf8",
+                        mode: 0o600,
+                    });
+                    setTimeout(() => process.exit(0), 50);
+                    return;
+                }
+                process.stderr.write(
+                    "Invalid code. Please make sure the full code was copied.\n",
+                );
+            }
+        });
+    }
 }

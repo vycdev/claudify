@@ -1,7 +1,6 @@
 import {
     ChatInputCommandInteraction,
     Events,
-    PermissionFlagsBits,
     SlashCommandBuilder,
 } from "discord.js";
 import {
@@ -21,7 +20,7 @@ const authManager = new ClaudeAuthManager({
 const authCommand = new SlashCommandBuilder()
     .setName("auth")
     .setDescription("Manage Claudify's Claude CLI authentication")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDefaultMemberPermissions(null)
     .setDMPermission(false)
     .addSubcommand((subcommand) =>
         subcommand
@@ -220,6 +219,6 @@ export async function registerAuthCommand(): Promise<void> {
         await client.application.commands.create(definition);
     }
     console.error(
-        `[Claude Auth] Registered /auth for ${AUTH_ADMIN_USER_IDS.size} configured administrator(s).`,
+        `[Claude Auth] Registered /auth for ${AUTH_ADMIN_USER_IDS.size} allowed user(s).`,
     );
 }

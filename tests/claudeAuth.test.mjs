@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -34,12 +35,17 @@ test("parses only non-sensitive Claude auth status fields", () => {
     assert.equal("token" in status, false);
 });
 
-test("extracts an OAuth URL across ANSI-decorated output", () => {
+test("extracts a trusted OAuth URL from terminal hyperlink output", () => {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?code=test";
     const output =
-        "\u001b[32mOpen https://claude.ai/oauth/authorize?code=test\u001b[0m\n";
+        `\u001b]8;;${loginUrl}\u0007${loginUrl}\u001b]8;;\u0007\n`;
     assert.equal(
         extractClaudeLoginUrl(output),
-        "https://claude.ai/oauth/authorize?code=test",
+        loginUrl,
+    );
+    assert.equal(
+        extractClaudeLoginUrl("https://example.com/oauth/authorize?code=test"),
+        undefined,
     );
 });
 
@@ -64,11 +70,16 @@ test("runs a private login session and verifies its final status", async (t) => 
 
     assert.deepEqual(await manager.getStatus(), { loggedIn: false });
     const loginUrl = await manager.startLogin("owner");
-    assert.equal(loginUrl, "https://claude.ai/oauth/authorize?test=1");
+    assert.equal(loginUrl, "https://claude.com/cai/oauth/authorize?test=1");
     await assert.rejects(
         () => manager.submitCode("someone-else", "valid-code"),
-        /another administrator/,
+        /another allowed user/,
     );
+    await assert.rejects(
+        () => manager.submitCode("owner", "invalid-code"),
+        /rejected.*try again/,
+    );
+    assert.equal(manager.hasActiveLogin(), true);
 
     const submission = manager.submitCode("owner", "valid-code");
     await assert.rejects(
@@ -83,4 +94,50 @@ test("runs a private login session and verifies its final status", async (t) => 
     await manager.startLogin("owner");
     manager.cancelLogin("owner");
     assert.equal(manager.hasActiveLogin(), false);
+
+    const closedInputManager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        commandTimeoutMs: 2_000,
+        loginTimeoutMs: 2_000,
+        env: {
+            ...process.env,
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_CLOSE_STDIN: "1",
+        },
+    });
+    await closedInputManager.startLogin("owner");
+    await assert.rejects(
+        () => closedInputManager.submitCode("owner", "valid-code"),
+        /could not accept|rejected/,
+    );
+    assert.equal(closedInputManager.hasActiveLogin(), false);
+});
+
+test("falls back for invalid Claude login timeout environment values", () => {
+    const configUrl = new URL("../build/config.js", import.meta.url).href;
+    const readTimeout = (value) => {
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `import { CLAUDE_AUTH_LOGIN_TIMEOUT_MS } from ${JSON.stringify(configUrl)}; process.stdout.write(String(CLAUDE_AUTH_LOGIN_TIMEOUT_MS));`,
+            ],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    CLAUDE_AUTH_LOGIN_TIMEOUT_MS: value,
+                },
+            },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return Number(result.stdout);
+    };
+
+    assert.equal(readTimeout("120000"), 120_000);
+    for (const value of ["", "oops", "-1", "0", "1.5", "2147483648"]) {
+        assert.equal(readTimeout(value), 300_000);
+    }
 });

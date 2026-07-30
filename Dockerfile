@@ -17,7 +17,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # Install Claude Code CLI for auto-response feature
-RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @anthropic-ai/claude-code@2.1.220
 
 COPY --from=build /app/build ./build
 COPY prompts/ ./prompts/
