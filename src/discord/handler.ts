@@ -1,6 +1,7 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
 import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
+import { normalizeBotMentions } from "./mentions.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
 import { handleGuild } from "./commands/guild.js";
@@ -574,9 +575,14 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
+        const normalizedContent = normalizeBotMentions(
+            msg.content,
+            client.user!.id,
+            botName,
+        );
         const rawQuestion = isAskCommand
-            ? msg.content.slice(5).trim()
-            : msg.content.replace(`<@${client.user!.id}>`, botName).trim();
+            ? normalizedContent.slice(5).trim()
+            : normalizedContent.trim();
         const question = replyContext + rawQuestion;
 
         if (!rawQuestion) {
