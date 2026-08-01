@@ -6,11 +6,17 @@ dotenv.config();
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
-function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+function parseNonNegativeInteger(
+    value: string | undefined,
+    fallback: number,
+    maximum = Number.MAX_SAFE_INTEGER,
+): number {
     if (value === undefined || value.trim() === "") return fallback;
 
     const parsed = Number(value);
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+    return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= maximum
+        ? parsed
+        : fallback;
 }
 
 function parsePositiveInteger(
@@ -59,7 +65,11 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 
-export const COOLDOWN_MS = parseNonNegativeInteger(process.env.COOLDOWN_MS, 10000);
+export const COOLDOWN_MS = parseNonNegativeInteger(
+    process.env.COOLDOWN_MS,
+    10000,
+    MAX_TIMER_DELAY_MS,
+);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
 export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
 export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
