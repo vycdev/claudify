@@ -49,6 +49,12 @@ const ReadMessageHistorySchema = z.object({
     maxLines: z.number().min(1).max(2000).default(300),
 });
 
+const FetchMessagesSchema = z.object({
+    links: z
+        .array(z.string())
+        .min(1, "Please provide at least one Discord message link"),
+});
+
 export function createMcpServer(): Server {
     const mcpServer = new Server(
         { name: "discord", version: "1.0.0" },
@@ -320,12 +326,7 @@ export function createMcpServer(): Server {
                     };
                 }
                 case "fetch-messages": {
-                    const links = (args as any)?.links as string[];
-                    if (!links || !Array.isArray(links) || links.length === 0) {
-                        throw new Error(
-                            "Please provide at least one Discord message link",
-                        );
-                    }
+                    const { links } = FetchMessagesSchema.parse(args);
                     const linkPattern =
                         /discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/;
                     const results = [];
