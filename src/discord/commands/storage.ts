@@ -12,9 +12,14 @@ import {
 
 export async function handleStorage(msg: Message): Promise<void> {
     console.error(`[Bot] Storage requested by ${msg.author.tag}`);
-    const countFiles = (dir: string) => {
+    const countFiles = (dir: string): number => {
         try {
-            return fs.readdirSync(dir).filter((f) => f.endsWith(".txt")).length;
+            return fs.readdirSync(dir).reduce((total, file) => {
+                const filePath = path.join(dir, file);
+                const stat = fs.statSync(filePath);
+                if (stat.isDirectory()) return total + countFiles(filePath);
+                return total + (file.endsWith(".txt") ? 1 : 0);
+            }, 0);
         } catch {
             return 0;
         }

@@ -110,7 +110,13 @@ async function buildLiveMessagesContext(
 function logIncomingMessage(msg: Message): void {
     const content = messageContentForMemory(msg);
     if (!content) return;
-    appendToLog(authorLabel(msg.author), content, msg.channel instanceof TextChannel ? msg.channel.name : "unknown", msg.createdAt);
+    appendToLog(
+        authorLabel(msg.author),
+        content,
+        msg.channel.id,
+        msg.channel instanceof TextChannel ? msg.channel.name : "unknown",
+        msg.createdAt,
+    );
 }
 
 async function enforceRequiredRole(msg: Message): Promise<boolean> {
@@ -376,6 +382,7 @@ export function registerHandler() {
                     userLabel,
                     user.id,
                     msg.channel.name,
+                    msg.channel.id,
                     msg.guild.name,
                     msg.guild.id,
                     imagePaths,
@@ -400,8 +407,18 @@ export function registerHandler() {
                 }
             }
 
-            appendToLog(userLabel, `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`, msg.channel.name);
-            appendToLog(botName + " (bot)", parsedResponse.historyContent, msg.channel.name);
+            appendToLog(
+                userLabel,
+                `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`,
+                msg.channel.id,
+                msg.channel.name,
+            );
+            appendToLog(
+                botName + " (bot)",
+                parsedResponse.historyContent,
+                msg.channel.id,
+                msg.channel.name,
+            );
 
             console.error(`[Bot] Reaction-triggered response sent successfully`);
         } catch (error: any) {
@@ -577,6 +594,7 @@ async function processMessage(msg: Message): Promise<void> {
                 authorLabel(msg.author),
                 msg.author.id,
                 msg.channel.name,
+                msg.channel.id,
                 msg.guild?.name || "DM",
                 msg.guild?.id || "unknown",
                 imagePaths,
@@ -600,6 +618,7 @@ async function processMessage(msg: Message): Promise<void> {
                 appendToLog(
                     botName + " (bot)",
                     parsedResponse.historyContent,
+                    msg.channel.id,
                     msg.channel.name,
                 );
             }
@@ -629,7 +648,12 @@ async function processMessage(msg: Message): Promise<void> {
 
         console.error(`[Bot] Response sent successfully`);
 
-        appendToLog(botName + " (bot)", parsedResponse.historyContent, msg.channel.name);
+        appendToLog(
+            botName + " (bot)",
+            parsedResponse.historyContent,
+            msg.channel.id,
+            msg.channel.name,
+        );
 
         // Background jobs
         const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;

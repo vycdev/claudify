@@ -63,9 +63,11 @@ export const AUTH_ADMIN_USER_IDS = new Set(
         .filter(Boolean),
 );
 export const HISTORY_DIR = path.join(MESSAGES_DIR, "history");
+export const HISTORY_V2_DIR = path.join(HISTORY_DIR, "v2");
 export const PENDING_DIR = path.join(MESSAGES_DIR, "pending");
 export const PROFILES_DIR = path.join(MESSAGES_DIR, "profiles");
 export const SUMMARIES_DIR = path.join(MESSAGES_DIR, "summaries");
+export const SUMMARIES_V2_DIR = path.join(SUMMARIES_DIR, "v2");
 export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 
 export const PROFILE_MAX_CHARS = 2000;
@@ -102,7 +104,9 @@ export const PROMPTS_PATH =
 
 // Ensure directories exist
 fs.mkdirSync(HISTORY_DIR, { recursive: true });
+fs.mkdirSync(HISTORY_V2_DIR, { recursive: true });
 fs.mkdirSync(PENDING_DIR, { recursive: true });
 fs.mkdirSync(PROFILES_DIR, { recursive: true });
 fs.mkdirSync(SUMMARIES_DIR, { recursive: true });
+fs.mkdirSync(SUMMARIES_V2_DIR, { recursive: true });
 fs.mkdirSync(IMAGES_DIR, { recursive: true });

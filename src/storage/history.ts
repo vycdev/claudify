@@ -1,7 +1,6 @@
 import fs from "fs";
-import path from "path";
 import {
-    HISTORY_DIR,
+    HISTORY_V2_DIR,
     HISTORY_RECENT_LINES,
     HISTORY_RECAP_MAX_CHARS,
     HISTORY_RECAP_MAX_LINES,
@@ -9,6 +8,7 @@ import {
     HISTORY_SEARCH_MAX_BLOCKS,
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
+import { getChannelHistoryPath } from "./historyPaths.js";
 
 const HISTORY_STOP_WORDS = new Set([
     "about",
@@ -62,19 +62,22 @@ const HISTORY_STOP_WORDS = new Set([
     "you",
 ]);
 
-export function getDailyLogPath(channelName: string, date: Date = new Date()): string {
-    const dateStr = date.toISOString().split("T")[0];
-    const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, "_");
-    return path.join(HISTORY_DIR, `${safeName}_${dateStr}.txt`);
+export function getDailyLogPath(
+    channelId: string,
+    date: Date = new Date(),
+    channelName: string = "channel",
+): string {
+    return getChannelHistoryPath(HISTORY_V2_DIR, channelId, channelName, date);
 }
 
 export function appendToLog(
     author: string,
     content: string,
+    channelId: string,
     channelName: string,
     timestamp: Date = new Date(),
 ) {
-    const filePath = getDailyLogPath(channelName, timestamp);
+    const filePath = getDailyLogPath(channelId, timestamp, channelName);
     const time = timestamp.toTimeString().split(" ")[0];
     const normalized = content.replace(/\s+/g, " ").trim() || "[no text]";
     const line = `[${time}] ${author}: ${normalized}\n`;
@@ -161,19 +164,23 @@ function buildRelevantSnippets(lines: string[], terms: string[]): string[] {
     return snippets;
 }
 
-export function loadRecentHistory(channelName: string, question: string = ""): string {
+export function loadRecentHistory(
+    channelId: string,
+    question: string = "",
+    channelName: string = "channel",
+): string {
     const parts: string[] = [];
     const deepHistory = isDeepHistoryRequest(question);
     const searchTerms = extractSearchTerms(question);
 
-    const olderSummaries = loadRecentSummaries(channelName, 7);
+    const olderSummaries = loadRecentSummaries(channelId, 7, channelName);
     if (olderSummaries) {
         parts.push(`--- Past week summaries ---\n${olderSummaries}`);
     }
 
     const yesterday = new Date(Date.now() - 86400000);
-    const yesterdaySummary = getSummaryPath(channelName, yesterday);
-    const yesterdayLog = getDailyLogPath(channelName, yesterday);
+    const yesterdaySummary = getSummaryPath(channelId, yesterday, channelName);
+    const yesterdayLog = getDailyLogPath(channelId, yesterday, channelName);
     if (!fs.existsSync(yesterdaySummary) && fs.existsSync(yesterdayLog)) {
         const lines = readLogLines(yesterdayLog);
         if (lines.length > 0) {
@@ -188,7 +195,7 @@ export function loadRecentHistory(channelName: string, question: string = ""): s
         }
     }
 
-    const todayPath = getDailyLogPath(channelName);
+    const todayPath = getDailyLogPath(channelId, new Date(), channelName);
     if (fs.existsSync(todayPath)) {
         const lines = readLogLines(todayPath);
         const relevantSnippets = buildRelevantSnippets(lines, searchTerms);

@@ -1,22 +1,36 @@
 import fs from "fs";
-import path from "path";
-import { HISTORY_DIR, SUMMARIES_DIR, BOT_EFFORT, BOT_MODEL } from "../config.js";
+import {
+    HISTORY_V2_DIR,
+    SUMMARIES_V2_DIR,
+    BOT_EFFORT,
+    BOT_MODEL,
+} from "../config.js";
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
+import {
+    getChannelHistoryPath,
+    parseChannelHistoryFileName,
+} from "./historyPaths.js";
 
 const summariesInProgress = new Set<string>();
 
-export function getSummaryPath(channelName: string, date: Date): string {
-    const dateStr = date.toISOString().split("T")[0];
-    const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, "_");
-    return path.join(SUMMARIES_DIR, `${safeName}_${dateStr}.txt`);
+export function getSummaryPath(
+    channelId: string,
+    date: Date,
+    channelName: string = "channel",
+): string {
+    return getChannelHistoryPath(SUMMARIES_V2_DIR, channelId, channelName, date);
 }
 
-export function loadRecentSummaries(channelName: string, days: number = 7): string {
+export function loadRecentSummaries(
+    channelId: string,
+    days: number = 7,
+    channelName: string = "channel",
+): string {
     const summaries: string[] = [];
     for (let i = 1; i <= days; i++) {
         const date = new Date(Date.now() - i * 86400000);
-        const summaryPath = getSummaryPath(channelName, date);
+        const summaryPath = getSummaryPath(channelId, date, channelName);
         if (fs.existsSync(summaryPath)) {
             const dateStr = date.toISOString().split("T")[0];
             summaries.push(
@@ -27,18 +41,17 @@ export function loadRecentSummaries(channelName: string, days: number = 7): stri
     return summaries.reverse().join("\n\n");
 }
 
-function getLogPath(channelName: string, date: Date): string {
-    const dateStr = date.toISOString().split("T")[0];
-    const safeName = channelName.replace(/[^a-zA-Z0-9-_]/g, "_");
-    return path.join(HISTORY_DIR, `${safeName}_${dateStr}.txt`);
+function getLogPath(channelId: string, channelName: string, date: Date): string {
+    return getChannelHistoryPath(HISTORY_V2_DIR, channelId, channelName, date);
 }
 
 export async function generateDailySummary(
+    channelId: string,
     channelName: string,
     date: Date,
 ): Promise<void> {
-    const logPath = getLogPath(channelName, date);
-    const summaryPath = getSummaryPath(channelName, date);
+    const logPath = getLogPath(channelId, channelName, date);
+    const summaryPath = getSummaryPath(channelId, date, channelName);
 
     if (
         !fs.existsSync(logPath) ||
@@ -90,13 +103,21 @@ export async function ensureYesterdaySummaries(): Promise<void> {
     const yesterday = new Date(Date.now() - 86400000);
     try {
         const files = fs
-            .readdirSync(HISTORY_DIR)
+            .readdirSync(HISTORY_V2_DIR)
             .filter((f) => f.endsWith(".txt"));
         const dateStr = yesterday.toISOString().split("T")[0];
-        const yesterdayFiles = files.filter((f) => f.includes(dateStr));
+        const yesterdayFiles = files.filter((file) => {
+            const parsed = parseChannelHistoryFileName(file);
+            return parsed?.date === dateStr;
+        });
         for (const file of yesterdayFiles) {
-            const channelName = file.replace(`_${dateStr}.txt`, "");
-            await generateDailySummary(channelName, yesterday);
+            const parsed = parseChannelHistoryFileName(file);
+            if (!parsed) continue;
+            await generateDailySummary(
+                parsed.channelId,
+                parsed.channelName,
+                yesterday,
+            );
         }
     } catch (err: any) {
         console.error(

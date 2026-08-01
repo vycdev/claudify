@@ -10,12 +10,14 @@ import path from "path";
 import {
     DISCORD_MESSAGE_MAX_CHARS,
     HISTORY_DIR,
+    HISTORY_V2_DIR,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
 import { compareHistoryFilenames } from "./historyFiles.js";
+import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
 
 const ReactToMessageSchema = z.object({
     server: z
@@ -159,7 +161,7 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description:
-                                "Optional channel name to narrow history files",
+                                "Optional channel name or ID to narrow history files",
                         },
                         date: {
                             type: "string",
@@ -283,18 +285,46 @@ export function createMcpServer(): Server {
                     let files = fs
                         .readdirSync(dir)
                         .filter((f) => f.endsWith(".txt"))
-                        .sort(
-                            type === "history"
-                                ? compareHistoryFilenames
-                                : undefined,
+                        .map((file) => ({
+                            displayName: file,
+                            filePath: path.join(dir, file),
+                            channelId: undefined as string | undefined,
+                            channelName: undefined as string | undefined,
+                        }));
+
+                    if (type === "history") {
+                        const channelFiles = fs
+                            .readdirSync(HISTORY_V2_DIR)
+                            .filter((file) => file.endsWith(".txt"))
+                            .map((file) => {
+                                const parsed = parseChannelHistoryFileName(file);
+                                return {
+                                    displayName: `v2/${file}`,
+                                    filePath: path.join(HISTORY_V2_DIR, file),
+                                    channelId: parsed?.channelId,
+                                    channelName: parsed?.channelName,
+                                };
+                            });
+                        files.push(...channelFiles);
+                        files.sort((left, right) =>
+                            compareHistoryFilenames(
+                                left.displayName,
+                                right.displayName,
+                            ),
                         );
+                    }
 
                     if (safeChannel) {
-                        files = files.filter((f) => f.startsWith(`${safeChannel}_`));
+                        files = files.filter((file) =>
+                            file.channelId !== undefined
+                                ? file.channelId === safeChannel ||
+                                  file.channelName === safeChannel
+                                : file.displayName.startsWith(`${safeChannel}_`),
+                        );
                     }
                     if (date) {
                         files = files.filter((f) =>
-                            f.endsWith(`_${date}.txt`),
+                            f.displayName.endsWith(`_${date}.txt`),
                         );
                     }
 
@@ -305,7 +335,7 @@ export function createMcpServer(): Server {
                     let matchingFiles = candidateFiles
                         .map((file) => {
                             let lines = fs
-                                .readFileSync(path.join(dir, file), "utf-8")
+                                .readFileSync(file.filePath, "utf-8")
                                 .split("\n")
                                 .map((line) => line.trim())
                                 .filter(Boolean);
@@ -316,7 +346,7 @@ export function createMcpServer(): Server {
                                 );
                             }
 
-                            return { file, lines };
+                            return { file: file.displayName, lines };
                         })
                         .filter(({ lines }) => !searchLower || lines.length > 0);
 
