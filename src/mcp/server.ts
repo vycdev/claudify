@@ -37,16 +37,16 @@ const ReadMessagesSchema = z.object({
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
-    limit: z.number().min(1).max(100).default(50),
+    limit: z.number().int().min(1).max(100).default(50),
 });
 
 const ReadMessageHistorySchema = z.object({
-    limit: z.number().min(1).max(100).default(20),
+    limit: z.number().int().min(1).max(100).default(20),
     type: z.enum(["history", "pending"]).default("history"),
     channel: z.string().optional(),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     search: z.string().min(1).optional(),
-    maxLines: z.number().min(1).max(2000).default(300),
+    maxLines: z.number().int().min(1).max(2000).default(300),
 });
 
 export function createMcpServer(): Server {
@@ -117,7 +117,7 @@ export function createMcpServer(): Server {
                     type: "object" as const,
                     properties: {
                         limit: {
-                            type: "number",
+                            type: "integer",
                             description:
                                 "Number of matching history files to read (default 20)",
                             default: 20,
@@ -144,7 +144,7 @@ export function createMcpServer(): Server {
                                 "Optional case-insensitive text filter",
                         },
                         maxLines: {
-                            type: "number",
+                            type: "integer",
                             description:
                                 "Maximum lines returned per file (default 300, max 2000)",
                             default: 300,
@@ -186,7 +186,7 @@ export function createMcpServer(): Server {
                             description: 'Channel name (e.g., "general") or ID',
                         },
                         limit: {
-                            type: "number",
+                            type: "integer",
                             description:
                                 "Number of messages to fetch (max 100)",
                             default: 50,
