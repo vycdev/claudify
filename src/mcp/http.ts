@@ -19,7 +19,23 @@ export function writeMcpConfig() {
 
 export function startMcpHttpServer(): http.Server {
     const httpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || "/", `http://localhost:${MCP_PORT}`);
+        let url: URL;
+        try {
+            url = new URL(req.url || "/", `http://localhost:${MCP_PORT}`);
+        } catch {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(
+                JSON.stringify({
+                    jsonrpc: "2.0",
+                    error: {
+                        code: -32600,
+                        message: "Invalid request URL",
+                    },
+                    id: null,
+                }),
+            );
+            return;
+        }
+
         if (url.pathname !== "/mcp") {
             res.writeHead(404).end("Not found");
             return;
