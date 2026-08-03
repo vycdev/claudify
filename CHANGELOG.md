@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Validate every `fetch-messages` link before processing MCP requests.
 - Fall back to the Claude CLI default when `BOT_EFFORT` is unsupported.
 - Reject empty or oversized MCP `send-message` content before calling Discord.
 - Reject MCP HTTP requests from untrusted browser origins.

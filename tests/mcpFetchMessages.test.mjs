@@ -1,14 +1,69 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test, { after } from "node:test";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { TextChannel } from "discord.js";
 
-import { client as discordClient } from "../build/discord/client.js";
-import { createMcpServer } from "../build/mcp/server.js";
+const messagesDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "claudify-mcp-fetch-messages-"),
+);
+const previousMessagesDir = process.env.MESSAGES_DIR;
+process.env.MESSAGES_DIR = messagesDir;
+const [{ client: discordClient }, { createMcpServer }] = await Promise.all([
+    import("../build/discord/client.js"),
+    import("../build/mcp/server.js"),
+]);
+if (previousMessagesDir === undefined) {
+    delete process.env.MESSAGES_DIR;
+} else {
+    process.env.MESSAGES_DIR = previousMessagesDir;
+}
+after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
 
-test("fetch-messages validates the server ID in message links", async () => {
+async function createTestClient(t) {
+    const server = createMcpServer();
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    t.after(async () => {
+        await Promise.allSettled([client.close(), server.close()]);
+    });
+
+    return client;
+}
+
+test("fetch-messages rejects non-string link values", async (t) => {
+    const client = await createTestClient(t);
+
+    await assert.rejects(
+        client.callTool({
+            name: "fetch-messages",
+            arguments: { links: [123] },
+        }),
+        /Invalid arguments: links\.0: Expected string, received number/,
+    );
+});
+
+test("fetch-messages still reports malformed string links per item", async (t) => {
+    const client = await createTestClient(t);
+
+    const result = await client.callTool({
+        name: "fetch-messages",
+        arguments: { links: ["not-a-discord-link"] },
+    });
+
+    assert.equal(result.content.length, 1);
+    assert.match(result.content[0].text, /Invalid Discord message link format/);
+});
+
+test("fetch-messages validates the server ID in message links", async (t) => {
     const fetchedMessageIds = [];
     const channel = Object.create(TextChannel.prototype);
     Object.defineProperties(channel, {
@@ -38,22 +93,9 @@ test("fetch-messages validates the server ID in message links", async () => {
 
     const originalFetch = discordClient.channels.fetch;
     discordClient.channels.fetch = async () => channel;
-
-    let server;
-    let mcpClient;
     try {
-        server = createMcpServer();
-        mcpClient = new Client(
-            { name: "fetch-messages-test", version: "1.0.0" },
-            { capabilities: {} },
-        );
-        const [clientTransport, serverTransport] =
-            InMemoryTransport.createLinkedPair();
-        await Promise.all([
-            server.connect(serverTransport),
-            mcpClient.connect(clientTransport),
-        ]);
-        const response = await mcpClient.callTool({
+        const client = await createTestClient(t);
+        const response = await client.callTool({
             name: "fetch-messages",
             arguments: {
                 links: [
@@ -74,9 +116,5 @@ test("fetch-messages validates the server ID in message links", async () => {
         assert.deepEqual(fetchedMessageIds, ["444444444444444444"]);
     } finally {
         discordClient.channels.fetch = originalFetch;
-        const cleanup = [];
-        if (mcpClient) cleanup.push(mcpClient.close());
-        if (server) cleanup.push(server.close());
-        await Promise.allSettled(cleanup);
     }
 });
