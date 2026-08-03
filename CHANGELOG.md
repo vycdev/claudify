@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Reject fractional MCP limits instead of passing them to file slicing or the Discord API.
 - Return a client error for malformed MCP request URLs instead of stopping the server.
 - Force-stop timed-out Claude CLI processes before releasing their concurrency slots.
 - Preserve reaction-only bot responses in saved conversation history.
