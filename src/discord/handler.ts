@@ -1,6 +1,7 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
 import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
+import { normalizeBotMentions } from "./mentions.js";
 import { parseClaudeResponse } from "./response.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
@@ -516,8 +517,11 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
-        const rawQuestion = askQuestion
-            ?? msg.content.replace(`<@${client.user!.id}>`, botName).trim();
+        const rawQuestion = normalizeBotMentions(
+            askQuestion ?? msg.content,
+            client.user!.id,
+            botName,
+        ).trim();
         const question = replyContext + rawQuestion;
 
         if (!rawQuestion) {
