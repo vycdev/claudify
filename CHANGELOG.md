@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Honor zero history limits when a question matches saved-history snippets.
 - Reject Discord message links whose server ID does not match the fetched channel.
 - Keep long fenced code blocks valid when Discord responses are split across messages.
 - Match MCP history date filters against the log date suffix instead of dates embedded in channel names.
