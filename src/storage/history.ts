@@ -196,7 +196,12 @@ export function loadRecentHistory(channelName: string, question: string = ""): s
         const charLimit = deepHistory ? HISTORY_RECAP_MAX_CHARS : Math.floor(HISTORY_RECAP_MAX_CHARS / 4);
         const { lines: selectedLines, omitted } = trimLinesToBudget(lines, lineLimit, charLimit);
 
-        if (relevantSnippets.length > 0 && !deepHistory) {
+        if (
+            relevantSnippets.length > 0
+            && !deepHistory
+            && lineLimit > 0
+            && charLimit > 0
+        ) {
             parts.push(
                 `--- Today relevant snippets (${relevantSnippets.length} match blocks) ---\n${relevantSnippets.join("\n\n...\n\n")}`,
             );

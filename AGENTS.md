@@ -38,6 +38,7 @@ src/
 ├── discord/              → Discord client and event handling
 │   ├── client.ts         → Client singleton (intents config)
 │   ├── helpers.ts        → Guild/channel resolution utilities
+│   ├── split.ts          → Discord message splitting + code fence balancing
 │   ├── handler.ts        → Event listeners (messageCreate, messageReactionAdd)
 │   └── commands/         → Command handlers (one file per command)
 │       ├── help.ts       → !help — command list and bot info
@@ -72,7 +73,7 @@ src/
 - **Strict TypeScript**: `strict: true` in tsconfig. No `any` except in catch blocks.
 - **Model selection**: All Claude CLI calls use `claude-haiku-4-5` for speed/cost. Model is passed to `runClaude()` explicitly.
 - **Error handling**: Catch at boundaries (event handlers, background jobs). Log with `console.error` and prefixed tags like `[Bot]`, `[Claude CLI]`, `[Profile]`, `[Summary]`.
-- **Discord limits**: Messages max 2000 chars, 10 embeds per message. The `smartSplit()` function in `handler.ts` handles splitting.
+- **Discord limits**: Messages max 2000 chars, 10 embeds per message. The `smartSplit()` function in `split.ts` handles splitting.
 
 ## Data flow
 
