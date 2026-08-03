@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Keep long fenced code blocks valid when Discord responses are split across messages.
 - Match MCP history date filters against the log date suffix instead of dates embedded in channel names.
 - Force-stop timed-out Claude authentication status checks that ignore termination.
 - Force-stop timed-out Claude authentication processes before allowing a new login session.
