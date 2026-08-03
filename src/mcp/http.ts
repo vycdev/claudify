@@ -39,7 +39,23 @@ export function startMcpHttpServer(): http.Server {
             return;
         }
 
-        const url = new URL(req.url || "/", `http://localhost:${MCP_PORT}`);
+        let url: URL;
+        try {
+            url = new URL(req.url || "/", `http://localhost:${MCP_PORT}`);
+        } catch {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(
+                JSON.stringify({
+                    jsonrpc: "2.0",
+                    error: {
+                        code: -32600,
+                        message: "Invalid request URL",
+                    },
+                    id: null,
+                }),
+            );
+            return;
+        }
+
         if (url.pathname !== "/mcp") {
             res.writeHead(404).end("Not found");
             return;

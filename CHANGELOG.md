@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Return a client error for malformed MCP request URLs instead of stopping the server.
 - Force-stop timed-out Claude CLI processes before releasing their concurrency slots.
 - Preserve reaction-only bot responses in saved conversation history.
 - Recognize `!ask` at the command boundary so empty commands receive usage guidance and tabs can separate questions.
