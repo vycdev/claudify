@@ -51,6 +51,36 @@ function readLimits(values) {
     }
 }
 
+function readBotEffort(value) {
+    const messagesDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-config-effort-"),
+    );
+    const configUrl = new URL("../build/config.js", import.meta.url).href;
+    const script = [
+        `const config = await import(${JSON.stringify(configUrl)});`,
+        "process.stdout.write(JSON.stringify(config.BOT_EFFORT));",
+    ].join("\n");
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            ["--input-type=module", "--eval", script],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: messagesDir,
+                    BOT_EFFORT: value,
+                },
+            },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return JSON.parse(result.stdout);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+}
+
 function readHistory({ recentLines, recapLines, recapChars, question }) {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-zero-history-"),
@@ -110,6 +140,18 @@ test("context limits preserve valid integers including zero", () => {
         5,
         6,
     ]);
+});
+
+test("bot effort accepts documented values and normalizes casing", () => {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+        assert.equal(readBotEffort(effort), effort);
+    }
+    assert.equal(readBotEffort("  HIGH  "), "high");
+});
+
+test("bot effort falls back to the CLI default for unsupported values", () => {
+    assert.equal(readBotEffort("bogus"), "");
+    assert.equal(readBotEffort(""), "");
 });
 
 test("zero history budgets exclude saved history", () => {
