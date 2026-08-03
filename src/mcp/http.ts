@@ -4,6 +4,11 @@ import fs from "fs";
 import { MCP_PORT, MCP_CONFIG_PATH } from "../config.js";
 import { createMcpServer } from "./server.js";
 
+const ALLOWED_ORIGINS = new Set([
+    `http://localhost:${MCP_PORT}`,
+    `http://127.0.0.1:${MCP_PORT}`,
+]);
+
 export function writeMcpConfig() {
     const config = {
         mcpServers: {
@@ -19,6 +24,21 @@ export function writeMcpConfig() {
 
 export function startMcpHttpServer(): http.Server {
     const httpServer = http.createServer(async (req, res) => {
+        const origin = req.headers.origin;
+        if (origin !== undefined && !ALLOWED_ORIGINS.has(origin)) {
+            res.writeHead(403, { "Content-Type": "application/json" }).end(
+                JSON.stringify({
+                    jsonrpc: "2.0",
+                    error: {
+                        code: -32000,
+                        message: "Forbidden origin",
+                    },
+                    id: null,
+                }),
+            );
+            return;
+        }
+
         let url: URL;
         try {
             url = new URL(req.url || "/", `http://localhost:${MCP_PORT}`);
