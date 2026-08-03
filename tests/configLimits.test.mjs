@@ -16,14 +16,14 @@ const limitNames = [
 ];
 const defaults = [35, 500, 80, 1000, 140000, 10, 2];
 
-function readLimits(values) {
+function readConfigValues(names, values) {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-config-limits-"),
     );
     const configUrl = new URL("../build/config.js", import.meta.url).href;
     const script = [
         `const config = await import(${JSON.stringify(configUrl)});`,
-        `process.stdout.write(JSON.stringify(${JSON.stringify(limitNames)}.map((name) => config[name])));`,
+        `process.stdout.write(JSON.stringify(${JSON.stringify(names)}.map((name) => config[name])));`,
     ].join("\n");
 
     try {
@@ -36,7 +36,7 @@ function readLimits(values) {
                     ...process.env,
                     MESSAGES_DIR: messagesDir,
                     ...Object.fromEntries(
-                        limitNames.map((name, index) => [
+                        names.map((name, index) => [
                             name,
                             values[index],
                         ]),
@@ -49,6 +49,10 @@ function readLimits(values) {
     } finally {
         fs.rmSync(messagesDir, { recursive: true, force: true });
     }
+}
+
+function readLimits(values) {
+    return readConfigValues(limitNames, values);
 }
 
 function readBotEffort(value) {
@@ -140,6 +144,17 @@ test("context limits preserve valid integers including zero", () => {
         5,
         6,
     ]);
+});
+
+test("cooldown stays within Node's supported timer range", () => {
+    assert.deepEqual(
+        readConfigValues(["COOLDOWN_MS"], ["2147483647"]),
+        [2147483647],
+    );
+    assert.deepEqual(
+        readConfigValues(["COOLDOWN_MS"], ["2147483648"]),
+        [10000],
+    );
 });
 
 test("bot effort accepts documented values and normalizes casing", () => {
