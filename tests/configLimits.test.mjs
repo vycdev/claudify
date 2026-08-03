@@ -51,6 +51,70 @@ function readLimits(values) {
     }
 }
 
+function readBotEffort(value) {
+    const messagesDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-config-effort-"),
+    );
+    const configUrl = new URL("../build/config.js", import.meta.url).href;
+    const script = [
+        `const config = await import(${JSON.stringify(configUrl)});`,
+        "process.stdout.write(JSON.stringify(config.BOT_EFFORT));",
+    ].join("\n");
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            ["--input-type=module", "--eval", script],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: messagesDir,
+                    BOT_EFFORT: value,
+                },
+            },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return JSON.parse(result.stdout);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+}
+
+function readHistory({ recentLines, recapLines, recapChars, question }) {
+    const messagesDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-zero-history-"),
+    );
+    const historyUrl = new URL("../build/storage/history.js", import.meta.url).href;
+    const script = [
+        `const fs = await import("node:fs");`,
+        `const history = await import(${JSON.stringify(historyUrl)});`,
+        `fs.writeFileSync(history.getDailyLogPath("zero-limit"), "[10:00:00] user: this content must be excluded\\n", "utf8");`,
+        `process.stdout.write(history.loadRecentHistory("zero-limit", ${JSON.stringify(question)}));`,
+    ].join("\n");
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            ["--input-type=module", "--eval", script],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: messagesDir,
+                    HISTORY_RECENT_LINES: recentLines,
+                    HISTORY_RECAP_MAX_LINES: recapLines,
+                    HISTORY_RECAP_MAX_CHARS: recapChars,
+                },
+            },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout;
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+}
+
 test("context limits fall back for malformed values", () => {
     assert.deepEqual(
         readLimits([
@@ -78,32 +142,44 @@ test("context limits preserve valid integers including zero", () => {
     ]);
 });
 
-test("zero history line limits exclude saved history", async (t) => {
-    const messagesDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), "claudify-zero-history-"),
-    );
-    t.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
+test("bot effort accepts documented values and normalizes casing", () => {
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+        assert.equal(readBotEffort(effort), effort);
+    }
+    assert.equal(readBotEffort("  HIGH  "), "high");
+});
 
-    process.env.MESSAGES_DIR = messagesDir;
-    process.env.HISTORY_RECENT_LINES = "0";
-    process.env.HISTORY_RECAP_MAX_LINES = "0";
-    process.env.HISTORY_RECAP_MAX_CHARS = "1000";
+test("bot effort falls back to the CLI default for unsupported values", () => {
+    assert.equal(readBotEffort("bogus"), "");
+    assert.equal(readBotEffort(""), "");
+});
 
-    const { getDailyLogPath, loadRecentHistory } = await import(
-        "../build/storage/history.js"
-    );
-    fs.writeFileSync(
-        getDailyLogPath("zero-limit"),
-        "[10:00:00] user: this content must be excluded\n",
-        "utf8",
-    );
+test("zero history budgets exclude saved history", () => {
+    const zeroLines = {
+        recentLines: "0",
+        recapLines: "0",
+        recapChars: "1000",
+    };
 
     assert.doesNotMatch(
-        loadRecentHistory("zero-limit", "ordinary question"),
+        readHistory({ ...zeroLines, question: "ordinary question" }),
         /this content must be excluded/,
     );
     assert.doesNotMatch(
-        loadRecentHistory("zero-limit", "full recap"),
+        readHistory({ ...zeroLines, question: "excluded content" }),
+        /this content must be excluded/,
+    );
+    assert.doesNotMatch(
+        readHistory({ ...zeroLines, question: "full recap" }),
+        /this content must be excluded/,
+    );
+    assert.doesNotMatch(
+        readHistory({
+            recentLines: "1",
+            recapLines: "1",
+            recapChars: "0",
+            question: "excluded content",
+        }),
         /this content must be excluded/,
     );
 });

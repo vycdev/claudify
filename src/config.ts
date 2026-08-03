@@ -5,6 +5,12 @@ import path from "path";
 dotenv.config();
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const VALID_BOT_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+
+function parseBotEffort(value: string | undefined): string {
+    const normalized = value?.trim().toLowerCase();
+    return normalized && VALID_BOT_EFFORTS.has(normalized) ? normalized : "";
+}
 
 function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
     if (value === undefined || value.trim() === "") return fallback;
@@ -58,10 +64,11 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
+export const DISCORD_MESSAGE_MAX_CHARS = 2000;
 
 export const COOLDOWN_MS = parseNonNegativeInteger(process.env.COOLDOWN_MS, 10000);
 export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
-export const BOT_EFFORT = process.env.BOT_EFFORT?.trim() || "";
+export const BOT_EFFORT = parseBotEffort(process.env.BOT_EFFORT);
 export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
     process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS,
     300_000,
