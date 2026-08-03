@@ -72,7 +72,12 @@ test("force-kills a timed-out Claude process that ignores SIGTERM", async (t) =>
     assert.equal(resultSettled, false);
     assert.doesNotThrow(() => process.kill(childPid, 0));
 
-    t.mock.timers.tick(1_000);
+    t.mock.timers.tick(4_999);
+    await Promise.resolve();
+    assert.equal(resultSettled, false);
+    assert.doesNotThrow(() => process.kill(childPid, 0));
+
+    t.mock.timers.tick(1);
     await assert.rejects(result, /timed out after 120 seconds/);
     assert.throws(
         () => process.kill(childPid, 0),

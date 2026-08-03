@@ -3,7 +3,7 @@ import { spawn } from "child_process";
 // Global concurrency limiter to avoid hitting rate limits
 const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
-const FORCE_KILL_GRACE_MS = 1000;
+const FORCE_KILL_GRACE_MS = 5_000;
 let activeCount = 0;
 let lastSpawnTime = 0;
 const queue: Array<{

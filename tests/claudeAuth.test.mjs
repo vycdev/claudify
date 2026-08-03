@@ -182,6 +182,66 @@ test("force-kills a timed-out login process that ignores SIGTERM", async (t) => 
     assert.equal(processIsRunning(), false);
 });
 
+test("force-kills a timed-out auth status process that ignores SIGTERM", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
+    const markerPath = path.join(tempDir, "authenticated");
+    const pidPath = path.join(tempDir, "pid");
+    const fakeCliPath = path.join(tempDir, "fake-claude.mjs");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeAuth.mjs");
+    fs.copyFileSync(fixturePath, fakeCliPath);
+    let childPid;
+    t.after(() => {
+        if (childPid) {
+            try {
+                process.kill(childPid, "SIGKILL");
+            } catch {
+                // The manager should already have terminated it.
+            }
+        }
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const manager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        commandTimeoutMs: 250,
+        env: {
+            ...process.env,
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_IGNORE_STATUS_SIGTERM: "1",
+            CLAUDIFY_AUTH_TEST_PID_PATH: pidPath,
+        },
+    });
+
+    const timedOut = assert.rejects(
+        () => manager.getStatus(),
+        /status timed out/,
+    );
+    const readyDeadline = Date.now() + 1_000;
+    while (!fs.existsSync(pidPath) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(fs.existsSync(pidPath), true);
+    childPid = Number(fs.readFileSync(pidPath, "utf8"));
+    await timedOut;
+
+    const processIsRunning = () => {
+        try {
+            process.kill(childPid, 0);
+            return true;
+        } catch (error) {
+            if (error?.code === "ESRCH") return false;
+            throw error;
+        }
+    };
+    const deadline = Date.now() + 2_000;
+    while (processIsRunning() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    assert.equal(processIsRunning(), false);
+});
+
 test("falls back for invalid Claude login timeout environment values", () => {
     const configUrl = new URL("../build/config.js", import.meta.url).href;
     const readTimeout = (value) => {
