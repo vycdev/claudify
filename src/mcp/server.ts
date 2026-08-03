@@ -261,7 +261,9 @@ export function createMcpServer(): Server {
                         files = files.filter((f) => f.startsWith(`${safeChannel}_`));
                     }
                     if (date) {
-                        files = files.filter((f) => f.includes(`_${date}`));
+                        files = files.filter((f) =>
+                            f.endsWith(`_${date}.txt`),
+                        );
                     }
 
                     const searchLower = search?.toLowerCase();
