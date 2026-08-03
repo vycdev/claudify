@@ -15,6 +15,7 @@ import {
 import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
+import { compareHistoryFilenames } from "./historyFiles.js";
 
 const ReactToMessageSchema = z.object({
     server: z
@@ -282,7 +283,11 @@ export function createMcpServer(): Server {
                     let files = fs
                         .readdirSync(dir)
                         .filter((f) => f.endsWith(".txt"))
-                        .sort();
+                        .sort(
+                            type === "history"
+                                ? compareHistoryFilenames
+                                : undefined,
+                        );
 
                     if (safeChannel) {
                         files = files.filter((f) => f.startsWith(`${safeChannel}_`));
