@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 // Global concurrency limiter to avoid hitting rate limits
 const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
+const FORCE_KILL_GRACE_MS = 5_000;
 let activeCount = 0;
 let lastSpawnTime = 0;
 const queue: Array<{
@@ -69,6 +70,38 @@ function spawnClaude(
         let stdout = "";
         let stderr = "";
         let stdinError: Error | undefined;
+        let timeoutError: Error | undefined;
+        let forceKillTimeout: NodeJS.Timeout | undefined;
+
+        const terminateProcess = (): void => {
+            if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+            try {
+                proc.kill();
+            } catch {
+                // The close/error handlers will settle an already-ended process.
+            }
+            if (forceKillTimeout) return;
+
+            forceKillTimeout = setTimeout(() => {
+                forceKillTimeout = undefined;
+                if (proc.exitCode !== null || proc.signalCode !== null) return;
+                try {
+                    proc.kill("SIGKILL");
+                } catch {
+                    // Process termination is best-effort; close/error owns cleanup.
+                }
+            }, FORCE_KILL_GRACE_MS);
+            forceKillTimeout.unref();
+        };
+
+        const clearProcessTimers = (): void => {
+            clearTimeout(timeout);
+            if (forceKillTimeout) {
+                clearTimeout(forceKillTimeout);
+                forceKillTimeout = undefined;
+            }
+        };
 
         proc.stdout.on("data", (data) => {
             stdout += data.toString();
@@ -78,14 +111,16 @@ function spawnClaude(
         });
 
         const timeout = setTimeout(() => {
-            proc.kill();
-            reject(new Error("Claude CLI timed out after 120 seconds"));
+            timeoutError = new Error("Claude CLI timed out after 120 seconds");
+            terminateProcess();
         }, 120000);
 
         proc.on("close", (code) => {
-            clearTimeout(timeout);
+            clearProcessTimers();
             if (stdinError) {
                 reject(stdinError);
+            } else if (timeoutError) {
+                reject(timeoutError);
             } else if (code === 0) {
                 resolve({ stdout, stderr });
             } else {
@@ -99,13 +134,13 @@ function spawnClaude(
         });
 
         proc.on("error", (error) => {
-            clearTimeout(timeout);
-            reject(error);
+            clearProcessTimers();
+            reject(timeoutError ?? error);
         });
 
         proc.stdin.on("error", (error) => {
             stdinError = error;
-            proc.kill();
+            terminateProcess();
         });
         proc.stdin.write(input);
         proc.stdin.end();
