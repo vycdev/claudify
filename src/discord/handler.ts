@@ -1,6 +1,7 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
 import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
+import { parseClaudeResponse } from "./response.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
 import { handleGuild } from "./commands/guild.js";
@@ -385,23 +386,21 @@ export function registerHandler() {
             setCooldown(user.id);
 
             // Extract any [REACT:emoji] tags and apply them as reactions
-            const reactTags2 = [...response.matchAll(/\[REACT:(.+?)\]/g)];
-            const textResponse2 = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
+            const parsedResponse = parseClaudeResponse(response);
 
-            for (const match of reactTags2) {
-                const emoji = match[1].trim();
+            for (const emoji of parsedResponse.reactions) {
                 await reactWithEmoji(msg, emoji);
             }
 
-            if (textResponse2) {
-                const chunks = smartSplit(textResponse2);
+            if (parsedResponse.text) {
+                const chunks = smartSplit(parsedResponse.text);
                 for (const chunk of chunks) {
                     await msg.channel.send(chunk);
                 }
             }
 
             appendToLog(userLabel, `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`, msg.channel.name);
-            appendToLog(botName + " (bot)", textResponse2 || `[reacted: ${reactTags2.map(m => m[1]).join(", ")}]`, msg.channel.name);
+            appendToLog(botName + " (bot)", parsedResponse.historyContent, msg.channel.name);
 
             console.error(`[Bot] Reaction-triggered response sent successfully`);
         } catch (error: any) {
@@ -585,21 +584,26 @@ async function processMessage(msg: Message): Promise<void> {
         setCooldown(userId);
 
         // Extract any [REACT:emoji] tags and apply them as reactions
-        const reactTags = [...response.matchAll(/\[REACT:(.+?)\]/g)];
-        const textResponse = response.replace(/\[REACT:(.+?)\]\s*/g, "").trim();
+        const parsedResponse = parseClaudeResponse(response);
 
-        for (const match of reactTags) {
-            const emoji = match[1].trim();
+        for (const emoji of parsedResponse.reactions) {
             console.error(`[Bot] Reacting with: ${emoji}`);
             await reactWithEmoji(msg, emoji);
         }
 
-        if (!textResponse) {
+        if (!parsedResponse.text) {
+            if (parsedResponse.reactions.length > 0) {
+                appendToLog(
+                    botName + " (bot)",
+                    parsedResponse.historyContent,
+                    msg.channel.name,
+                );
+            }
             return;
         }
 
         console.error(
-            `[Bot] Sending response (${textResponse.length} chars) to #${msg.channel.name}`,
+            `[Bot] Sending response (${parsedResponse.text.length} chars) to #${msg.channel.name}`,
         );
 
         const safeSend = async (text: string, reply: boolean) => {
@@ -614,14 +618,14 @@ async function processMessage(msg: Message): Promise<void> {
             }
         };
 
-        const chunks = smartSplit(textResponse);
+        const chunks = smartSplit(parsedResponse.text);
         for (let i = 0; i < chunks.length; i++) {
             await safeSend(chunks[i], i === 0);
         }
 
         console.error(`[Bot] Response sent successfully`);
 
-        appendToLog(botName + " (bot)", textResponse, msg.channel.name);
+        appendToLog(botName + " (bot)", parsedResponse.historyContent, msg.channel.name);
 
         // Background jobs
         const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;

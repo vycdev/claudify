@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Preserve reaction-only bot responses in saved conversation history.
 - Recognize `!ask` at the command boundary so empty commands receive usage guidance and tabs can separate questions.
 - Validate every `fetch-messages` link before processing MCP requests.
 - Fall back to the Claude CLI default when `BOT_EFFORT` is unsupported.
