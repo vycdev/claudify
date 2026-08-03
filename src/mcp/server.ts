@@ -340,7 +340,7 @@ export function createMcpServer(): Server {
                             });
                             continue;
                         }
-                        const [, , channelId, messageId] = match;
+                        const [, serverId, channelId, messageId] = match;
                         try {
                             const channel =
                                 await client.channels.fetch(channelId);
@@ -348,6 +348,13 @@ export function createMcpServer(): Server {
                                 results.push({
                                     link,
                                     error: "Channel is not a text channel",
+                                });
+                                continue;
+                            }
+                            if (channel.guild.id !== serverId) {
+                                results.push({
+                                    link,
+                                    error: "Message link server does not match the channel's server",
                                 });
                                 continue;
                             }
