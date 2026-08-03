@@ -9,6 +9,10 @@ export const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
     ],
-    partials: [Partials.Channel],
+    partials: [
+        Partials.Channel,
+        Partials.Message,
+        Partials.Reaction,
+    ],
     allowedMentions: SUPPRESS_MENTIONS ? { parse: [] } : undefined,
 });
