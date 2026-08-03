@@ -7,6 +7,7 @@ import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
+import { parseAskCommand } from "./commands/ask.js";
 import { askClaude } from "../askClaude.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
@@ -240,7 +241,7 @@ export function registerHandler() {
 
             // Check if this is a bot interaction
             const isMention = msg.mentions.has(client.user!);
-            const isAskCommand = msg.content.startsWith("!ask ");
+            const isAskCommand = parseAskCommand(msg.content) !== null;
             const isReplyToBot = msg.reference?.messageId
                 ? (
                       await msg.channel.messages
@@ -448,7 +449,7 @@ async function processMessage(msg: Message): Promise<void> {
     try {
         if (!(msg.channel instanceof TextChannel)) return;
 
-        const isAskCommand = msg.content.startsWith("!ask ");
+        const askQuestion = parseAskCommand(msg.content);
         console.error(
             `[Bot] Processing message from ${msg.author.tag} in #${msg.channel.name}: ${msg.content.slice(0, 100)}`,
         );
@@ -516,9 +517,8 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
-        const rawQuestion = isAskCommand
-            ? msg.content.slice(5).trim()
-            : msg.content.replace(`<@${client.user!.id}>`, botName).trim();
+        const rawQuestion = askQuestion
+            ?? msg.content.replace(`<@${client.user!.id}>`, botName).trim();
         const question = replyContext + rawQuestion;
 
         if (!rawQuestion) {

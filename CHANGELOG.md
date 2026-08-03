@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Recognize `!ask` at the command boundary so empty commands receive usage guidance and tabs can separate questions.
 - Validate every `fetch-messages` link before processing MCP requests.
 - Fall back to the Claude CLI default when `BOT_EFFORT` is unsupported.
 - Reject empty or oversized MCP `send-message` content before calling Discord.
