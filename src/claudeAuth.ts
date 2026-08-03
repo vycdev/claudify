@@ -459,13 +459,33 @@ export class ClaudeAuthManager {
             let stdout = "";
             let stderr = "";
             let settled = false;
+            let forceKillTimeout: NodeJS.Timeout | undefined;
 
             const timeout = setTimeout(() => {
                 if (settled) return;
                 settled = true;
                 child.kill();
+                forceKillTimeout = setTimeout(() => {
+                    forceKillTimeout = undefined;
+                    if (
+                        child.exitCode !== null
+                        || child.signalCode !== null
+                    ) return;
+                    try {
+                        child.kill("SIGKILL");
+                    } catch {
+                        // Process termination is best-effort.
+                    }
+                }, FORCE_KILL_GRACE_MS);
+                forceKillTimeout.unref();
                 reject(new Error("Claude authentication status timed out."));
             }, this.commandTimeoutMs);
+
+            const clearForceKillTimeout = () => {
+                if (!forceKillTimeout) return;
+                clearTimeout(forceKillTimeout);
+                forceKillTimeout = undefined;
+            };
 
             child.stdout.on("data", (data: Buffer) => {
                 stdout = appendBounded(stdout, data.toString());
@@ -474,6 +494,7 @@ export class ClaudeAuthManager {
                 stderr = appendBounded(stderr, data.toString());
             });
             child.on("error", (error) => {
+                clearForceKillTimeout();
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
@@ -484,6 +505,7 @@ export class ClaudeAuthManager {
                 );
             });
             child.on("close", (code) => {
+                clearForceKillTimeout();
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);

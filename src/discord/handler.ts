@@ -13,6 +13,7 @@ import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
+import { smartSplit } from "./split.js";
 
 // Consistent display name for a user — used in logs, prompts, and history
 function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
@@ -188,65 +189,6 @@ async function reactWithEmoji(msg: Message, emoji: string): Promise<void> {
         console.error(`[Bot] Failed to react with "${emoji}", using 👍 fallback`);
         await msg.react("👍").catch(() => {});
     }
-}
-
-// Smart message splitting that respects code blocks and paragraph boundaries
-function smartSplit(text: string, maxLen: number = 2000): string[] {
-    if (text.length <= maxLen) return [text];
-
-    const chunks: string[] = [];
-    let remaining = text;
-
-    while (remaining.length > 0) {
-        if (remaining.length <= maxLen) {
-            chunks.push(remaining);
-            break;
-        }
-
-        let splitAt = -1;
-        const slice = remaining.slice(0, maxLen);
-
-        // Count open code blocks in this slice to avoid splitting inside one
-        const codeBlockMatches = slice.match(/```/g);
-        const insideCodeBlock = codeBlockMatches && codeBlockMatches.length % 2 !== 0;
-
-        if (insideCodeBlock) {
-            // Find the last ``` opening before maxLen and split before it
-            const lastCodeBlockStart = slice.lastIndexOf("```");
-            if (lastCodeBlockStart > 0) {
-                // Look for a newline before the code block
-                const newlineBefore = slice.lastIndexOf("\n", lastCodeBlockStart);
-                splitAt = newlineBefore > 0 ? newlineBefore : lastCodeBlockStart;
-            }
-        }
-
-        if (splitAt === -1) {
-            // Try splitting at double newline (paragraph boundary)
-            const doubleNewline = slice.lastIndexOf("\n\n");
-            if (doubleNewline > maxLen * 0.3) {
-                splitAt = doubleNewline;
-            }
-        }
-
-        if (splitAt === -1) {
-            // Try splitting at single newline
-            const singleNewline = slice.lastIndexOf("\n");
-            if (singleNewline > maxLen * 0.3) {
-                splitAt = singleNewline;
-            }
-        }
-
-        if (splitAt === -1) {
-            // Last resort: split at space
-            const space = slice.lastIndexOf(" ");
-            splitAt = space > maxLen * 0.3 ? space : maxLen;
-        }
-
-        chunks.push(remaining.slice(0, splitAt).trimEnd());
-        remaining = remaining.slice(splitAt).trimStart();
-    }
-
-    return chunks.filter((c) => c.length > 0);
 }
 
 export function registerHandler() {
