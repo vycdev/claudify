@@ -8,7 +8,14 @@ if (!markerPath || group !== "auth") {
 }
 
 if (action === "status") {
-    if (fs.existsSync(markerPath)) {
+    if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_STATUS_SIGTERM === "1") {
+        process.on("SIGTERM", () => {});
+        const pidPath = process.env.CLAUDIFY_AUTH_TEST_PID_PATH;
+        if (pidPath) {
+            fs.writeFileSync(pidPath, String(process.pid), "utf8");
+        }
+        setInterval(() => {}, 1_000);
+    } else if (fs.existsSync(markerPath)) {
         process.stdout.write(
             JSON.stringify({
                 loggedIn: true,
@@ -17,9 +24,10 @@ if (action === "status") {
             }),
         );
         process.exit(0);
+    } else {
+        process.stdout.write(JSON.stringify({ loggedIn: false }));
+        process.exit(1);
     }
-    process.stdout.write(JSON.stringify({ loggedIn: false }));
-    process.exit(1);
 }
 
 if (action === "login") {
