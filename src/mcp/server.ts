@@ -7,7 +7,11 @@ import { TextChannel } from "discord.js";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
-import { HISTORY_DIR, PENDING_DIR } from "../config.js";
+import {
+    DISCORD_MESSAGE_MAX_CHARS,
+    HISTORY_DIR,
+    PENDING_DIR,
+} from "../config.js";
 import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
@@ -22,13 +26,28 @@ const ReactToMessageSchema = z.object({
     emoji: z.string().describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
 });
 
-const SendMessageSchema = z.object({
+function isWithinDiscordMessageLimit(message: string): boolean {
+    let characters = 0;
+    for (const _character of message) {
+        characters += 1;
+        if (characters > DISCORD_MESSAGE_MAX_CHARS) return false;
+    }
+    return true;
+}
+
+export const SendMessageSchema = z.object({
     server: z
         .string()
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
-    message: z.string(),
+    message: z
+        .string()
+        .min(1)
+        .refine(
+            isWithinDiscordMessageLimit,
+            `String must contain at most ${DISCORD_MESSAGE_MAX_CHARS} character(s)`,
+        ),
 });
 
 const ReadMessagesSchema = z.object({
@@ -75,6 +94,8 @@ export function createMcpServer(): Server {
                         message: {
                             type: "string",
                             description: "Message content to send",
+                            minLength: 1,
+                            maxLength: DISCORD_MESSAGE_MAX_CHARS,
                         },
                     },
                     required: ["channel", "message"],

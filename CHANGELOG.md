@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Reject empty or oversized MCP `send-message` content before calling Discord.
 - Reject MCP HTTP requests from untrusted browser origins.
 - Honor zero history limits when a question matches saved-history snippets.
 - Reject Discord message links whose server ID does not match the fetched channel.
