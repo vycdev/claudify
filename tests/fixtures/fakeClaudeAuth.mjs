@@ -32,6 +32,13 @@ if (action === "status") {
 
 if (action === "login") {
     const loginUrl = "https://claude.com/cai/oauth/authorize?test=1";
+    if (
+        process.env.CLAUDIFY_AUTH_TEST_REQUIRE_TTY === "1"
+        && (!process.stdin.isTTY || !process.stdout.isTTY)
+    ) {
+        process.stderr.write("Interactive login requires a terminal.\n");
+        process.exit(1);
+    }
     if (process.env.CLAUDIFY_AUTH_TEST_IGNORE_SIGTERM === "1") {
         process.on("SIGTERM", () => {});
         const pidPath = process.env.CLAUDIFY_AUTH_TEST_PID_PATH;

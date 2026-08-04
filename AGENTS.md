@@ -174,6 +174,7 @@ messages/
 | `@modelcontextprotocol/sdk` | MCP server framework |
 | `discord.js` | Discord bot client |
 | `dotenv` | Environment variable loading |
+| `node-pty` | Pseudo-terminal for interactive Claude authentication |
 | `zod` | Input validation for MCP tools |
 
 ## Docker

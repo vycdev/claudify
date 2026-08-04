@@ -1,20 +1,23 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# node-pty does not publish an Alpine prebuild, so compile it during install.
+RUN apk add --no-cache --virtual .node-pty-build-deps python3 make g++ \
+    && npm ci --omit=dev \
+    && apk del .node-pty-build-deps
 
 # Install Claude Code CLI for auto-response feature
 RUN npm install -g @anthropic-ai/claude-code@2.1.220

@@ -45,6 +45,8 @@ Set `AUTH_ADMIN_USER_IDS` to your Discord user ID and restart the bot. Claudify 
 - `/auth code` privately submits the short-lived code shown after browser authorization.
 - `/auth cancel` stops an unfinished login.
 
+The login process runs in a pseudo-terminal inside the container, so the interactive Claude CLI prompt accepts the code submitted through Discord; no terminal login is required.
+
 Only explicitly listed user IDs can execute these commands. Discord roles and Administrator status are not used for authorization. Claudify never logs or stores the one-time code. Never submit an API key or long-lived OAuth token through Discord.
 
 The Discord application must be installed with the `applications.commands` scope for slash commands to appear.

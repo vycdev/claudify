@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Run Discord-initiated Claude login in a pseudo-terminal so the CLI accepts submitted OAuth codes.
 - Isolate saved history and summaries by Discord channel ID in dedicated storage namespaces so same-named channels do not share automatic context.
 - Reject fractional MCP limits instead of passing them to file slicing or the Discord API.
 - Return a client error for malformed MCP request URLs instead of stopping the server.

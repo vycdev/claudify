@@ -2,6 +2,7 @@ import {
     ChildProcessWithoutNullStreams,
     spawn,
 } from "child_process";
+import { fileURLToPath } from "url";
 
 const MAX_CAPTURED_OUTPUT = 64 * 1024;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -181,10 +182,17 @@ export class ClaudeAuthManager {
             "login",
             ...(method === "console" ? ["--console"] : []),
         ];
-        const child = spawn(this.command, args, {
-            env: this.env,
-            stdio: ["pipe", "pipe", "pipe"],
-        });
+        const helperPath = fileURLToPath(
+            new URL("./claudeAuthPty.js", import.meta.url),
+        );
+        const child = spawn(
+            process.execPath,
+            [helperPath, this.command, ...args],
+            {
+                env: this.env,
+                stdio: ["pipe", "pipe", "pipe"],
+            },
+        );
 
         let resolveCompletion!: (result: LoginCompletion) => void;
         const completion = new Promise<LoginCompletion>((resolve) => {
@@ -346,9 +354,10 @@ export class ClaudeAuthManager {
         ]);
 
         try {
+            // A carriage return is the Enter key for a terminal-backed prompt.
             await new Promise<void>((resolve, reject) => {
                 session.child.stdin.write(
-                    `${normalizedCode}\n\n`,
+                    `${normalizedCode}\r`,
                     (error?: Error | null) => {
                         if (error) {
                             reject(
@@ -367,7 +376,9 @@ export class ClaudeAuthManager {
                 session.codeAttempt = undefined;
                 session.codeSubmitted = false;
             }
-            throw error;
+            throw new Error(
+                "The Claude authentication process could not accept the code.",
+            );
         }
 
         const result = await attemptResult;

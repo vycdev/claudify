@@ -65,6 +65,7 @@ test("runs a private login session and verifies its final status", async (t) => 
         env: {
             ...process.env,
             CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_REQUIRE_TTY: "1",
         },
     });
 
