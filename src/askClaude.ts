@@ -22,12 +22,13 @@ export async function askClaude(
     author: string,
     authorId: string,
     channelName: string,
+    channelId: string,
     serverName: string,
     guildId: string,
     imagePaths: string[] = [],
     liveMessages: string = "",
 ): Promise<string> {
-    const recentHistory = loadRecentHistory(channelName, question);
+    const recentHistory = loadRecentHistory(channelId, question, channelName);
     const userProfile = getUserProfile(authorId);
     const serverMemory = getServerMemory(guildId);
 

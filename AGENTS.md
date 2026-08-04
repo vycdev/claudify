@@ -119,12 +119,18 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 
 ## Storage layout
 
-All data is stored as flat text files under `MESSAGES_DIR`:
+All data is stored as text files under `MESSAGES_DIR`. ID-keyed channel data
+uses dedicated `v2/` namespaces so legacy flat filenames cannot be mistaken
+for current channel history:
 
 ```
 messages/
-├── history/    → Daily logs: {channel}_{YYYY-MM-DD}.txt
-├── summaries/  → Daily summaries: {channel}_{YYYY-MM-DD}.txt
+├── history/
+│   ├── v2/     → Daily logs: v2_{channelId}__{channel}_{YYYY-MM-DD}.txt
+│   └── *.txt   → Legacy name-keyed logs (explicit browsing only)
+├── summaries/
+│   ├── v2/     → Daily summaries: v2_{channelId}__{channel}_{YYYY-MM-DD}.txt
+│   └── *.txt   → Legacy name-keyed summaries
 ├── profiles/   → User profiles: {userId}.txt, server memory: server_{guildId}.txt
 ├── pending/    → In-flight messages (temp files)
 └── images/     → Downloaded attachments

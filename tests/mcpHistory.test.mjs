@@ -29,6 +29,16 @@ test("history date filters match only the log date suffix", async (t) => {
         "[11:00:00] user: wrong-day entry\n",
         "utf8",
     );
+    const historyV2Dir = path.join(historyDir, "v2");
+    fs.mkdirSync(historyV2Dir, { recursive: true });
+    fs.writeFileSync(
+        path.join(
+            historyV2Dir,
+            "v2_111111111111111111__general_2026-08-01.txt",
+        ),
+        "[12:00:00] user: namespaced entry\n",
+        "utf8",
+    );
 
     const [clientTransport, serverTransport] =
         InMemoryTransport.createLinkedPair();
@@ -51,6 +61,11 @@ test("history date filters match only the log date suffix", async (t) => {
     assert.equal(typeof text, "string");
     assert.match(text, /general_2026-08-01\.txt/);
     assert.match(text, /expected entry/);
+    assert.match(
+        text,
+        /v2\/v2_111111111111111111__general_2026-08-01\.txt/,
+    );
+    assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
 });
