@@ -1,76 +1,292 @@
 import { spawn } from "child_process";
 import { Message, TextChannel, EmbedBuilder } from "discord.js";
 
+export type CurrentUsagePeriodKind = "week" | "month";
+
+export interface CurrentUsagePeriod {
+    since: string;
+    until: string;
+    displayRange: string;
+}
+
+interface UsageRequest {
+    ccArgs: string[];
+    title: string;
+    embedColor: number;
+    period?: CurrentUsagePeriod;
+}
+
+interface UsageTotals {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    totalTokens: number;
+    totalCost: number;
+}
+
+interface UsageModelBreakdown {
+    modelName: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    cost: number;
+}
+
+interface CurrentPeriodEntry extends UsageTotals {
+    modelBreakdowns?: UsageModelBreakdown[];
+}
+
+export interface CurrentPeriodUsageData {
+    weekly?: CurrentPeriodEntry[];
+    monthly?: CurrentPeriodEntry[];
+    totals?: UsageTotals;
+}
+
+const EMPTY_TOTALS: UsageTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 0,
+    totalCost: 0,
+};
+
+function formatCompactUtcDate(date: Date): string {
+    return date.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+function formatUtcCalendarDate(date: Date): string {
+    return date.toISOString().slice(0, 10);
+}
+
+function formatUtcTimestamp(date: Date): string {
+    return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
+
+export function getCurrentUsagePeriod(
+    kind: CurrentUsagePeriodKind,
+    now = new Date(),
+): CurrentUsagePeriod {
+    const start = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        kind === "month" ? 1 : now.getUTCDate(),
+    ));
+
+    if (kind === "week") {
+        const daysSinceMonday = (start.getUTCDay() + 6) % 7;
+        start.setUTCDate(start.getUTCDate() - daysSinceMonday);
+    }
+
+    return {
+        since: formatCompactUtcDate(start),
+        until: formatCompactUtcDate(now),
+        displayRange: `${formatUtcCalendarDate(start)} 00:00 UTC → ${formatUtcTimestamp(now)}`,
+    };
+}
+
+export function createUsageRequest(subcommand: string, now = new Date()): UsageRequest | undefined {
+    const today = formatCompactUtcDate(now);
+
+    switch (subcommand) {
+        case "today":
+            return {
+                ccArgs: ["ccusage@latest", "claude", "daily", "--json", "--since", today],
+                title: "📊 Today's Usage",
+                embedColor: 0x5865f2,
+            };
+        case "week": {
+            const period = getCurrentUsagePeriod("week", now);
+            return {
+                ccArgs: [
+                    "ccusage@latest", "claude", "weekly", "--json", "--breakdown",
+                    "--start-of-week", "monday", "--since", period.since,
+                    "--until", period.until, "--timezone", "UTC",
+                ],
+                title: "📈 Current Week Usage",
+                embedColor: 0x3498db,
+                period,
+            };
+        }
+        case "month": {
+            const period = getCurrentUsagePeriod("month", now);
+            return {
+                ccArgs: [
+                    "ccusage@latest", "claude", "monthly", "--json", "--breakdown",
+                    "--since", period.since, "--until", period.until, "--timezone", "UTC",
+                ],
+                title: "📆 Current Month Usage",
+                embedColor: 0x9b59b6,
+                period,
+            };
+        }
+        case "daily":
+            return {
+                ccArgs: ["ccusage@latest", "claude", "daily", "--json"],
+                title: "📅 Daily Usage",
+                embedColor: 0x57f287,
+            };
+        case "blocks":
+            return {
+                ccArgs: ["ccusage@latest", "claude", "blocks", "--json", "--since", today],
+                title: "⏱️ Billing Windows (Today)",
+                embedColor: 0xfee75c,
+            };
+        case "monthly":
+            return {
+                ccArgs: ["ccusage@latest", "claude", "monthly", "--json"],
+                title: "📆 Monthly Usage",
+                embedColor: 0xeb459e,
+            };
+        default:
+            return undefined;
+    }
+}
+
+const formatCost = (cost: number) => cost >= 1 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(4)}`;
+const formatTokens = (tokens: number) =>
+    tokens >= 1_000_000_000 ? `${(tokens / 1_000_000_000).toFixed(2)}B`
+    : tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(2)}M`
+    : tokens >= 1_000 ? `${(tokens / 1_000).toFixed(1)}K`
+    : `${tokens}`;
+const progressBar = (value: number, max: number, length = 10) => {
+    if (max === 0) return "░".repeat(length);
+    const filled = Math.round((value / max) * length);
+    return "█".repeat(Math.min(filled, length)) + "░".repeat(length - Math.min(filled, length));
+};
+const modelEmoji = (name: string) => {
+    if (name.includes("opus")) return "🟣";
+    if (name.includes("sonnet")) return "🔵";
+    if (name.includes("haiku")) return "🟢";
+    return "⚪";
+};
+const shortModel = (name: string) => name
+    .replace("claude-", "")
+    .replace(/-\d{8}$/, "");
+
+function sumUsageTotals(entries: CurrentPeriodEntry[]): UsageTotals {
+    return entries.reduce<UsageTotals>((totals, entry) => ({
+        inputTokens: totals.inputTokens + entry.inputTokens,
+        outputTokens: totals.outputTokens + entry.outputTokens,
+        cacheCreationTokens: totals.cacheCreationTokens + entry.cacheCreationTokens,
+        cacheReadTokens: totals.cacheReadTokens + entry.cacheReadTokens,
+        totalTokens: totals.totalTokens + entry.totalTokens,
+        totalCost: totals.totalCost + entry.totalCost,
+    }), { ...EMPTY_TOTALS });
+}
+
+function aggregateModelBreakdowns(entries: CurrentPeriodEntry[]): UsageModelBreakdown[] {
+    const models = new Map<string, UsageModelBreakdown>();
+
+    for (const entry of entries) {
+        for (const model of entry.modelBreakdowns || []) {
+            const existing = models.get(model.modelName);
+            if (existing) {
+                existing.inputTokens += model.inputTokens;
+                existing.outputTokens += model.outputTokens;
+                existing.cacheCreationTokens += model.cacheCreationTokens;
+                existing.cacheReadTokens += model.cacheReadTokens;
+                existing.cost += model.cost;
+            } else {
+                models.set(model.modelName, { ...model });
+            }
+        }
+    }
+
+    return [...models.values()].sort((a, b) => b.cost - a.cost);
+}
+
+export function buildCurrentPeriodUsageEmbed(
+    kind: CurrentUsagePeriodKind,
+    data: CurrentPeriodUsageData,
+    period: CurrentUsagePeriod,
+): EmbedBuilder {
+    const entries = kind === "week" ? data.weekly || [] : data.monthly || [];
+    const totals = data.totals || (entries.length > 0 ? sumUsageTotals(entries) : EMPTY_TOTALS);
+    const modelBreakdowns = aggregateModelBreakdowns(entries);
+    const title = kind === "week" ? "📈 Current Week Usage" : "📆 Current Month Usage";
+    const embedColor = kind === "week" ? 0x3498db : 0x9b59b6;
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setColor(embedColor)
+        .setDescription(
+            `${entries.length === 0 ? "No usage data found for this period.\n\n" : ""}` +
+            `**Total Cost: ${formatCost(totals.totalCost)}** · ${formatTokens(totals.totalTokens)} tokens`,
+        )
+        .addFields(
+            { name: "📅 Covered Period", value: period.displayRange, inline: false },
+            {
+                name: "🔢 Token Breakdown",
+                value:
+                    "```\n" +
+                    `Input:        ${formatTokens(totals.inputTokens).padStart(10)}\n` +
+                    `Output:       ${formatTokens(totals.outputTokens).padStart(10)}\n` +
+                    `Cache write:  ${formatTokens(totals.cacheCreationTokens).padStart(10)}\n` +
+                    `Cache read:   ${formatTokens(totals.cacheReadTokens).padStart(10)}\n` +
+                    "```",
+                inline: false,
+            },
+        );
+
+    const visibleModels = modelBreakdowns.slice(0, 22);
+    const maxCost = Math.max(0, ...visibleModels.map((model) => model.cost));
+    for (const model of visibleModels) {
+        const percentage = totals.totalCost > 0
+            ? ((model.cost / totals.totalCost) * 100).toFixed(1)
+            : "0";
+        let detail = `\`${progressBar(model.cost, maxCost, 12)}\` **${formatCost(model.cost)}** (${percentage}%)\n`;
+        detail += `In: ${formatTokens(model.inputTokens)} · Out: ${formatTokens(model.outputTokens)}`;
+        if (model.cacheCreationTokens > 0 || model.cacheReadTokens > 0) {
+            detail += `\nCache W: ${formatTokens(model.cacheCreationTokens)} · Cache R: ${formatTokens(model.cacheReadTokens)}`;
+        }
+        embed.addFields({
+            name: `${modelEmoji(model.modelName)} ${shortModel(model.modelName)}`,
+            value: detail,
+            inline: false,
+        });
+    }
+
+    if (modelBreakdowns.length === 0) {
+        embed.addFields({ name: "🤖 Models", value: "No model usage in this period.", inline: false });
+    } else if (modelBreakdowns.length > visibleModels.length) {
+        embed.addFields({
+            name: "🤖 Additional Models",
+            value: `${modelBreakdowns.length - visibleModels.length} more model(s) omitted to fit Discord's embed limit.`,
+            inline: false,
+        });
+    }
+
+    return embed.setTimestamp();
+}
+
 export async function handleUsage(msg: Message): Promise<void> {
     const args = msg.content.trim().split(/\s+/).slice(1);
     const subcommand = args[0] || "today";
 
-    let ccArgs: string[];
-    let title: string;
-    let embedColor: number;
-    const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
-
-    switch (subcommand) {
-        case "today":
-            ccArgs = ["ccusage@latest", "claude", "daily", "--json", "--since", today];
-            title = "📊 Today's Usage";
-            embedColor = 0x5865f2;
-            break;
-        case "daily":
-            ccArgs = ["ccusage@latest", "claude", "daily", "--json"];
-            title = "📅 Daily Usage";
-            embedColor = 0x57f287;
-            break;
-        case "blocks":
-            ccArgs = ["ccusage@latest", "claude", "blocks", "--json", "--since", today];
-            title = "⏱️ Billing Windows (Today)";
-            embedColor = 0xfee75c;
-            break;
-        case "monthly":
-            ccArgs = ["ccusage@latest", "claude", "monthly", "--json"];
-            title = "📆 Monthly Usage";
-            embedColor = 0xeb459e;
-            break;
-        default:
-            const helpEmbed = new EmbedBuilder()
-                .setTitle("📊 Usage Command Help")
-                .setColor(0x5865f2)
-                .setDescription("View Claude API token usage and costs.")
-                .addFields(
-                    { name: "`!usage today`", value: "Today's breakdown by model *(default)*", inline: true },
-                    { name: "`!usage daily`", value: "Daily breakdown over time", inline: true },
-                    { name: "`!usage blocks`", value: "5-hour billing windows for today", inline: true },
-                    { name: "`!usage monthly`", value: "Monthly totals and trends", inline: true },
-                )
-                .setFooter({ text: "Powered by ccusage" });
-            await msg.reply({ embeds: [helpEmbed] });
-            return;
+    const request = createUsageRequest(subcommand);
+    if (!request) {
+        const helpEmbed = new EmbedBuilder()
+            .setTitle("📊 Usage Command Help")
+            .setColor(0x5865f2)
+            .setDescription("View Claude API token usage and costs.")
+            .addFields(
+                { name: "`!usage today`", value: "Today's breakdown by model *(default)*", inline: true },
+                { name: "`!usage week`", value: "Current week since Monday 00:00 UTC", inline: true },
+                { name: "`!usage month`", value: "Current calendar month so far (UTC)", inline: true },
+                { name: "`!usage daily`", value: "Daily breakdown over time", inline: true },
+                { name: "`!usage blocks`", value: "5-hour billing windows for today", inline: true },
+                { name: "`!usage monthly`", value: "Historical monthly totals and trends", inline: true },
+            )
+            .setFooter({ text: "Powered by ccusage" });
+        await msg.reply({ embeds: [helpEmbed] });
+        return;
     }
 
-    await (msg.channel as TextChannel).sendTyping();
+    const { ccArgs, title, embedColor, period } = request;
 
-    const formatCost = (c: number) => c >= 1 ? `$${c.toFixed(2)}` : `$${c.toFixed(4)}`;
-    const formatTokens = (t: number) =>
-        t >= 1_000_000_000 ? `${(t / 1_000_000_000).toFixed(2)}B`
-        : t >= 1_000_000 ? `${(t / 1_000_000).toFixed(2)}M`
-        : t >= 1_000 ? `${(t / 1_000).toFixed(1)}K`
-        : `${t}`;
-    const progressBar = (value: number, max: number, length = 10) => {
-        if (max === 0) return "░".repeat(length);
-        const filled = Math.round((value / max) * length);
-        return "█".repeat(Math.min(filled, length)) + "░".repeat(length - Math.min(filled, length));
-    };
-    const modelEmoji = (name: string) => {
-        if (name.includes("opus")) return "🟣";
-        if (name.includes("sonnet")) return "🔵";
-        if (name.includes("haiku")) return "🟢";
-        return "⚪";
-    };
-    const shortModel = (name: string) => {
-        return name
-            .replace("claude-", "")
-            .replace(/-\d{8}$/, "");
-    };
+    await (msg.channel as TextChannel).sendTyping();
 
     try {
         const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -154,6 +370,8 @@ export async function handleUsage(msg: Message): Promise<void> {
                 embed.setTimestamp();
                 embeds.push(embed);
             }
+        } else if ((subcommand === "week" || subcommand === "month") && period) {
+            embeds.push(buildCurrentPeriodUsageEmbed(subcommand, data, period));
         } else if (subcommand === "monthly") {
             const entries = data.monthly || [];
             if (entries.length === 0) {
