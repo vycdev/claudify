@@ -67,6 +67,14 @@ If the bot sends "Sorry, I could not generate a response", it's most likely an a
 
 For deployed products or services, prefer `ANTHROPIC_API_KEY` or a supported cloud provider rather than relaying Claude subscription authentication.
 
+## Usage reports
+
+Use `!usage week` for an aggregate from Monday at 00:00 through the current
+time, or `!usage month` for the current calendar month through the current
+time. Both current-period commands use UTC consistently and include total cost,
+token and cache-token totals, and a per-model breakdown. `!usage monthly`
+remains the historical monthly totals and trends report.
+
 ## MCP Server Tools
 
 When used as an MCP server (e.g., with Claude Desktop or Claude Code), these tools are available:

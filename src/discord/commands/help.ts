@@ -22,7 +22,7 @@ export async function handleHelp(msg: Message): Promise<void> {
         ``,
         `**Commands**`,
         `\`!help\` — This message`,
-        `\`!usage [today|daily|blocks|monthly]\` — Token usage stats`,
+        `\`!usage [today|week|month|daily|blocks|monthly]\` — Token usage stats (\`month\` is current; \`monthly\` is history)`,
         `\`!profile [@user]\` — View a user's profile`,
         `\`!guild\` — View server memory`,
         `\`!storage\` — Storage stats`,
