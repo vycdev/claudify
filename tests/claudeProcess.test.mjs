@@ -42,7 +42,9 @@ test("force-kills a timed-out Claude process that ignores SIGTERM", async (t) =>
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    const result = runClaude(["-p"], "test input");
+    const result = runClaude(["-p"], "test input", {
+        workload: "response",
+    });
     let resultSettled = false;
     void result.then(
         () => {

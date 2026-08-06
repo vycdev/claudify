@@ -1,15 +1,131 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import type {
+    ClaudeEffort,
+    ClaudeRunOptions,
+    ClaudeWorkload,
+} from "./claudeTypes.js";
 
 dotenv.config();
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const VALID_BOT_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+const DEFAULT_BOT_MODEL = "claude-haiku-4-5";
+const VALID_BOT_EFFORTS: ReadonlySet<string> = new Set([
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+]);
+const WORKLOAD_ENV: Readonly<
+    Record<ClaudeWorkload, { model: string; effort: string }>
+> = {
+    response: {
+        model: "CLAUDE_RESPONSE_MODEL",
+        effort: "CLAUDE_RESPONSE_EFFORT",
+    },
+    "profile-update": {
+        model: "CLAUDE_PROFILE_MODEL",
+        effort: "CLAUDE_PROFILE_EFFORT",
+    },
+    "server-memory-update": {
+        model: "CLAUDE_SERVER_MEMORY_MODEL",
+        effort: "CLAUDE_SERVER_MEMORY_EFFORT",
+    },
+    "daily-summary": {
+        model: "CLAUDE_SUMMARY_MODEL",
+        effort: "CLAUDE_SUMMARY_EFFORT",
+    },
+};
 
-function parseBotEffort(value: string | undefined): string {
+function parseBotEffort(value: string | undefined): ClaudeEffort | undefined {
     const normalized = value?.trim().toLowerCase();
-    return normalized && VALID_BOT_EFFORTS.has(normalized) ? normalized : "";
+    return normalized && VALID_BOT_EFFORTS.has(normalized)
+        ? normalized as ClaudeEffort
+        : undefined;
+}
+
+function parseGlobalModel(value: string | undefined): string {
+    const normalized = value?.trim();
+    if (!normalized) return DEFAULT_BOT_MODEL;
+    if (/[\s\p{Cc}]/u.test(normalized)) {
+        console.error(
+            `[Claude Config] Invalid BOT_MODEL; using ${DEFAULT_BOT_MODEL}`,
+        );
+        return DEFAULT_BOT_MODEL;
+    }
+    return normalized;
+}
+
+function parseGlobalEffort(value: string | undefined): ClaudeEffort | undefined {
+    const normalized = value?.trim();
+    if (!normalized) return undefined;
+
+    const effort = parseBotEffort(normalized);
+    if (!effort) {
+        console.error(
+            `[Claude Config] Invalid BOT_EFFORT=${JSON.stringify(normalized)}; using the Claude CLI default`,
+        );
+    }
+    return effort;
+}
+
+function resolveModelOverride(
+    envName: string,
+    value: string | undefined,
+    fallback: string,
+): string | undefined {
+    const normalized = value?.trim();
+    if (!normalized || normalized.toLowerCase() === "inherit") return fallback;
+    if (normalized.toLowerCase() === "default") return undefined;
+    if (/[\s\p{Cc}]/u.test(normalized)) {
+        console.error(
+            `[Claude Config] Invalid ${envName}; inheriting BOT_MODEL`,
+        );
+        return fallback;
+    }
+    return normalized;
+}
+
+function resolveEffortOverride(
+    envName: string,
+    value: string | undefined,
+    fallback: ClaudeEffort | undefined,
+): ClaudeEffort | undefined {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized || normalized === "inherit") return fallback;
+    if (normalized === "default") return undefined;
+
+    const effort = parseBotEffort(normalized);
+    if (!effort) {
+        console.error(
+            `[Claude Config] Invalid ${envName}=${JSON.stringify(value?.trim())}; inheriting BOT_EFFORT`,
+        );
+        return fallback;
+    }
+    return effort;
+}
+
+function resolveWorkloadConfig(
+    workload: ClaudeWorkload,
+    globalModel: string,
+    globalEffort: ClaudeEffort | undefined,
+): Readonly<ClaudeRunOptions> {
+    const envNames = WORKLOAD_ENV[workload];
+    return Object.freeze({
+        workload,
+        model: resolveModelOverride(
+            envNames.model,
+            process.env[envNames.model],
+            globalModel,
+        ),
+        effort: resolveEffortOverride(
+            envNames.effort,
+            process.env[envNames.effort],
+            globalEffort,
+        ),
+    });
 }
 
 function parseNonNegativeInteger(
@@ -79,8 +195,41 @@ export const COOLDOWN_MS = parseNonNegativeInteger(
     10000,
     MAX_TIMER_DELAY_MS,
 );
-export const BOT_MODEL = process.env.BOT_MODEL || "claude-haiku-4-5";
-export const BOT_EFFORT = parseBotEffort(process.env.BOT_EFFORT);
+export const BOT_MODEL = parseGlobalModel(process.env.BOT_MODEL);
+export const BOT_EFFORT = parseGlobalEffort(process.env.BOT_EFFORT) ?? "";
+const GLOBAL_BOT_EFFORT = parseBotEffort(BOT_EFFORT);
+export const CLAUDE_WORKLOAD_CONFIG: Readonly<
+    Record<ClaudeWorkload, Readonly<ClaudeRunOptions>>
+> = Object.freeze({
+    response: resolveWorkloadConfig("response", BOT_MODEL, GLOBAL_BOT_EFFORT),
+    "profile-update": resolveWorkloadConfig(
+        "profile-update",
+        BOT_MODEL,
+        GLOBAL_BOT_EFFORT,
+    ),
+    "server-memory-update": resolveWorkloadConfig(
+        "server-memory-update",
+        BOT_MODEL,
+        GLOBAL_BOT_EFFORT,
+    ),
+    "daily-summary": resolveWorkloadConfig(
+        "daily-summary",
+        BOT_MODEL,
+        GLOBAL_BOT_EFFORT,
+    ),
+});
+
+export function getResponseModelDisplay(): string {
+    return CLAUDE_WORKLOAD_CONFIG.response.model ?? "Claude CLI default";
+}
+
+export function logClaudeWorkloadConfig(): void {
+    for (const config of Object.values(CLAUDE_WORKLOAD_CONFIG)) {
+        console.error(
+            `[Claude Config] ${config.workload}: model=${config.model ?? "default"}, effort=${config.effort ?? "default"}`,
+        );
+    }
+}
 export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
     process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS,
     300_000,

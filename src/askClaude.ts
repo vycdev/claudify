@@ -1,16 +1,24 @@
-import { HISTORY_DIR, MESSAGES_DIR, MCP_CONFIG_PATH, BOT_EFFORT, BOT_MODEL } from "./config.js";
+import {
+    CLAUDE_WORKLOAD_CONFIG,
+    HISTORY_DIR,
+    MESSAGES_DIR,
+    MCP_CONFIG_PATH,
+    getResponseModelDisplay,
+} from "./config.js";
 import { runClaude } from "./claude.js";
 import { client } from "./discord/client.js";
 import { loadRecentHistory } from "./storage/history.js";
 import { getUserProfile, getServerMemory } from "./storage/profiles.js";
 import { renderPrompt } from "./prompts.js";
 
+type ClaudeRunner = typeof runClaude;
+
 function getSystemPrompt(): string {
     const botName =
         client.user?.displayName || client.user?.username || "Claudify";
 
     return renderPrompt("botSystem", {
-        botModel: BOT_MODEL,
+        botModel: getResponseModelDisplay(),
         botName,
         historyDir: HISTORY_DIR,
         messagesDir: MESSAGES_DIR,
@@ -27,6 +35,7 @@ export async function askClaude(
     guildId: string,
     imagePaths: string[] = [],
     liveMessages: string = "",
+    claudeRunner: ClaudeRunner = runClaude,
 ): Promise<string> {
     const recentHistory = loadRecentHistory(channelId, question, channelName);
     const userProfile = getUserProfile(authorId);
@@ -111,7 +120,7 @@ export async function askClaude(
             `[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`,
         );
 
-        const { stdout, stderr } = await runClaude(
+        const { stdout, stderr } = await claudeRunner(
             [
                 "-p",
                 "--system-prompt",
@@ -124,8 +133,7 @@ export async function askClaude(
                 MCP_CONFIG_PATH,
             ],
             prompt,
-            BOT_MODEL,
-            BOT_EFFORT,
+            CLAUDE_WORKLOAD_CONFIG.response,
         );
 
         if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);

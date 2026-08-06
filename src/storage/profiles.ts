@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { PROFILES_DIR, PROFILE_MAX_CHARS, SERVER_MEMORY_MAX_CHARS, BOT_EFFORT, BOT_MODEL } from "../config.js";
+import {
+    CLAUDE_WORKLOAD_CONFIG,
+    PROFILES_DIR,
+    PROFILE_MAX_CHARS,
+    SERVER_MEMORY_MAX_CHARS,
+} from "../config.js";
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
 
@@ -66,7 +71,11 @@ export async function backgroundProfileUpdate(
                     profileSections,
                 });
 
-                const { stdout } = await claudeRunner(["-p"], prompt, BOT_MODEL, BOT_EFFORT);
+                const { stdout } = await claudeRunner(
+                    ["-p"],
+                    prompt,
+                    CLAUDE_WORKLOAD_CONFIG["profile-update"],
+                );
                 const output = stdout.trim();
 
                 if (output === "NO_UPDATES") {
@@ -129,7 +138,11 @@ export async function backgroundServerMemoryUpdate(
                 serverMemoryMaxChars: SERVER_MEMORY_MAX_CHARS,
             });
 
-            const { stdout } = await claudeRunner(["-p"], prompt, BOT_MODEL, BOT_EFFORT);
+            const { stdout } = await claudeRunner(
+                ["-p"],
+                prompt,
+                CLAUDE_WORKLOAD_CONFIG["server-memory-update"],
+            );
 
             const newMemory = stdout.trim();
             if (newMemory && newMemory !== existingMemory.trim()) {

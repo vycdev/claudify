@@ -8,7 +8,16 @@ services:
       - AUTH_ADMIN_USER_IDS=
       - CLAUDE_AUTH_LOGIN_TIMEOUT_MS=300000
       - MESSAGES_DIR=/app/messages
+      - BOT_MODEL=claude-haiku-4-5
       - BOT_EFFORT=
+      - CLAUDE_RESPONSE_MODEL=
+      - CLAUDE_RESPONSE_EFFORT=
+      - CLAUDE_PROFILE_MODEL=
+      - CLAUDE_PROFILE_EFFORT=
+      - CLAUDE_SERVER_MEMORY_MODEL=
+      - CLAUDE_SERVER_MEMORY_EFFORT=
+      - CLAUDE_SUMMARY_MODEL=
+      - CLAUDE_SUMMARY_EFFORT=
     volumes:
       - messages:/app/messages
       - claude-home:/root

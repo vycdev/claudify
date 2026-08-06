@@ -1,5 +1,5 @@
 import "./config.js";
-import { MESSAGES_DIR } from "./config.js";
+import { MESSAGES_DIR, logClaudeWorkloadConfig } from "./config.js";
 import { client } from "./discord/client.js";
 import { registerHandler } from "./discord/handler.js";
 import {
@@ -29,6 +29,8 @@ async function main() {
     if (!token) {
         throw new Error("DISCORD_TOKEN environment variable is not set");
     }
+
+    logClaudeWorkloadConfig();
 
     try {
         await client.login(token);

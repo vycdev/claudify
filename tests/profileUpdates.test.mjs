@@ -8,6 +8,10 @@ const messagesDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "claudify-profile-updates-"),
 );
 process.env.MESSAGES_DIR = messagesDir;
+process.env.CLAUDE_PROFILE_MODEL = "profile-test-model";
+process.env.CLAUDE_PROFILE_EFFORT = "HIGH";
+process.env.CLAUDE_SERVER_MEMORY_MODEL = "server-memory-test-model";
+process.env.CLAUDE_SERVER_MEMORY_EFFORT = "medium";
 
 const {
     backgroundProfileUpdate,
@@ -29,8 +33,10 @@ function deferred() {
 test("serializes overlapping profile updates before reading saved profiles", async () => {
     const firstResult = deferred();
     const prompts = [];
-    const runner = async (_args, prompt) => {
+    const options = [];
+    const runner = async (_args, prompt, runOptions) => {
         prompts.push(prompt);
+        options.push(runOptions);
         if (prompts.length === 1) return firstResult.promise;
 
         assert.match(prompt, /likes TypeScript/);
@@ -61,13 +67,20 @@ test("serializes overlapping profile updates before reading saved profiles", asy
     await Promise.all([firstUpdate, secondUpdate]);
 
     assert.equal(getUserProfile("user-1"), "likes TypeScript and ESM");
+    assert.deepEqual(options, Array.from({ length: 2 }, () => ({
+        workload: "profile-update",
+        model: "profile-test-model",
+        effort: "high",
+    })));
 });
 
 test("serializes server memory updates for the same guild", async () => {
     const firstResult = deferred();
     const prompts = [];
-    const runner = async (_args, prompt) => {
+    const options = [];
+    const runner = async (_args, prompt, runOptions) => {
         prompts.push(prompt);
+        options.push(runOptions);
         if (prompts.length === 1) return firstResult.promise;
 
         assert.match(prompt, /weekly demos/);
@@ -96,4 +109,9 @@ test("serializes server memory updates for the same guild", async () => {
     await Promise.all([firstUpdate, secondUpdate]);
 
     assert.equal(getServerMemory("guild-1"), "weekly demos on Fridays");
+    assert.deepEqual(options, Array.from({ length: 2 }, () => ({
+        workload: "server-memory-update",
+        model: "server-memory-test-model",
+        effort: "medium",
+    })));
 });
