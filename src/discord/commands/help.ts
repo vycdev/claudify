@@ -1,8 +1,8 @@
 import { Message } from "discord.js";
 import {
     AUTH_ADMIN_USER_IDS,
-    BOT_MODEL,
     COOLDOWN_MS,
+    getResponseModelDisplay,
 } from "../../config.js";
 import { client } from "../client.js";
 
@@ -12,7 +12,7 @@ export async function handleHelp(msg: Message): Promise<void> {
     const cooldownSec = Math.round(COOLDOWN_MS / 1000);
 
     const help = [
-        `**${botName}** — powered by \`${BOT_MODEL}\``,
+        `**${botName}** — powered by \`${getResponseModelDisplay()}\``,
         ``,
         `**Triggers**`,
         `\`!ask <question>\` — Ask me anything`,

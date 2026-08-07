@@ -24,6 +24,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `AUTH_ADMIN_USER_IDS` — comma-separated Discord user IDs allowed to manage Claude authentication (leave empty to disable)
    - `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` — optional Discord login-session timeout (default: `300000`)
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
+   - `BOT_MODEL` — global Claude model fallback for every workload (default: `claude-haiku-4-5`)
    - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
 
@@ -31,6 +32,50 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 ```bash
 docker compose up -d
 ```
+
+### Per-workload Claude configuration
+
+Responses and background maintenance can use different model and effort
+settings. This lets user-facing answers use a stronger model while profile
+extraction, server-memory maintenance, and daily summaries use lower-cost
+settings.
+
+| Workload | Model override | Effort override |
+|----------|----------------|-----------------|
+| User response | `CLAUDE_RESPONSE_MODEL` | `CLAUDE_RESPONSE_EFFORT` |
+| User-profile update | `CLAUDE_PROFILE_MODEL` | `CLAUDE_PROFILE_EFFORT` |
+| Server-memory update | `CLAUDE_SERVER_MEMORY_MODEL` | `CLAUDE_SERVER_MEMORY_EFFORT` |
+| Daily summary | `CLAUDE_SUMMARY_MODEL` | `CLAUDE_SUMMARY_EFFORT` |
+
+Each property resolves independently. A non-empty workload override takes
+priority, then `BOT_MODEL` or `BOT_EFFORT`, then the built-in fallback
+(`claude-haiku-4-5` and no explicit effort). Unset, blank, or `inherit` values
+inherit the global setting. Use `default` to bypass the global value and omit
+that Claude CLI flag for one workload. Effort values are case-insensitive.
+Invalid values produce a startup warning and inherit their deterministic global
+fallback; model IDs are operator-controlled but cannot contain whitespace or
+control characters.
+
+For example:
+
+```env
+# Stronger user-facing responses
+BOT_MODEL=claude-sonnet-5
+BOT_EFFORT=high
+
+# Lower-cost background maintenance
+CLAUDE_PROFILE_MODEL=claude-haiku-4-5
+CLAUDE_PROFILE_EFFORT=low
+CLAUDE_SERVER_MEMORY_MODEL=claude-haiku-4-5
+CLAUDE_SERVER_MEMORY_EFFORT=low
+CLAUDE_SUMMARY_MODEL=claude-haiku-4-5
+CLAUDE_SUMMARY_EFFORT=low
+```
+
+Model aliases remain operator-controlled; stronger background models may
+improve extraction and summary quality at higher cost and latency. Restart the
+process or container after changing these environment variables because the
+routing table is resolved once at startup.
 
 ## Authenticating Claude
 
@@ -113,6 +158,7 @@ does not expose it to host-side MCP clients by default.
 npm install
 npm run dev      # watch mode
 npm run build    # compile
+npm test         # build and run the complete test suite
 npm start        # run
 ```
 

@@ -7,6 +7,7 @@
 - Add current-week and current-month usage aggregates with UTC date ranges and per-model breakdowns.
 - Add owner-only Discord slash commands for Claude CLI authentication.
 - Add opt-in Discord mention suppression through the `SUPPRESS_MENTIONS` environment variable.
+- Add typed per-workload model and effort routing for responses, profile updates, server-memory updates, and daily summaries, with legacy global fallbacks and workload-aware logs.
 
 ### Fixed
 

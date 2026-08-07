@@ -1,4 +1,10 @@
 import { spawn } from "child_process";
+import type { ClaudeRunOptions } from "./claudeTypes.js";
+
+export interface ClaudeExecutable {
+    command: string;
+    args?: readonly string[];
+}
 
 // Global concurrency limiter to avoid hitting rate limits
 const MAX_CONCURRENT = 2;
@@ -45,27 +51,34 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
 function spawnClaude(
     args: string[],
     input: string,
-    model?: string,
-    effort?: string,
+    options: ClaudeRunOptions,
+    executable: ClaudeExecutable,
 ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
+        const { workload, model, effort } = options;
         const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(process.env)) {
             if (value !== undefined) env[key] = value;
         }
         delete env.MCP_SERVER_NAME;
+        delete env.ANTHROPIC_MODEL;
+        let claudeArgs = [...args];
         if (model) {
             env.ANTHROPIC_MODEL = model;
-            args = ["--model", model, ...args];
+            claudeArgs = ["--model", model, ...claudeArgs];
         }
         if (effort) {
-            args = ["--effort", effort, ...args];
+            claudeArgs = ["--effort", effort, ...claudeArgs];
         }
 
         console.error(
-            `[Claude CLI] Spawning with model=${model || "default"}, effort=${effort || "default"}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || "unset"} (active: ${activeCount}/${MAX_CONCURRENT}, queued: ${queue.length})`,
+            `[Claude CLI][${workload}] Spawning with model=${model || "default"}, effort=${effort || "default"}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || "unset"} (active: ${activeCount}/${MAX_CONCURRENT}, queued: ${queue.length})`,
         );
-        const proc = spawn("claude", args, { env });
+        const proc = spawn(
+            executable.command,
+            [...(executable.args ?? []), ...claudeArgs],
+            { env },
+        );
 
         let stdout = "";
         let stderr = "";
@@ -111,7 +124,9 @@ function spawnClaude(
         });
 
         const timeout = setTimeout(() => {
-            timeoutError = new Error("Claude CLI timed out after 120 seconds");
+            timeoutError = new Error(
+                `Claude CLI [${workload}] timed out after 120 seconds`,
+            );
             terminateProcess();
         }, 120000);
 
@@ -125,7 +140,7 @@ function spawnClaude(
                 resolve({ stdout, stderr });
             } else {
                 const err: any = new Error(
-                    `Claude CLI exited with code ${code}`,
+                    `Claude CLI [${workload}] exited with code ${code}`,
                 );
                 err.stdout = stdout;
                 err.stderr = stderr;
@@ -135,11 +150,18 @@ function spawnClaude(
 
         proc.on("error", (error) => {
             clearProcessTimers();
-            reject(timeoutError ?? error);
+            reject(
+                timeoutError
+                ?? new Error(
+                    `Claude CLI [${workload}] failed to start: ${error.message}`,
+                ),
+            );
         });
 
         proc.stdin.on("error", (error) => {
-            stdinError = error;
+            stdinError = new Error(
+                `Claude CLI [${workload}] stdin failed: ${error.message}`,
+            );
             terminateProcess();
         });
         proc.stdin.write(input);
@@ -147,11 +169,16 @@ function spawnClaude(
     });
 }
 
-export function runClaude(
+export function createClaudeRunner(
+    executable: ClaudeExecutable = { command: "claude" },
+): (
     args: string[],
     input: string,
-    model?: string,
-    effort?: string,
-): Promise<{ stdout: string; stderr: string }> {
-    return enqueue(() => spawnClaude(args, input, model, effort));
+    options: ClaudeRunOptions,
+) => Promise<{ stdout: string; stderr: string }> {
+    return (args, input, options) => enqueue(
+        () => spawnClaude(args, input, options, executable),
+    );
 }
+
+export const runClaude = createClaudeRunner();

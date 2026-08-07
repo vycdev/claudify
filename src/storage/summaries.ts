@@ -1,9 +1,8 @@
 import fs from "fs";
 import {
+    CLAUDE_WORKLOAD_CONFIG,
     HISTORY_V2_DIR,
     SUMMARIES_V2_DIR,
-    BOT_EFFORT,
-    BOT_MODEL,
 } from "../config.js";
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
@@ -13,6 +12,7 @@ import {
 } from "./historyPaths.js";
 
 const summariesInProgress = new Set<string>();
+type ClaudeRunner = typeof runClaude;
 
 export function getSummaryPath(
     channelId: string,
@@ -49,6 +49,7 @@ export async function generateDailySummary(
     channelId: string,
     channelName: string,
     date: Date,
+    claudeRunner: ClaudeRunner = runClaude,
 ): Promise<void> {
     const logPath = getLogPath(channelId, channelName, date);
     const summaryPath = getSummaryPath(channelId, date, channelName);
@@ -74,15 +75,14 @@ export async function generateDailySummary(
             console.error(
                 `[Summary] Generating summary for #${channelName} on ${dateStr}`,
             );
-            const { stdout } = await runClaude(
+            const { stdout } = await claudeRunner(
                 [
                     "-p",
                     "--system-prompt",
                     renderPrompt("dailySummarySystem"),
                 ],
                 log,
-                BOT_MODEL,
-                BOT_EFFORT,
+                CLAUDE_WORKLOAD_CONFIG["daily-summary"],
             );
 
             if (stdout.trim()) {

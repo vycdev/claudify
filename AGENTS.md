@@ -5,11 +5,13 @@ Project guidance for Claude Code when working in this repository.
 ## Build & Run
 
 - **Build:** `npm run build` (runs `tsc`, outputs to `build/`)
+- **Test:** `npm test` (builds, then runs `node --test tests/*.test.mjs`)
 - **Dev:** `npm run dev` (runs `tsc -w` for watch mode)
 - **Start:** `npm start` (runs `node build/index.js`)
 - **MCP Inspector:** `npx @modelcontextprotocol/inspector node build/index.js`
 
-No linter or test suite is configured. Always run `npm run build` after changes to verify compilation.
+No linter is configured. Always run `npm test` after changes; `npm run build`
+is the minimum compilation gate when tests cannot run.
 
 ## Workflow
 
@@ -71,7 +73,11 @@ src/
 
 - **ES Modules**: All imports use `.js` extensions (Node16 module resolution).
 - **Strict TypeScript**: `strict: true` in tsconfig. No `any` except in catch blocks.
-- **Model selection**: All Claude CLI calls use `claude-haiku-4-5` for speed/cost. Model is passed to `runClaude()` explicitly.
+- **Model selection**: Every Claude CLI caller passes a typed workload to
+  `runClaude()`. `CLAUDE_WORKLOAD_CONFIG` resolves response, profile-update,
+  server-memory-update, and daily-summary settings once at startup. Workload
+  overrides inherit `BOT_MODEL`/`BOT_EFFORT` by default; do not bypass this map
+  or re-read environment variables per request.
 - **Error handling**: Catch at boundaries (event handlers, background jobs). Log with `console.error` and prefixed tags like `[Bot]`, `[Claude CLI]`, `[Profile]`, `[Summary]`.
 - **Discord limits**: Messages max 2000 chars, 10 embeds per message. The `smartSplit()` function in `split.ts` handles splitting.
 
@@ -112,10 +118,24 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `AUTH_ADMIN_USER_IDS` | No | `""` (disabled) | Comma-separated Discord user IDs allowed to manage Claude CLI authentication |
 | `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` | No | `300000` | Timeout for an interactive Discord authentication session |
 | `COOLDOWN_MS` | No | `10000` | Per-user cooldown in ms |
-| `BOT_MODEL` | No | `claude-haiku-4-5` | Claude model for all CLI calls |
-| `BOT_EFFORT` | No | `""` | Claude Code `--effort` level (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `BOT_MODEL` | No | `claude-haiku-4-5` | Global Claude model fallback |
+| `BOT_EFFORT` | No | `""` | Global Claude Code `--effort` fallback (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `CLAUDE_RESPONSE_MODEL` | No | inherit | Model for user-facing responses |
+| `CLAUDE_RESPONSE_EFFORT` | No | inherit | Effort for user-facing responses |
+| `CLAUDE_PROFILE_MODEL` | No | inherit | Model for background profile updates |
+| `CLAUDE_PROFILE_EFFORT` | No | inherit | Effort for background profile updates |
+| `CLAUDE_SERVER_MEMORY_MODEL` | No | inherit | Model for background server-memory updates |
+| `CLAUDE_SERVER_MEMORY_EFFORT` | No | inherit | Effort for background server-memory updates |
+| `CLAUDE_SUMMARY_MODEL` | No | inherit | Model for daily summaries |
+| `CLAUDE_SUMMARY_EFFORT` | No | inherit | Effort for daily summaries |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
+
+Per-workload model and effort properties resolve independently. Blank, unset,
+or `inherit` values inherit the corresponding global value; `default` omits the
+Claude CLI setting for that workload. Invalid workload overrides warn at
+startup and inherit the global fallback. Configuration changes require a
+restart because the typed routing table is immutable after startup.
 
 ## Storage layout
 
