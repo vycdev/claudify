@@ -1,6 +1,11 @@
 import { spawn } from "child_process";
 import type { ClaudeRunOptions } from "./claudeTypes.js";
 
+export interface ClaudeExecutable {
+    command: string;
+    args?: readonly string[];
+}
+
 // Global concurrency limiter to avoid hitting rate limits
 const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
@@ -47,6 +52,7 @@ function spawnClaude(
     args: string[],
     input: string,
     options: ClaudeRunOptions,
+    executable: ClaudeExecutable,
 ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         const { workload, model, effort } = options;
@@ -68,7 +74,11 @@ function spawnClaude(
         console.error(
             `[Claude CLI][${workload}] Spawning with model=${model || "default"}, effort=${effort || "default"}, ANTHROPIC_MODEL=${env.ANTHROPIC_MODEL || "unset"} (active: ${activeCount}/${MAX_CONCURRENT}, queued: ${queue.length})`,
         );
-        const proc = spawn("claude", claudeArgs, { env });
+        const proc = spawn(
+            executable.command,
+            [...(executable.args ?? []), ...claudeArgs],
+            { env },
+        );
 
         let stdout = "";
         let stderr = "";
@@ -159,10 +169,16 @@ function spawnClaude(
     });
 }
 
-export function runClaude(
+export function createClaudeRunner(
+    executable: ClaudeExecutable = { command: "claude" },
+): (
     args: string[],
     input: string,
     options: ClaudeRunOptions,
-): Promise<{ stdout: string; stderr: string }> {
-    return enqueue(() => spawnClaude(args, input, options));
+) => Promise<{ stdout: string; stderr: string }> {
+    return (args, input, options) => enqueue(
+        () => spawnClaude(args, input, options, executable),
+    );
 }
+
+export const runClaude = createClaudeRunner();

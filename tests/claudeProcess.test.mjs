@@ -5,28 +5,26 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runClaude } from "../build/claude.js";
+import { createClaudeRunner } from "../build/claude.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
-test("force-kills a timed-out Claude process that ignores SIGTERM", async (t) => {
+test("terminates a timed-out Claude process", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-process-"));
     const pidPath = path.join(tempDir, "pid");
-    const cliPath = path.join(tempDir, "claude");
     const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeProcess.mjs");
-    fs.copyFileSync(fixturePath, cliPath);
-    fs.chmodSync(cliPath, 0o755);
+    const runFakeClaude = createClaudeRunner({
+        command: process.execPath,
+        args: [fixturePath],
+    });
 
-    const originalPath = process.env.PATH;
     const originalPidPath = process.env.CLAUDIFY_PROCESS_TEST_PID_PATH;
-    process.env.PATH = `${tempDir}${path.delimiter}${originalPath ?? ""}`;
     process.env.CLAUDIFY_PROCESS_TEST_PID_PATH = pidPath;
 
     let childPid;
     t.after(() => {
-        process.env.PATH = originalPath;
         if (originalPidPath === undefined) {
             delete process.env.CLAUDIFY_PROCESS_TEST_PID_PATH;
         } else {
@@ -42,7 +40,7 @@ test("force-kills a timed-out Claude process that ignores SIGTERM", async (t) =>
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    const result = runClaude(["-p"], "test input", {
+    const result = runFakeClaude(["-p"], "test input", {
         workload: "response",
     });
     let resultSettled = false;
@@ -71,6 +69,23 @@ test("force-kills a timed-out Claude process that ignores SIGTERM", async (t) =>
 
     t.mock.timers.tick(120_000);
     await Promise.resolve();
+
+    if (process.platform === "win32") {
+        // Windows terminates the child on the initial kill; POSIX gives the
+        // fixture a grace period before escalating to SIGKILL.
+        const terminationDeadline = Date.now() + 2_000;
+        while (!resultSettled && Date.now() < terminationDeadline) {
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+        assert.equal(resultSettled, true, "Timed-out child did not exit within 2 seconds");
+        await assert.rejects(result, /timed out after 120 seconds/);
+        assert.throws(
+            () => process.kill(childPid, 0),
+            (error) => error?.code === "ESRCH",
+        );
+        return;
+    }
+
     assert.equal(resultSettled, false);
     assert.doesNotThrow(() => process.kill(childPid, 0));
 

@@ -5,26 +5,25 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runClaude } from "../build/claude.js";
+import { createClaudeRunner } from "../build/claude.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 test("queued workloads keep isolated model, effort, environment, and logs", async (t) => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-routing-"));
     const capturePath = path.join(tempDir, "captures.jsonl");
-    const cliPath = path.join(tempDir, "claude");
     const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeRouting.mjs");
-    fs.copyFileSync(fixturePath, cliPath);
-    fs.chmodSync(cliPath, 0o755);
+    const runFakeClaude = createClaudeRunner({
+        command: process.execPath,
+        args: [fixturePath],
+    });
 
     const original = {
-        path: process.env.PATH,
         capture: process.env.CLAUDIFY_ROUTING_CAPTURE_PATH,
         model: process.env.ANTHROPIC_MODEL,
         consoleError: console.error,
     };
     const logs = [];
-    process.env.PATH = `${tempDir}${path.delimiter}${original.path ?? ""}`;
     process.env.CLAUDIFY_ROUTING_CAPTURE_PATH = capturePath;
     process.env.ANTHROPIC_MODEL = "ambient-model-must-not-leak";
     console.error = (...args) => logs.push(args.join(" "));
@@ -32,7 +31,6 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
     t.after(() => {
         console.error = original.consoleError;
         for (const [name, value] of [
-            ["PATH", original.path],
             ["CLAUDIFY_ROUTING_CAPTURE_PATH", original.capture],
             ["ANTHROPIC_MODEL", original.model],
         ]) {
@@ -42,17 +40,21 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    const [response, summary] = await Promise.all([
-        runClaude(["-p"], "response-input", {
+    const results = await Promise.allSettled([
+        runFakeClaude(["-p"], "response-input", {
             workload: "response",
             model: "response-model",
             effort: "high",
         }),
-        runClaude(["-p"], "summary-input", {
+        runFakeClaude(["-p"], "summary-input", {
             workload: "daily-summary",
             effort: "low",
         }),
     ]);
+    for (const result of results) {
+        assert.equal(result.status, "fulfilled", result.reason?.message);
+    }
+    const [response, summary] = results.map((result) => result.value);
 
     assert.equal(response.stdout, "response:response-input");
     assert.equal(summary.stdout, "response:summary-input");
