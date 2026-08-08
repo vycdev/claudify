@@ -28,6 +28,11 @@ function isPromptMap(value: unknown): value is PromptMap {
     );
 }
 
+function hasPromptContent(value: PromptValue): boolean {
+    const source = Array.isArray(value) ? value.join("\n") : value;
+    return source.trim().length > 0;
+}
+
 function loadPrompts(): PromptMap {
     if (cachedPrompts) return cachedPrompts;
 
@@ -39,8 +44,12 @@ function loadPrompts(): PromptMap {
     }
 
     for (const promptName of REQUIRED_PROMPTS) {
-        if (!parsed[promptName]) {
+        const prompt = parsed[promptName];
+        if (prompt === undefined) {
             throw new Error(`Prompt file ${PROMPTS_PATH} is missing "${promptName}"`);
+        }
+        if (!hasPromptContent(prompt)) {
+            throw new Error(`Prompt file ${PROMPTS_PATH} must not have an empty "${promptName}"`);
         }
     }
 
