@@ -16,7 +16,10 @@ import {
 import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
-import { compareHistoryFilenames } from "./historyFiles.js";
+import {
+    compareHistoryFilenames,
+    getLegacyHistoryChannel,
+} from "./historyFiles.js";
 import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
 
 const ReactToMessageSchema = z.object({
@@ -289,7 +292,10 @@ export function createMcpServer(): Server {
                             displayName: file,
                             filePath: path.join(dir, file),
                             channelId: undefined as string | undefined,
-                            channelName: undefined as string | undefined,
+                            channelName:
+                                type === "history"
+                                    ? getLegacyHistoryChannel(file)
+                                    : undefined,
                         }));
 
                     if (type === "history") {
@@ -319,7 +325,9 @@ export function createMcpServer(): Server {
                             file.channelId !== undefined
                                 ? file.channelId === safeChannel ||
                                   file.channelName === safeChannel
-                                : file.displayName.startsWith(`${safeChannel}_`),
+                                : type === "history"
+                                  ? file.channelName === safeChannel
+                                  : file.displayName.startsWith(`${safeChannel}_`),
                         );
                     }
                     if (date) {

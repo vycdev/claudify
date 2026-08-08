@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("history date filters match only the log date suffix", async (t) => {
+test("history filters match exact dates and legacy channels", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-history-"),
     );
@@ -22,6 +22,11 @@ test("history date filters match only the log date suffix", async (t) => {
     fs.writeFileSync(
         path.join(historyDir, "general_2026-08-01.txt"),
         "[10:00:00] user: expected entry\n",
+        "utf8",
+    );
+    fs.writeFileSync(
+        path.join(historyDir, "general_chat_2026-08-01.txt"),
+        "[10:30:00] user: similarly named channel entry\n",
         "utf8",
     );
     fs.writeFileSync(
@@ -68,4 +73,23 @@ test("history date filters match only the log date suffix", async (t) => {
     assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
+
+    const channelResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { channel: "general", date: "2026-08-01" },
+    });
+    const channelText = channelResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof channelText, "string");
+    assert.match(channelText, /general_2026-08-01\.txt/);
+    assert.match(channelText, /expected entry/);
+    assert.match(
+        channelText,
+        /v2\/v2_111111111111111111__general_2026-08-01\.txt/,
+    );
+    assert.match(channelText, /namespaced entry/);
+    assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
+    assert.doesNotMatch(channelText, /similarly named channel entry/);
 });
