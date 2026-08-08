@@ -140,7 +140,7 @@ same network environment to connect to its Streamable HTTP endpoint:
   "mcpServers": {
     "discord": {
       "type": "http",
-      "url": "http://localhost:3100/mcp"
+      "url": "http://127.0.0.1:3100/mcp"
     }
   }
 }
@@ -170,7 +170,7 @@ npx @modelcontextprotocol/inspector
 ```
 
 In the Inspector, select **Streamable HTTP** and connect to
-`http://localhost:3100/mcp` (or your configured `MCP_PORT`).
+`http://127.0.0.1:3100/mcp` (or your configured `MCP_PORT`).
 
 ## Security
 

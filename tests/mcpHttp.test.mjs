@@ -4,6 +4,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
 
@@ -54,6 +55,44 @@ function sendRequest(port, requestPath) {
         request.end();
     });
 }
+
+test("generated MCP config uses the IPv4 listener address", () => {
+    const workingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-mcp-config-"),
+    );
+    const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ],
+            {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MCP_PORT: "43100",
+                    MESSAGES_DIR: path.join(workingDir, "messages"),
+                },
+            },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        const config = JSON.parse(
+            fs.readFileSync(path.join(workingDir, ".mcp-config.json"), "utf8"),
+        );
+        assert.equal(
+            config.mcpServers.discord.url,
+            "http://127.0.0.1:43100/mcp",
+        );
+    } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+    }
+});
 
 test("malformed MCP request URLs return 400 without stopping the server", async (t) => {
     const messagesDir = fs.mkdtempSync(
