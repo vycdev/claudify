@@ -17,6 +17,7 @@ import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
+import { formatContextTime } from "./context.js";
 
 // Consistent display name for a user — used in logs, prompts, and history
 function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
@@ -56,7 +57,7 @@ function messageContentForMemory(msg: Message): string {
 }
 
 function formatMessageForContext(msg: Message): string {
-    const time = msg.createdAt.toTimeString().split(" ")[0];
+    const time = formatContextTime(msg.createdAt);
     const label = authorLabel(msg.author);
     return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
 }
