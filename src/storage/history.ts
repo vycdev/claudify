@@ -127,15 +127,20 @@ function trimLinesToBudget(
 
 function extractSearchTerms(question: string): string[] {
     const cleaned = question
+        .normalize("NFC")
         .toLowerCase()
         .replace(/<@!?\d+>/g, " ")
         .replace(/https?:\/\/\S+/g, " ")
-        .replace(/[^a-z0-9_-]+/g, " ");
+        .replace(/[^\p{L}\p{M}\p{N}_-]+/gu, " ");
 
     const terms = cleaned
         .split(/\s+/)
         .map((term) => term.trim())
-        .filter((term) => term.length >= 3 && !HISTORY_STOP_WORDS.has(term));
+        .filter((term) => {
+            const minimumLength = /^[\x00-\x7F]+$/.test(term) ? 3 : 2;
+            return Array.from(term).length >= minimumLength
+                && !HISTORY_STOP_WORDS.has(term);
+        });
 
     return Array.from(new Set(terms)).slice(0, 8);
 }
@@ -147,7 +152,7 @@ function buildRelevantSnippets(lines: string[], terms: string[]): string[] {
     const usedIndexes = new Set<number>();
 
     for (let i = 0; i < lines.length && snippets.length < HISTORY_SEARCH_MAX_BLOCKS; i++) {
-        const lowerLine = lines[i].toLowerCase();
+        const lowerLine = lines[i].normalize("NFC").toLowerCase();
         if (!terms.some((term) => lowerLine.includes(term))) continue;
 
         const start = Math.max(0, i - HISTORY_SEARCH_CONTEXT_LINES);
