@@ -1,7 +1,10 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
 import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
-import { normalizeBotMentions } from "./mentions.js";
+import {
+    hasContentBesidesBotMentions,
+    normalizeBotMentions,
+} from "./mentions.js";
 import { parseClaudeResponse } from "./response.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
@@ -534,14 +537,24 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
+        const questionContent = askQuestion ?? msg.content;
         const rawQuestion = normalizeBotMentions(
-            askQuestion ?? msg.content,
+            questionContent,
             client.user!.id,
             botName,
         ).trim();
         const question = replyContext + rawQuestion;
 
-        if (!rawQuestion) {
+        const hasQuestionContent = hasContentBesidesBotMentions(
+            questionContent,
+            client.user!.id,
+        );
+        if (
+            !rawQuestion ||
+            (!hasQuestionContent &&
+                !replyContext &&
+                allAttachments.length === 0)
+        ) {
             console.error(`[Bot] Empty question from ${msg.author.tag}`);
             await msg.reply(
                 "Please provide a question! Usage: `!ask <your question>` or mention me with a question.",

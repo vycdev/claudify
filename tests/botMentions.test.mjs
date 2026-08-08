@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeBotMentions } from "../build/discord/mentions.js";
+import {
+    hasContentBesidesBotMentions,
+    normalizeBotMentions,
+} from "../build/discord/mentions.js";
 
 const botUserId = "123456789012345678";
 
@@ -35,5 +38,36 @@ test("normalizes mentions in ask commands and treats bot names literally", () =>
             "$&",
         ),
         "!ask $& what does $& mean?",
+    );
+});
+
+test("treats bare bot mentions as empty questions", () => {
+    assert.equal(
+        hasContentBesidesBotMentions(`<@${botUserId}>`, botUserId),
+        false,
+    );
+    assert.equal(
+        hasContentBesidesBotMentions(
+            `  <@!${botUserId}>\n<@${botUserId}>  `,
+            botUserId,
+        ),
+        false,
+    );
+});
+
+test("recognizes question content alongside bot mentions", () => {
+    assert.equal(
+        hasContentBesidesBotMentions(
+            `<@${botUserId}> how does this work?`,
+            botUserId,
+        ),
+        true,
+    );
+    assert.equal(
+        hasContentBesidesBotMentions(
+            `<@${botUserId}> ask <@987654321098765432>`,
+            botUserId,
+        ),
+        true,
     );
 });
