@@ -118,3 +118,59 @@ test("fetch-messages validates the server ID in message links", async (t) => {
         discordClient.channels.fetch = originalFetch;
     }
 });
+
+test("fetch-messages preserves embeds that only contain a URL", async (t) => {
+    const channel = Object.create(TextChannel.prototype);
+    Object.defineProperties(channel, {
+        name: { value: "general" },
+        guild: {
+            value: {
+                id: "111111111111111111",
+                name: "Expected Server",
+            },
+        },
+        messages: {
+            value: {
+                fetch: async (id) => ({
+                    id,
+                    author: { tag: "user#0001" },
+                    content: "https://example.com/article",
+                    createdAt: new Date("2026-08-01T00:00:00.000Z"),
+                    attachments: new Map(),
+                    embeds: [
+                        {
+                            title: null,
+                            description: null,
+                            url: "https://example.com/article",
+                        },
+                    ],
+                }),
+            },
+        },
+    });
+
+    const originalFetch = discordClient.channels.fetch;
+    discordClient.channels.fetch = async () => channel;
+    try {
+        const client = await createTestClient(t);
+        const response = await client.callTool({
+            name: "fetch-messages",
+            arguments: {
+                links: [
+                    "https://discord.com/channels/111111111111111111/222222222222222222/333333333333333333",
+                ],
+            },
+        });
+        const results = JSON.parse(response.content[0].text);
+
+        assert.deepEqual(results[0].embeds, [
+            {
+                title: null,
+                description: null,
+                url: "https://example.com/article",
+            },
+        ]);
+    } finally {
+        discordClient.channels.fetch = originalFetch;
+    }
+});
