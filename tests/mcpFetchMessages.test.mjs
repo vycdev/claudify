@@ -39,6 +39,23 @@ async function createTestClient(t) {
     return client;
 }
 
+test("fetch-messages advertises and enforces a non-empty links array", async (t) => {
+    const client = await createTestClient(t);
+    const tools = await client.listTools();
+    const schema = tools.tools.find(
+        ({ name }) => name === "fetch-messages",
+    )?.inputSchema;
+
+    assert.equal(schema?.properties?.links?.minItems, 1);
+    await assert.rejects(
+        client.callTool({
+            name: "fetch-messages",
+            arguments: { links: [] },
+        }),
+        /Invalid arguments: links: Please provide at least one Discord message link/,
+    );
+});
+
 test("fetch-messages rejects non-string link values", async (t) => {
     const client = await createTestClient(t);
 
