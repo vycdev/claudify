@@ -150,6 +150,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Number of matching history files to read (default 20)",
+                            minimum: 1,
+                            maximum: 100,
                             default: 20,
                         },
                         type: {
@@ -177,6 +179,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Maximum lines returned per file (default 300, max 2000)",
+                            minimum: 1,
+                            maximum: 2000,
                             default: 300,
                         },
                     },
@@ -219,6 +223,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Number of messages to fetch (max 100)",
+                            minimum: 1,
+                            maximum: 100,
                             default: 50,
                         },
                     },
