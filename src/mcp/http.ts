@@ -1,13 +1,46 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import http from "http";
 import fs from "fs";
-import { MCP_PORT, MCP_CONFIG_PATH } from "../config.js";
+import {
+    MCP_MAX_REQUEST_BYTES,
+    MCP_PORT,
+    MCP_CONFIG_PATH,
+} from "../config.js";
 import { createMcpServer } from "./server.js";
 
 const ALLOWED_ORIGINS = new Set([
     `http://localhost:${MCP_PORT}`,
     `http://127.0.0.1:${MCP_PORT}`,
 ]);
+
+function rejectOversizedRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+): boolean {
+    const contentLength = req.headers["content-length"];
+    if (contentLength === undefined) return false;
+
+    const requestBytes = Number(contentLength);
+    if (
+        Number.isSafeInteger(requestBytes) &&
+        requestBytes >= 0 &&
+        requestBytes <= MCP_MAX_REQUEST_BYTES
+    ) {
+        return false;
+    }
+
+    res.writeHead(413, { "Content-Type": "application/json" }).end(
+        JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+                code: -32600,
+                message: "Request body too large",
+            },
+            id: null,
+        }),
+    );
+    return true;
+}
 
 export function writeMcpConfig() {
     const config = {
@@ -62,6 +95,8 @@ export function startMcpHttpServer(): http.Server {
         }
 
         if (req.method === "POST") {
+            if (rejectOversizedRequest(req, res)) return;
+
             const mcpServer = createMcpServer();
             const transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: undefined,

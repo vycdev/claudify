@@ -247,6 +247,7 @@ export const HISTORY_SEARCH_MAX_BLOCKS = parseNonNegativeInteger(process.env.HIS
 export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.HISTORY_SEARCH_CONTEXT_LINES, 2);
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
+export const MCP_MAX_REQUEST_BYTES = 1_048_576;
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");

@@ -23,14 +23,15 @@ async function reservePort() {
     return port;
 }
 
-function sendRequest(port, requestPath) {
+function sendRequest(port, requestPath, options = {}) {
     return new Promise((resolve, reject) => {
         const request = http.request(
             {
                 host: "127.0.0.1",
                 port,
-                method: "GET",
+                method: options.method || "GET",
                 path: requestPath,
+                headers: options.headers,
             },
             (response) => {
                 let body = "";
@@ -51,7 +52,7 @@ function sendRequest(port, requestPath) {
             request.destroy(new Error("Timed out waiting for HTTP response"));
         });
         request.on("error", reject);
-        request.end();
+        request.end(options.body);
     });
 }
 
@@ -65,6 +66,7 @@ test("malformed MCP request URLs return 400 without stopping the server", async 
     process.env.MESSAGES_DIR = messagesDir;
     process.env.MCP_PORT = String(port);
 
+    const { MCP_MAX_REQUEST_BYTES } = await import("../build/config.js");
     const { startMcpHttpServer } = await import("../build/mcp/http.js");
     const server = startMcpHttpServer();
     t.after(async () => {
@@ -87,6 +89,24 @@ test("malformed MCP request URLs return 400 without stopping the server", async 
         error: {
             code: -32600,
             message: "Invalid request URL",
+        },
+        id: null,
+    });
+
+    const oversizedResponse = await sendRequest(port, "/mcp", {
+        method: "POST",
+        headers: {
+            "content-length": String(MCP_MAX_REQUEST_BYTES + 1),
+        },
+        body: Buffer.alloc(MCP_MAX_REQUEST_BYTES + 1),
+    });
+    assert.equal(oversizedResponse.statusCode, 413);
+    assert.equal(oversizedResponse.contentType, "application/json");
+    assert.deepEqual(JSON.parse(oversizedResponse.body), {
+        jsonrpc: "2.0",
+        error: {
+            code: -32600,
+            message: "Request body too large",
         },
         id: null,
     });
