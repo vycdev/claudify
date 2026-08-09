@@ -10,50 +10,63 @@ import {
     MESSAGES_DIR,
 } from "../../config.js";
 
+function walkStorageTree(
+    dir: string,
+    onFile: (name: string, filePath: string) => number,
+): number {
+    try {
+        return fs.readdirSync(dir, { withFileTypes: true }).reduce(
+            (total, entry) => {
+                // Storage directories may be operator-mounted, so do not follow
+                // links into unrelated paths or recurse through symlink cycles.
+                if (entry.isSymbolicLink()) return total;
+
+                const filePath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    return total + walkStorageTree(filePath, onFile);
+                }
+                if (!entry.isFile()) return total;
+                return total + onFile(entry.name, filePath);
+            },
+            0,
+        );
+    } catch {
+        return 0;
+    }
+}
+
+export function countStorageFiles(dir: string): number {
+    return walkStorageTree(
+        dir,
+        (name) => name.endsWith(".txt") ? 1 : 0,
+    );
+}
+
+export function getStorageDirectorySize(dir: string): number {
+    return walkStorageTree(
+        dir,
+        (_name, filePath) => fs.statSync(filePath).size,
+    );
+}
+
 export async function handleStorage(msg: Message): Promise<void> {
     console.error(`[Bot] Storage requested by ${msg.author.tag}`);
-    const countFiles = (dir: string): number => {
-        try {
-            return fs.readdirSync(dir).reduce((total, file) => {
-                const filePath = path.join(dir, file);
-                const stat = fs.statSync(filePath);
-                if (stat.isDirectory()) return total + countFiles(filePath);
-                return total + (file.endsWith(".txt") ? 1 : 0);
-            }, 0);
-        } catch {
-            return 0;
-        }
-    };
-    const getDirSize = (dir: string): number => {
-        try {
-            return fs.readdirSync(dir).reduce((total, file) => {
-                const filePath = path.join(dir, file);
-                const stat = fs.statSync(filePath);
-                return (
-                    total +
-                    (stat.isDirectory() ? getDirSize(filePath) : stat.size)
-                );
-            }, 0);
-        } catch {
-            return 0;
-        }
-    };
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
-    const historyCount = countFiles(HISTORY_DIR);
-    const pendingCount = countFiles(PENDING_DIR);
-    const summaryCount = countFiles(SUMMARIES_DIR);
-    const profileCount = countFiles(PROFILES_DIR);
-    const historySize = getDirSize(HISTORY_DIR);
-    const pendingSize = getDirSize(PENDING_DIR);
-    const summariesSize = getDirSize(SUMMARIES_DIR);
-    const profilesSize = getDirSize(PROFILES_DIR);
-    const imagesSize = getDirSize(IMAGES_DIR);
-    const totalSize = getDirSize(MESSAGES_DIR);
+    const historyCount = countStorageFiles(HISTORY_DIR);
+    const pendingCount = countStorageFiles(PENDING_DIR);
+    const summaryCount = countStorageFiles(SUMMARIES_DIR);
+    const profileCount = countStorageFiles(PROFILES_DIR);
+    const historySize = getStorageDirectorySize(HISTORY_DIR);
+    const pendingSize = getStorageDirectorySize(PENDING_DIR);
+    const summariesSize = getStorageDirectorySize(SUMMARIES_DIR);
+    const profilesSize = getStorageDirectorySize(PROFILES_DIR);
+    const imagesSize = getStorageDirectorySize(IMAGES_DIR);
+    const totalSize = getStorageDirectorySize(MESSAGES_DIR);
 
     const output = [
         `History:    ${historyCount} files (${formatSize(historySize)})`,

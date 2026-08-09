@@ -33,3 +33,4 @@
 - Fall back to safe defaults when context or history limit environment variables are invalid.
 - Prevent simultaneous Claude requests from the same user across message and reaction triggers.
 - Serialize overlapping profile and server-memory updates to avoid losing newer context.
+- Ignore symlinked files and directories when calculating storage statistics.
