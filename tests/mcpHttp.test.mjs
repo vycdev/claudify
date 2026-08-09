@@ -23,13 +23,13 @@ async function reservePort() {
     return port;
 }
 
-function sendRequest(port, requestPath) {
+function sendRequest(port, requestPath, method = "GET") {
     return new Promise((resolve, reject) => {
         const request = http.request(
             {
                 host: "127.0.0.1",
                 port,
-                method: "GET",
+                method,
                 path: requestPath,
             },
             (response) => {
@@ -41,6 +41,7 @@ function sendRequest(port, requestPath) {
                 response.on("end", () =>
                     resolve({
                         statusCode: response.statusCode,
+                        allow: response.headers.allow,
                         contentType: response.headers["content-type"],
                         body,
                     }),
@@ -55,7 +56,7 @@ function sendRequest(port, requestPath) {
     });
 }
 
-test("malformed MCP request URLs return 400 without stopping the server", async (t) => {
+test("MCP HTTP server rejects invalid URLs and unsupported methods", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-http-"),
     );
@@ -93,4 +94,17 @@ test("malformed MCP request URLs return 400 without stopping the server", async 
 
     const followUpResponse = await sendRequest(port, "/not-mcp");
     assert.equal(followUpResponse.statusCode, 404);
+
+    const getResponse = await sendRequest(port, "/mcp");
+    assert.equal(getResponse.statusCode, 405);
+    assert.equal(getResponse.allow, "POST");
+    assert.equal(getResponse.contentType, "application/json");
+    assert.equal(
+        JSON.parse(getResponse.body).error.message,
+        "Method not allowed (stateless mode)",
+    );
+
+    const putResponse = await sendRequest(port, "/mcp", "PUT");
+    assert.equal(putResponse.statusCode, 405);
+    assert.equal(putResponse.allow, "POST");
 });
