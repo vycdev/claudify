@@ -28,6 +28,7 @@
 - Keep long fenced code blocks valid when Discord responses are split across messages.
 - Match MCP history date filters against the log date suffix instead of dates embedded in channel names.
 - Force-stop timed-out Claude authentication status checks that ignore termination.
+- Treat failed Claude authentication status commands as unauthenticated even if they emit stale authenticated JSON.
 - Force-stop timed-out Claude authentication processes before allowing a new login session.
 - Fall back to the default cooldown when `COOLDOWN_MS` exceeds Node's supported timer range.
 - Fall back to safe defaults when context or history limit environment variables are invalid.
