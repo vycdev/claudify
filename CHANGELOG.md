@@ -12,6 +12,7 @@
 ### Fixed
 
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
+- Restrict Claude authentication slash commands to private DMs, matching text-command security behavior.
 - Run Discord-initiated Claude login in a pseudo-terminal so the CLI accepts submitted OAuth codes.
 - Isolate saved history and summaries by Discord channel ID in dedicated storage namespaces so same-named channels do not share automatic context.
 - Reject fractional MCP limits instead of passing them to file slicing or the Discord API.
