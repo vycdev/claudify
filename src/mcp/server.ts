@@ -11,6 +11,7 @@ import {
     DISCORD_MESSAGE_MAX_CHARS,
     HISTORY_DIR,
     HISTORY_V2_DIR,
+    MCP_FETCH_MESSAGES_MAX_LINKS,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -74,7 +75,11 @@ const ReadMessageHistorySchema = z.object({
 const FetchMessagesSchema = z.object({
     links: z
         .array(z.string())
-        .min(1, "Please provide at least one Discord message link"),
+        .min(1, "Please provide at least one Discord message link")
+        .max(
+            MCP_FETCH_MESSAGES_MAX_LINKS,
+            `Please provide at most ${MCP_FETCH_MESSAGES_MAX_LINKS} Discord message links`,
+        ),
 });
 
 export function createMcpServer(): Server {
@@ -192,6 +197,7 @@ export function createMcpServer(): Server {
                         links: {
                             type: "array",
                             items: { type: "string" },
+                            maxItems: MCP_FETCH_MESSAGES_MAX_LINKS,
                             description:
                                 "Array of Discord message links to fetch",
                         },

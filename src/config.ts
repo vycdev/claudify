@@ -189,6 +189,7 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const DISCORD_MESSAGE_MAX_CHARS = 2000;
+export const MCP_FETCH_MESSAGES_MAX_LINKS = 100;
 
 export const COOLDOWN_MS = parseNonNegativeInteger(
     process.env.COOLDOWN_MS,
