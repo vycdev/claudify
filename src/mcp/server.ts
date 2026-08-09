@@ -283,24 +283,36 @@ export function createMcpServer(): Server {
                     const dir = type === "pending" ? PENDING_DIR : HISTORY_DIR;
                     const safeChannel = channel?.replace(/[^a-zA-Z0-9-_]/g, "_");
                     let files = fs
-                        .readdirSync(dir)
-                        .filter((f) => f.endsWith(".txt"))
-                        .map((file) => ({
-                            displayName: file,
-                            filePath: path.join(dir, file),
+                        .readdirSync(dir, { withFileTypes: true })
+                        .filter(
+                            (entry) =>
+                                entry.isFile() && entry.name.endsWith(".txt"),
+                        )
+                        .map((entry) => ({
+                            displayName: entry.name,
+                            filePath: path.join(dir, entry.name),
                             channelId: undefined as string | undefined,
                             channelName: undefined as string | undefined,
                         }));
 
                     if (type === "history") {
                         const channelFiles = fs
-                            .readdirSync(HISTORY_V2_DIR)
-                            .filter((file) => file.endsWith(".txt"))
-                            .map((file) => {
-                                const parsed = parseChannelHistoryFileName(file);
+                            .readdirSync(HISTORY_V2_DIR, { withFileTypes: true })
+                            .filter(
+                                (entry) =>
+                                    entry.isFile() &&
+                                    entry.name.endsWith(".txt"),
+                            )
+                            .map((entry) => {
+                                const parsed = parseChannelHistoryFileName(
+                                    entry.name,
+                                );
                                 return {
-                                    displayName: `v2/${file}`,
-                                    filePath: path.join(HISTORY_V2_DIR, file),
+                                    displayName: `v2/${entry.name}`,
+                                    filePath: path.join(
+                                        HISTORY_V2_DIR,
+                                        entry.name,
+                                    ),
                                     channelId: parsed?.channelId,
                                     channelName: parsed?.channelName,
                                 };
