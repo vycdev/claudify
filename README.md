@@ -26,6 +26,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
    - `BOT_MODEL` — global Claude model fallback for every workload (default: `claude-haiku-4-5`)
    - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
+   - `LIVE_CONTEXT_MAX_CHARS` — optional maximum size of recent live Discord context passed to Claude (default: `140000`)
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
 
 3. Run it:

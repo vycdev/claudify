@@ -240,6 +240,10 @@ export const SUPPRESS_MENTIONS =
 
 export const LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.LIVE_CONTEXT_LIMIT, 35);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.DEEP_LIVE_CONTEXT_LIMIT, 500);
+export const LIVE_CONTEXT_MAX_CHARS = parseNonNegativeInteger(
+    process.env.LIVE_CONTEXT_MAX_CHARS,
+    140000,
+);
 export const HISTORY_RECENT_LINES = parseNonNegativeInteger(process.env.HISTORY_RECENT_LINES, 80);
 export const HISTORY_RECAP_MAX_LINES = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_LINES, 1000);
 export const HISTORY_RECAP_MAX_CHARS = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_CHARS, 140000);
