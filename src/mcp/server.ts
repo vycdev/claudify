@@ -38,6 +38,26 @@ function isWithinDiscordMessageLimit(message: string): boolean {
     return true;
 }
 
+function readPendingChannel(filePath: string): {
+    channelId: string | undefined;
+    channelName: string | undefined;
+} {
+    const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+    const separatorIndex = lines.indexOf("---");
+    const headerLines = lines.slice(0, separatorIndex === -1 ? 4 : separatorIndex);
+    const channelLine = headerLines.find((line) => line.startsWith("Channel: #"));
+    const channelIdLine = headerLines.find((line) =>
+        line.startsWith("Channel ID: "),
+    );
+
+    return {
+        channelId: channelIdLine?.slice("Channel ID: ".length),
+        channelName: channelLine
+            ?.slice("Channel: #".length)
+            .replace(/[^a-zA-Z0-9-_]/g, "_"),
+    };
+}
+
 export const SendMessageSchema = z.object({
     server: z
         .string()
@@ -285,12 +305,19 @@ export function createMcpServer(): Server {
                     let files = fs
                         .readdirSync(dir)
                         .filter((f) => f.endsWith(".txt"))
-                        .map((file) => ({
-                            displayName: file,
-                            filePath: path.join(dir, file),
-                            channelId: undefined as string | undefined,
-                            channelName: undefined as string | undefined,
-                        }));
+                        .map((file) => {
+                            const filePath = path.join(dir, file);
+                            const pendingChannel =
+                                type === "pending"
+                                    ? readPendingChannel(filePath)
+                                    : undefined;
+                            return {
+                                displayName: file,
+                                filePath,
+                                channelId: pendingChannel?.channelId,
+                                channelName: pendingChannel?.channelName,
+                            };
+                        });
 
                     if (type === "history") {
                         const channelFiles = fs
@@ -316,7 +343,8 @@ export function createMcpServer(): Server {
 
                     if (safeChannel) {
                         files = files.filter((file) =>
-                            file.channelId !== undefined
+                            file.channelId !== undefined ||
+                            file.channelName !== undefined
                                 ? file.channelId === safeChannel ||
                                   file.channelName === safeChannel
                                 : file.displayName.startsWith(`${safeChannel}_`),
