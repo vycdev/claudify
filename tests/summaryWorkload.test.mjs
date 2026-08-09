@@ -44,3 +44,26 @@ test("daily summaries declare the daily-summary workload", async () => {
         "A useful summary",
     );
 });
+
+test("daily summaries include a single user-and-bot exchange", async () => {
+    const date = new Date("2026-08-02T12:00:00Z");
+    const logPath = getDailyLogPath("channel-2", date, "general");
+    fs.writeFileSync(logPath, "user: question\nbot: answer\n", "utf8");
+
+    let capturedLog;
+    await generateDailySummary(
+        "channel-2",
+        "general",
+        date,
+        async (_args, input) => {
+            capturedLog = input;
+            return { stdout: "A single-exchange summary", stderr: "" };
+        },
+    );
+
+    assert.equal(capturedLog, "user: question\nbot: answer");
+    assert.equal(
+        fs.readFileSync(getSummaryPath("channel-2", date, "general"), "utf8"),
+        "A single-exchange summary",
+    );
+});
