@@ -10,6 +10,14 @@ export interface ClaudeExecutable {
 const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
 const FORCE_KILL_GRACE_MS = 5_000;
+const MAX_CAPTURED_OUTPUT = 64 * 1024;
+
+function appendBounded(current: string, chunk: string): string {
+    const combined = current + chunk;
+    return combined.length <= MAX_CAPTURED_OUTPUT
+        ? combined
+        : combined.slice(-MAX_CAPTURED_OUTPUT);
+}
 let activeCount = 0;
 let lastSpawnTime = 0;
 const queue: Array<{
@@ -117,10 +125,10 @@ function spawnClaude(
         };
 
         proc.stdout.on("data", (data) => {
-            stdout += data.toString();
+            stdout = appendBounded(stdout, data.toString());
         });
         proc.stderr.on("data", (data) => {
-            stderr += data.toString();
+            stderr = appendBounded(stderr, data.toString());
         });
 
         const timeout = setTimeout(() => {
