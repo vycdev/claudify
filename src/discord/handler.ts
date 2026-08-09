@@ -55,6 +55,15 @@ function messageContentForMemory(msg: Message): string {
     return content.trim();
 }
 
+export function buildReactionQuestion(
+    msgAuthorLabel: string,
+    userLabel: string,
+    msg: Message,
+): string {
+    const targetContent = messageContentForMemory(msg);
+    return `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${targetContent}`;
+}
+
 function formatMessageForContext(msg: Message): string {
     const time = msg.createdAt.toTimeString().split(" ")[0];
     const label = authorLabel(msg.author);
@@ -350,7 +359,7 @@ export function registerHandler() {
             const botName = client.user?.displayName || client.user?.username || "Claudify";
             const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
             const userLabel = authorLabel(user as any);
-            const question = `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${msg.content}`;
+            const question = buildReactionQuestion(msgAuthorLabel, userLabel, msg);
 
             // Fetch live messages for context
             let liveMessages = "";
@@ -409,7 +418,7 @@ export function registerHandler() {
 
             appendToLog(
                 userLabel,
-                `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`,
+                `[🤖 reaction on: ${messageContentForMemory(msg).slice(0, 100)}]`,
                 msg.channel.id,
                 msg.channel.name,
             );
