@@ -1,6 +1,7 @@
 import fs from "fs";
 import {
     CLAUDE_WORKLOAD_CONFIG,
+    HISTORY_RECAP_MAX_CHARS,
     HISTORY_V2_DIR,
     SUMMARIES_V2_DIR,
 } from "../config.js";
@@ -32,10 +33,13 @@ export function loadRecentSummaries(
         const date = new Date(Date.now() - i * 86400000);
         const summaryPath = getSummaryPath(channelId, date, channelName);
         if (fs.existsSync(summaryPath)) {
+            const summary = fs
+                .readFileSync(summaryPath, "utf-8")
+                .trim()
+                .slice(0, HISTORY_RECAP_MAX_CHARS);
+            if (!summary) continue;
             const dateStr = date.toISOString().split("T")[0];
-            summaries.push(
-                `[${dateStr}] ${fs.readFileSync(summaryPath, "utf-8").trim()}`,
-            );
+            summaries.push(`[${dateStr}] ${summary}`);
         }
     }
     return summaries.reverse().join("\n\n");
