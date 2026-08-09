@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("history date filters match only the log date suffix", async (t) => {
+test("read-message-history filters dates and preserves pending indentation", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-history-"),
     );
@@ -68,4 +68,29 @@ test("history date filters match only the log date suffix", async (t) => {
     assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
+
+    const pendingDir = path.join(messagesDir, "pending");
+    fs.writeFileSync(
+        path.join(pendingDir, "222222222222222222.txt"),
+        [
+            "Author: user#0001",
+            "Channel: #general",
+            "Timestamp: 2026-08-01T10:00:00.000Z",
+            "---",
+            "Example:",
+            "    const answer = 42;",
+        ].join("\n"),
+        "utf8",
+    );
+
+    const pendingResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { type: "pending" },
+    });
+    const pendingText = pendingResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof pendingText, "string");
+    assert.match(pendingText, /\n    const answer = 42;/);
 });
