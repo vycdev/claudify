@@ -157,6 +157,13 @@ test("cooldown stays within Node's supported timer range", () => {
     );
 });
 
+test("required role IDs ignore surrounding configuration whitespace", () => {
+    assert.deepEqual(
+        readConfigValues(["REQUIRED_ROLE_ID"], [" 123456789012345678 "]),
+        ["123456789012345678"],
+    );
+});
+
 test("bot effort accepts documented values and normalizes casing", () => {
     for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
         assert.equal(readBotEffort(effort), effort);
