@@ -77,6 +77,11 @@ test("runs a private login session and verifies its final status", async (t) => 
         /another allowed user/,
     );
     await assert.rejects(
+        () => manager.submitCode("owner", "code\u001b[2J"),
+        /code is not valid/,
+    );
+    assert.equal(manager.hasActiveLogin(), true);
+    await assert.rejects(
         () => manager.submitCode("owner", "invalid-code"),
         /rejected.*try again/,
     );

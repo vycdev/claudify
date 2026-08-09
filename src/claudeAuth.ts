@@ -322,7 +322,7 @@ export class ClaudeAuthManager {
         if (
             normalizedCode.length === 0 ||
             normalizedCode.length > 4096 ||
-            /[\r\n\u0000]/.test(normalizedCode)
+            /\p{Cc}/u.test(normalizedCode)
         ) {
             throw new Error("The authentication code is not valid.");
         }
