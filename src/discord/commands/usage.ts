@@ -53,6 +53,81 @@ const EMPTY_TOTALS: UsageTotals = {
     totalCost: 0,
 };
 
+const DEFAULT_USAGE_TIMEOUT_MS = 120_000;
+const FORCE_KILL_GRACE_MS = 1_000;
+
+export interface UsageCommandOptions {
+    command?: string;
+    timeoutMs?: number;
+}
+
+export function runUsageCommand(
+    args: string[],
+    options: UsageCommandOptions = {},
+): Promise<{ stdout: string; stderr: string }> {
+    const command = options.command || "npx";
+    const timeoutMs = options.timeoutMs ?? DEFAULT_USAGE_TIMEOUT_MS;
+
+    return new Promise((resolve, reject) => {
+        const proc = spawn(command, args, {
+            env: { ...process.env },
+        });
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
+        let forceKillTimeout: NodeJS.Timeout | undefined;
+
+        const clearForceKillTimeout = (): void => {
+            if (forceKillTimeout) {
+                clearTimeout(forceKillTimeout);
+                forceKillTimeout = undefined;
+            }
+        };
+
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            proc.kill();
+            forceKillTimeout = setTimeout(() => {
+                forceKillTimeout = undefined;
+                if (proc.exitCode !== null || proc.signalCode !== null) return;
+                try {
+                    proc.kill("SIGKILL");
+                } catch {
+                    // Process termination is best-effort.
+                }
+            }, FORCE_KILL_GRACE_MS);
+            forceKillTimeout.unref();
+            reject(new Error(`ccusage timed out after ${timeoutMs} milliseconds`));
+        }, timeoutMs);
+
+        proc.stdout.on("data", (data) => {
+            stdout += data.toString();
+        });
+        proc.stderr.on("data", (data) => {
+            stderr += data.toString();
+        });
+        proc.on("error", (error) => {
+            clearTimeout(timeout);
+            clearForceKillTimeout();
+            if (settled) return;
+            settled = true;
+            reject(error);
+        });
+        proc.on("close", (code) => {
+            clearTimeout(timeout);
+            clearForceKillTimeout();
+            if (settled) return;
+            settled = true;
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(new Error(stderr || `ccusage exited with code ${code}`));
+            }
+        });
+    });
+}
+
 function formatCompactUtcDate(date: Date): string {
     return date.toISOString().slice(0, 10).replace(/-/g, "");
 }
@@ -289,19 +364,7 @@ export async function handleUsage(msg: Message): Promise<void> {
     await (msg.channel as TextChannel).sendTyping();
 
     try {
-        const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-            const proc = spawn("npx", ccArgs, {
-                env: { ...process.env },
-                shell: true,
-            });
-            let stdout = "";
-            let stderr = "";
-            proc.stdout.on("data", (d) => (stdout += d.toString()));
-            proc.stderr.on("data", (d) => (stderr += d.toString()));
-            proc.on("close", (code) =>
-                code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr || `exit ${code}`)),
-            );
-        });
+        const { stdout } = await runUsageCommand(ccArgs);
 
         const data = JSON.parse(stdout);
         const embeds: EmbedBuilder[] = [];
