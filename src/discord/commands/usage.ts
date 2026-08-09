@@ -130,7 +130,10 @@ export function createUsageRequest(subcommand: string, now = new Date()): UsageR
             };
         case "blocks":
             return {
-                ccArgs: ["ccusage@latest", "claude", "blocks", "--json", "--since", today],
+                ccArgs: [
+                    "ccusage@latest", "claude", "blocks", "--json", "--since", today,
+                    "--timezone", "UTC",
+                ],
                 title: "⏱️ Billing Windows (Today)",
                 embedColor: 0xfee75c,
             };
@@ -165,6 +168,15 @@ const modelEmoji = (name: string) => {
 const shortModel = (name: string) => name
     .replace("claude-", "")
     .replace(/-\d{8}$/, "");
+
+export function formatUsageBlockTime(date: Date): string {
+    return `${date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "UTC",
+    })} UTC`;
+}
 
 function sumUsageTotals(entries: CurrentPeriodEntry[]): UsageTotals {
     return entries.reduce<UsageTotals>((totals, entry) => ({
@@ -319,8 +331,8 @@ export async function handleUsage(msg: Message): Promise<void> {
             for (const block of blocks) {
                 const start = new Date(block.startTime);
                 const end = new Date(block.endTime);
-                const startStr = start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-                const endStr = end.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+                const startStr = formatUsageBlockTime(start);
+                const endStr = formatUsageBlockTime(end);
 
                 const embed = new EmbedBuilder()
                     .setTitle(`${title}`)
