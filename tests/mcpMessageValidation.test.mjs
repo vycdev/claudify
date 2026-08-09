@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("MCP send-message enforces Discord's content length limits", async (t) => {
+test("MCP send-message enforces Discord's content limits", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-message-validation-"),
     );
@@ -25,6 +25,14 @@ test("MCP send-message enforces Discord's content length limits", async (t) => {
         () => SendMessageSchema.parse({ channel: "general", message: "" }),
         /at least 1 character/,
     );
+    for (const message of [" ", "\t\n"]) {
+        assert.throws(
+            () => SendMessageSchema.parse({ channel: "general", message }),
+            /at least one non-whitespace character/,
+        );
+    }
+    const paddedInput = { channel: "general", message: " \tHello 😀\n" };
+    assert.deepEqual(SendMessageSchema.parse(paddedInput), paddedInput);
     for (const message of [
         "x".repeat(DISCORD_MESSAGE_MAX_CHARS + 1),
         "😀".repeat(DISCORD_MESSAGE_MAX_CHARS + 1),
@@ -49,11 +57,27 @@ test("MCP send-message enforces Discord's content length limits", async (t) => {
     const sendMessageTool = tools.find(({ name }) => name === "send-message");
     assert.deepEqual(sendMessageTool.inputSchema.properties.message, {
         type: "string",
-        description: "Message content to send",
+        description:
+            "Message content to send; must contain at least one non-whitespace character",
         minLength: 1,
         maxLength: DISCORD_MESSAGE_MAX_CHARS,
+        pattern: "\\S",
     });
 
+    await assert.rejects(
+        () =>
+            callToolHandler(
+                {
+                    method: "tools/call",
+                    params: {
+                        name: "send-message",
+                        arguments: { channel: "general", message: " \t\n" },
+                    },
+                },
+                {},
+            ),
+        /Invalid arguments: message: String must contain at least one non-whitespace character/,
+    );
     await assert.rejects(
         () =>
             callToolHandler(
