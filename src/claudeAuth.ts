@@ -402,6 +402,19 @@ export class ClaudeAuthManager {
 
     cancelLogin(ownerId: string): void {
         const session = this.requireOwnedSession(ownerId);
+        const cancellationError = new Error(
+            "Claude authentication session was cancelled.",
+        );
+        if (!session.urlResolved) {
+            session.rejectUrl(cancellationError);
+        }
+        const attempt = session.codeAttempt;
+        if (attempt) {
+            session.codeAttempt = undefined;
+            session.codeSubmitted = false;
+            attempt.reject(cancellationError);
+        }
+        session.resolveCompletion({ code: null, timedOut: false });
         this.finishSession(session);
         this.terminateSession(session);
     }
