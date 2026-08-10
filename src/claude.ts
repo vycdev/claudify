@@ -58,6 +58,7 @@ function spawnClaude(
         const { workload, model, effort } = options;
         const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(process.env)) {
+            if (key.toUpperCase() === "CLAUDECODE") continue;
             if (value !== undefined) env[key] = value;
         }
         delete env.MCP_SERVER_NAME;
