@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserve URL-only embeds returned by the MCP `fetch-messages` tool.
 - Reject impossible calendar dates in MCP saved-history filters.
 - Fetch Discord messages linked from guild thread and announcement channels.
 - Reject `fetch-messages` links that use insecure or non-Discord origins.

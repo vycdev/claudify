@@ -498,7 +498,10 @@ export function createMcpServer(): Server {
                                         description: e.description,
                                         url: e.url,
                                     }))
-                                    .filter((e) => e.title || e.description);
+                                    .filter(
+                                        (e) =>
+                                            e.title || e.description || e.url,
+                                    );
                             }
                             results.push(entry);
                         } catch (err: any) {
