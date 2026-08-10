@@ -47,9 +47,15 @@ if (action === "login") {
         }
         setInterval(() => {}, 1_000);
     }
-    process.stdout.write(
+    const emitLoginUrl = () => process.stdout.write(
         `\u001b]8;;${loginUrl}\u0007${loginUrl}\u001b]8;;\u0007\n`,
     );
+    const delayMs = Number(process.env.CLAUDIFY_AUTH_TEST_DELAY_URL_MS || 0);
+    if (delayMs > 0) {
+        setTimeout(emitLoginUrl, delayMs);
+    } else {
+        emitLoginUrl();
+    }
     if (process.env.CLAUDIFY_AUTH_TEST_CLOSE_STDIN === "1") {
         process.stdin.destroy();
         setTimeout(() => process.exit(1), 100);

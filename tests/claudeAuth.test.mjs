@@ -151,6 +151,33 @@ test("runs a private login session and verifies its final status", async (t) => 
     assert.equal(closedInputManager.hasActiveLogin(), false);
 });
 
+test("cancelling before the login URL rejects the pending login", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
+    const markerPath = path.join(tempDir, "authenticated");
+    const fakeCliPath = path.join(tempDir, "fake-claude.mjs");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeAuth.mjs");
+    fs.copyFileSync(fixturePath, fakeCliPath);
+    t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+    const manager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        loginTimeoutMs: 2_000,
+        env: {
+            ...process.env,
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_DELAY_URL_MS: "1_000",
+        },
+    });
+
+    const login = manager.startLogin("owner");
+    assert.equal(manager.hasActiveLogin(), true);
+    manager.cancelLogin("owner");
+
+    await assert.rejects(login, /cancelled/);
+    assert.equal(manager.hasActiveLogin(), false);
+});
+
 test("force-kills a timed-out login process that ignores SIGTERM", async (t) => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
     const markerPath = path.join(tempDir, "authenticated");
