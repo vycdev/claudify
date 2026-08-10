@@ -603,6 +603,17 @@ export function createMcpServer(): Server {
                             content: msg.content,
                             timestamp: msg.createdAt.toISOString(),
                         };
+                        if (msg.attachments.size > 0) {
+                            entry.attachments = Array.from(msg.attachments.values()).map(
+                                (att) => ({
+                                    id: att.id,
+                                    name: att.name,
+                                    url: att.url,
+                                    contentType: att.contentType,
+                                    size: att.size,
+                                }),
+                            );
+                        }
                         const images: string[] = [];
                         for (const att of msg.attachments.values()) {
                             if (att.contentType?.startsWith("image/")) {
