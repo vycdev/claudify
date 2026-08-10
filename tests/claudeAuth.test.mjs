@@ -63,6 +63,23 @@ test("extracts a trusted OAuth URL from terminal hyperlink output", () => {
     );
 });
 
+test("removes unmatched prose delimiters from Claude login URLs", () => {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?code=test";
+
+    for (const output of [
+        `Open (${loginUrl}).`,
+        `Open [${loginUrl}]`,
+        `Open {${loginUrl}}`,
+    ]) {
+        assert.equal(extractClaudeLoginUrl(output), loginUrl);
+    }
+});
+
+test("preserves balanced delimiters within Claude login URLs", () => {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?state=a(b)";
+    assert.equal(extractClaudeLoginUrl(loginUrl), loginUrl);
+});
+
 test("runs a private login session and verifies its final status", async (t) => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
     const markerPath = path.join(tempDir, "authenticated");
