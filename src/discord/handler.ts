@@ -1,4 +1,4 @@
-import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
+import { Message, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
 import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
 import { client } from "./client.js";
 import { normalizeBotMentions } from "./mentions.js";
@@ -17,6 +17,7 @@ import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
+import { BotMessageChannel, isBotMessageChannel } from "./channel.js";
 
 // Consistent display name for a user — used in logs, prompts, and history
 function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
@@ -61,7 +62,7 @@ function formatMessageForContext(msg: Message): string {
     return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
 }
 
-async function fetchChannelMessages(channel: TextChannel, limit: number): Promise<Message[]> {
+async function fetchChannelMessages(channel: BotMessageChannel, limit: number): Promise<Message[]> {
     const collected: Message[] = [];
     let before: string | undefined;
 
@@ -87,7 +88,7 @@ async function fetchChannelMessages(channel: TextChannel, limit: number): Promis
 }
 
 async function buildLiveMessagesContext(
-    channel: TextChannel,
+    channel: BotMessageChannel,
     question: string,
 ): Promise<{ text: string; messages: Message[] }> {
     const limit = isDeepHistoryRequest(question)
@@ -114,7 +115,7 @@ function logIncomingMessage(msg: Message): void {
         authorLabel(msg.author),
         content,
         msg.channel.id,
-        msg.channel instanceof TextChannel ? msg.channel.name : "unknown",
+        isBotMessageChannel(msg.channel) ? msg.channel.name : "unknown",
         msg.createdAt,
     );
 }
@@ -205,7 +206,7 @@ export function registerHandler() {
         try {
             if (msg.author.bot) return;
             if (await handleAuthTextMessage(msg)) return;
-            if (!(msg.channel instanceof TextChannel)) return;
+            if (!isBotMessageChannel(msg.channel)) return;
 
             logIncomingMessage(msg);
 
@@ -307,7 +308,7 @@ export function registerHandler() {
             if (user.bot) return;
 
             const msg = reaction.message as Message;
-            if (!(msg.channel instanceof TextChannel)) return;
+            if (!isBotMessageChannel(msg.channel)) return;
             if (!msg.guild) return;
 
             // Don't respond to reactions on bot's own messages
@@ -372,7 +373,7 @@ export function registerHandler() {
 
             await msg.channel.sendTyping();
             const typingInterval = setInterval(() => {
-                (msg.channel as TextChannel).sendTyping().catch(() => {});
+                (msg.channel as BotMessageChannel).sendTyping().catch(() => {});
             }, 8000);
 
             let response: string;
@@ -464,7 +465,7 @@ async function processMessage(msg: Message): Promise<void> {
     userProcessing.add(userId);
 
     try {
-        if (!(msg.channel instanceof TextChannel)) return;
+        if (!isBotMessageChannel(msg.channel)) return;
 
         const askQuestion = parseAskCommand(msg.content);
         console.error(
@@ -572,14 +573,14 @@ async function processMessage(msg: Message): Promise<void> {
         // Show typing indicator
         await msg.channel.sendTyping();
         const typingInterval = setInterval(() => {
-            (msg.channel as TextChannel).sendTyping().catch(() => {});
+            (msg.channel as BotMessageChannel).sendTyping().catch(() => {});
         }, 8000);
 
         // Fetch live channel messages for context (reused later for participant collection)
         let liveMessages = "";
         let recentMessages: Message[] = [];
         try {
-            const liveContext = await buildLiveMessagesContext(msg.channel as TextChannel, question);
+            const liveContext = await buildLiveMessagesContext(msg.channel as BotMessageChannel, question);
             recentMessages = liveContext.messages;
             liveMessages = liveContext.text;
             console.error(`[Bot] Added ${recentMessages.length} live messages to context`);
@@ -634,10 +635,10 @@ async function processMessage(msg: Message): Promise<void> {
                 try {
                     await msg.reply(text);
                 } catch {
-                    await (msg.channel as TextChannel).send(text);
+                    await (msg.channel as BotMessageChannel).send(text);
                 }
             } else {
-                await (msg.channel as TextChannel).send(text);
+                await (msg.channel as BotMessageChannel).send(text);
             }
         };
 

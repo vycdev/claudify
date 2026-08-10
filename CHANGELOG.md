@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Route bot message and reaction triggers from Discord threads through the same request handling as regular text channels.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
 - Run Discord-initiated Claude login in a pseudo-terminal so the CLI accepts submitted OAuth codes.
 - Isolate saved history and summaries by Discord channel ID in dedicated storage namespaces so same-named channels do not share automatic context.
