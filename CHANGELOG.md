@@ -22,6 +22,7 @@
 - Keep historical daily and monthly usage embeds within Discord's field limit when many models are present.
 - Keep astral Unicode characters intact when long Discord responses are split across messages.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
+- Reject empty MCP `react-to-message` emoji values before calling Discord.
 - Run Discord-initiated Claude login in a pseudo-terminal so the CLI accepts submitted OAuth codes.
 - Isolate saved history and summaries by Discord channel ID in dedicated storage namespaces so same-named channels do not share automatic context.
 - Reject fractional MCP limits instead of passing them to file slicing or the Discord API.

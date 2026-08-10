@@ -30,7 +30,11 @@ const ReactToMessageSchema = z.object({
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
     messageId: z.string().describe("The Discord message ID to react to"),
-    emoji: z.string().describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
+    emoji: z
+        .string()
+        .trim()
+        .min(1, "Emoji must not be empty")
+        .describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
 });
 
 function isWithinDiscordMessageLimit(message: string): boolean {
@@ -184,6 +188,7 @@ export function createMcpServer(): Server {
                             type: "string",
                             description:
                                 'Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")',
+                            minLength: 1,
                         },
                     },
                     required: ["channel", "messageId", "emoji"],
