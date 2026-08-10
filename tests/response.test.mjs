@@ -21,3 +21,11 @@ test("separates reaction tags from a text response", () => {
         },
     );
 });
+
+test("ignores reaction tags without an emoji", () => {
+    assert.deepEqual(parseClaudeResponse("[REACT: ]"), {
+        reactions: [],
+        text: "",
+        historyContent: "",
+    });
+});
