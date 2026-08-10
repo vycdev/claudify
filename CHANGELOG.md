@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Strip inherited `CLAUDECODE` markers from Claude CLI subprocesses so Claudify can launch them from Claude Code-managed environments.
 - Reject required prompt values that contain no non-whitespace content.
 - Match legacy MCP history channel filters exactly instead of including similarly named channels.
 - Preserve URL-only embeds returned by the MCP `fetch-messages` tool.
