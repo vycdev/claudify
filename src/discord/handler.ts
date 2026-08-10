@@ -535,6 +535,8 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
+        // A bare bot mention is intentionally a valid prompt: Claude should infer
+        // a response from live channel context, with replyContext added for replies.
         const rawQuestion = normalizeBotMentions(
             askQuestion ?? msg.content,
             client.user!.id,
