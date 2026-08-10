@@ -127,8 +127,10 @@ When used as an MCP server (e.g., with Claude Desktop or Claude Code), these too
 | Tool | Description |
 |------|-------------|
 | `send-message` | Send a message to a Discord channel |
+| `react-to-message` | React to a message with a Unicode or custom guild emoji |
 | `read-messages` | Read recent messages from a channel via Discord API |
 | `read-message-history` | Read saved message history/pending files from disk |
+| `fetch-messages` | Fetch specific messages by Discord message links |
 
 ### MCP Configuration
 

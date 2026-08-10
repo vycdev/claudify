@@ -72,3 +72,46 @@ test("MCP send-message enforces Discord's content length limits", async (t) => {
         /Invalid arguments: message: String must contain at most 2000 character/,
     );
 });
+
+test("MCP react-to-message rejects empty emoji", async (t) => {
+    const { createMcpServer } = await import("../build/mcp/server.js");
+    const server = createMcpServer();
+    t.after(() => server.close().catch(() => {}));
+    const listToolsHandler = server._requestHandlers.get("tools/list");
+    const callToolHandler = server._requestHandlers.get("tools/call");
+    assert.ok(listToolsHandler);
+    assert.ok(callToolHandler);
+
+    const { tools } = await listToolsHandler(
+        { method: "tools/list", params: {} },
+        {},
+    );
+    const reactToMessageTool = tools.find(
+        ({ name }) => name === "react-to-message",
+    );
+    assert.equal(
+        reactToMessageTool.inputSchema.properties.emoji.minLength,
+        1,
+    );
+
+    for (const emoji of ["", " \t\n "]) {
+        await assert.rejects(
+            () =>
+                callToolHandler(
+                    {
+                        method: "tools/call",
+                        params: {
+                            name: "react-to-message",
+                            arguments: {
+                                channel: "general",
+                                messageId: "123",
+                                emoji,
+                            },
+                        },
+                    },
+                    {},
+                ),
+            /Invalid arguments: emoji: Emoji must not be empty/,
+        );
+    }
+});
