@@ -35,3 +35,26 @@ test("bounds live context while retaining the newest messages", () => {
     assert.match(context, /newest live message/);
     assert.match(context, /omitted_oldest=2/);
 });
+
+test("formats each live message only once while applying the budget", () => {
+    let contentReads = 0;
+    const messages = Array.from({ length: 500 }, (_, index) => {
+        const value = message(
+            String(index),
+            "",
+            new Date(1_700_000_000_000 + index * 1_000).toISOString(),
+        );
+        Object.defineProperty(value, "content", {
+            get() {
+                contentReads++;
+                return "x".repeat(2_000);
+            },
+        });
+        return value;
+    });
+
+    const context = formatLiveMessagesContext(messages, 500, 140_000);
+
+    assert.ok(context.length <= 140_000);
+    assert.equal(contentReads, messages.length);
+});

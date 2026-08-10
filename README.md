@@ -128,8 +128,10 @@ When used as an MCP server (e.g., with Claude Desktop or Claude Code), these too
 | Tool | Description |
 |------|-------------|
 | `send-message` | Send a message to a Discord channel |
+| `react-to-message` | React to a message with a Unicode or custom guild emoji |
 | `read-messages` | Read recent messages from a channel via Discord API |
 | `read-message-history` | Read saved message history/pending files from disk |
+| `fetch-messages` | Fetch specific messages by Discord message links |
 
 ### MCP Configuration
 
@@ -141,7 +143,7 @@ same network environment to connect to its Streamable HTTP endpoint:
   "mcpServers": {
     "discord": {
       "type": "http",
-      "url": "http://localhost:3100/mcp"
+      "url": "http://127.0.0.1:3100/mcp"
     }
   }
 }
@@ -171,7 +173,7 @@ npx @modelcontextprotocol/inspector
 ```
 
 In the Inspector, select **Streamable HTTP** and connect to
-`http://localhost:3100/mcp` (or your configured `MCP_PORT`).
+`http://127.0.0.1:3100/mcp` (or your configured `MCP_PORT`).
 
 ## Security
 
