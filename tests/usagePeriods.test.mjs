@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
     buildCurrentPeriodUsageEmbed,
+    buildHistoricalUsageEmbed,
     createUsageRequest,
     getCurrentUsagePeriod,
 } from "../build/discord/commands/usage.js";
@@ -191,6 +192,31 @@ test("keeps current-period model fields within Discord's embed limit", () => {
             modelBreakdowns,
         }],
     }, getCurrentUsagePeriod("week", fixedNow)).toJSON();
+
+    assert.equal(embed.fields.length, 25);
+    assert.ok(embed.fields.some((field) =>
+        field.name === "🤖 Additional Models" && field.value.startsWith("2 more model(s)")
+    ));
+});
+
+test("keeps historical model fields within Discord's embed limit", () => {
+    const modelBreakdowns = Array.from({ length: 25 }, (_, index) => ({
+        modelName: `claude-model-${index}`,
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 1,
+    }));
+    const embed = buildHistoricalUsageEmbed("📅 Daily Usage", 0x57f287, "2026-08-05", {
+        inputTokens: 25,
+        outputTokens: 25,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 50,
+        totalCost: 25,
+        modelBreakdowns,
+    }).toJSON();
 
     assert.equal(embed.fields.length, 25);
     assert.ok(embed.fields.some((field) =>

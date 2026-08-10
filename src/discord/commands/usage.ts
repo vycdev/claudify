@@ -38,6 +38,10 @@ interface CurrentPeriodEntry extends UsageTotals {
     modelBreakdowns?: UsageModelBreakdown[];
 }
 
+interface HistoricalUsageEntry extends UsageTotals {
+    modelBreakdowns?: UsageModelBreakdown[];
+}
+
 export interface CurrentPeriodUsageData {
     weekly?: CurrentPeriodEntry[];
     monthly?: CurrentPeriodEntry[];
@@ -52,6 +56,8 @@ const EMPTY_TOTALS: UsageTotals = {
     totalTokens: 0,
     totalCost: 0,
 };
+
+const DISCORD_MAX_EMBED_FIELDS = 25;
 
 function formatCompactUtcDate(date: Date): string {
     return date.toISOString().slice(0, 10).replace(/-/g, "");
@@ -198,6 +204,69 @@ function aggregateModelBreakdowns(entries: CurrentPeriodEntry[]): UsageModelBrea
     return [...models.values()].sort((a, b) => b.cost - a.cost);
 }
 
+function addModelBreakdownFields(
+    embed: EmbedBuilder,
+    modelBreakdowns: UsageModelBreakdown[],
+    totalCost: number,
+): void {
+    const existingFieldCount = embed.toJSON().fields?.length || 0;
+    const availableFields = Math.max(0, DISCORD_MAX_EMBED_FIELDS - existingFieldCount);
+    const visibleModelLimit = modelBreakdowns.length > availableFields
+        ? Math.max(0, availableFields - 1)
+        : availableFields;
+    const visibleModels = modelBreakdowns.slice(0, visibleModelLimit);
+    const maxCost = Math.max(0, ...visibleModels.map((model) => model.cost));
+
+    for (const model of visibleModels) {
+        const percentage = totalCost > 0
+            ? ((model.cost / totalCost) * 100).toFixed(1)
+            : "0";
+        let detail = `\`${progressBar(model.cost, maxCost, 12)}\` **${formatCost(model.cost)}** (${percentage}%)\n`;
+        detail += `In: ${formatTokens(model.inputTokens)} · Out: ${formatTokens(model.outputTokens)}`;
+        if (model.cacheCreationTokens > 0 || model.cacheReadTokens > 0) {
+            detail += `\nCache W: ${formatTokens(model.cacheCreationTokens)} · Cache R: ${formatTokens(model.cacheReadTokens)}`;
+        }
+        embed.addFields({
+            name: `${modelEmoji(model.modelName)} ${shortModel(model.modelName)}`,
+            value: detail,
+            inline: false,
+        });
+    }
+
+    if (modelBreakdowns.length > visibleModels.length && availableFields > 0) {
+        embed.addFields({
+            name: "🤖 Additional Models",
+            value: `${modelBreakdowns.length - visibleModels.length} more model(s) omitted to fit Discord's embed limit.`,
+            inline: false,
+        });
+    }
+}
+
+export function buildHistoricalUsageEmbed(
+    title: string,
+    embedColor: number,
+    label: string,
+    entry: HistoricalUsageEntry,
+): EmbedBuilder {
+    const embed = new EmbedBuilder()
+        .setTitle(`${title} — ${label}`)
+        .setColor(embedColor)
+        .setDescription(
+            `**Total Cost: ${formatCost(entry.totalCost)}** · ${formatTokens(entry.totalTokens)} tokens`,
+        );
+
+    let tokenDetail = "```\n";
+    tokenDetail += `Input:        ${formatTokens(entry.inputTokens).padStart(10)}\n`;
+    tokenDetail += `Output:       ${formatTokens(entry.outputTokens).padStart(10)}\n`;
+    tokenDetail += `Cache write:  ${formatTokens(entry.cacheCreationTokens).padStart(10)}\n`;
+    tokenDetail += `Cache read:   ${formatTokens(entry.cacheReadTokens).padStart(10)}\n`;
+    tokenDetail += "```";
+    embed.addFields({ name: "🔢 Token Breakdown", value: tokenDetail, inline: false });
+
+    addModelBreakdownFields(embed, entry.modelBreakdowns || [], entry.totalCost);
+    return embed.setTimestamp();
+}
+
 export function buildCurrentPeriodUsageEmbed(
     kind: CurrentUsagePeriodKind,
     data: CurrentPeriodUsageData,
@@ -230,32 +299,10 @@ export function buildCurrentPeriodUsageEmbed(
             },
         );
 
-    const visibleModels = modelBreakdowns.slice(0, 22);
-    const maxCost = Math.max(0, ...visibleModels.map((model) => model.cost));
-    for (const model of visibleModels) {
-        const percentage = totals.totalCost > 0
-            ? ((model.cost / totals.totalCost) * 100).toFixed(1)
-            : "0";
-        let detail = `\`${progressBar(model.cost, maxCost, 12)}\` **${formatCost(model.cost)}** (${percentage}%)\n`;
-        detail += `In: ${formatTokens(model.inputTokens)} · Out: ${formatTokens(model.outputTokens)}`;
-        if (model.cacheCreationTokens > 0 || model.cacheReadTokens > 0) {
-            detail += `\nCache W: ${formatTokens(model.cacheCreationTokens)} · Cache R: ${formatTokens(model.cacheReadTokens)}`;
-        }
-        embed.addFields({
-            name: `${modelEmoji(model.modelName)} ${shortModel(model.modelName)}`,
-            value: detail,
-            inline: false,
-        });
-    }
-
     if (modelBreakdowns.length === 0) {
         embed.addFields({ name: "🤖 Models", value: "No model usage in this period.", inline: false });
-    } else if (modelBreakdowns.length > visibleModels.length) {
-        embed.addFields({
-            name: "🤖 Additional Models",
-            value: `${modelBreakdowns.length - visibleModels.length} more model(s) omitted to fit Discord's embed limit.`,
-            inline: false,
-        });
+    } else {
+        addModelBreakdownFields(embed, modelBreakdowns, totals.totalCost);
     }
 
     return embed.setTimestamp();
@@ -384,40 +431,7 @@ export async function handleUsage(msg: Message): Promise<void> {
             }
 
             for (const entry of entries) {
-                const embed = new EmbedBuilder()
-                    .setTitle(`${title} — ${entry.month}`)
-                    .setColor(embedColor);
-
-                embed.setDescription(
-                    `**Total Cost: ${formatCost(entry.totalCost)}** · ${formatTokens(entry.totalTokens)} tokens`
-                );
-
-                let tokenDetail = "```\n";
-                tokenDetail += `Input:        ${formatTokens(entry.inputTokens).padStart(10)}\n`;
-                tokenDetail += `Output:       ${formatTokens(entry.outputTokens).padStart(10)}\n`;
-                tokenDetail += `Cache write:  ${formatTokens(entry.cacheCreationTokens).padStart(10)}\n`;
-                tokenDetail += `Cache read:   ${formatTokens(entry.cacheReadTokens).padStart(10)}\n`;
-                tokenDetail += "```";
-                embed.addFields({ name: "🔢 Token Breakdown", value: tokenDetail, inline: false });
-
-                const maxCost = Math.max(...(entry.modelBreakdowns || []).map((m: any) => m.cost));
-                for (const m of entry.modelBreakdowns || []) {
-                    const pct = entry.totalCost > 0 ? ((m.cost / entry.totalCost) * 100).toFixed(1) : "0";
-                    const bar = progressBar(m.cost, maxCost, 12);
-                    let detail = `\`${bar}\` **${formatCost(m.cost)}** (${pct}%)\n`;
-                    detail += `In: ${formatTokens(m.inputTokens)} · Out: ${formatTokens(m.outputTokens)}`;
-                    if (m.cacheCreationTokens > 0 || m.cacheReadTokens > 0) {
-                        detail += `\nCache W: ${formatTokens(m.cacheCreationTokens)} · Cache R: ${formatTokens(m.cacheReadTokens)}`;
-                    }
-                    embed.addFields({
-                        name: `${modelEmoji(m.modelName)} ${shortModel(m.modelName)}`,
-                        value: detail,
-                        inline: false,
-                    });
-                }
-
-                embed.setTimestamp();
-                embeds.push(embed);
+                embeds.push(buildHistoricalUsageEmbed(title, embedColor, entry.month, entry));
             }
         } else {
             const entries = data.daily || [];
@@ -431,40 +445,7 @@ export async function handleUsage(msg: Message): Promise<void> {
             }
 
             for (const entry of entries) {
-                const embed = new EmbedBuilder()
-                    .setTitle(`${title} — ${entry.date}`)
-                    .setColor(embedColor);
-
-                embed.setDescription(
-                    `**Total Cost: ${formatCost(entry.totalCost)}** · ${formatTokens(entry.totalTokens)} tokens`
-                );
-
-                let tokenDetail = "```\n";
-                tokenDetail += `Input:        ${formatTokens(entry.inputTokens).padStart(10)}\n`;
-                tokenDetail += `Output:       ${formatTokens(entry.outputTokens).padStart(10)}\n`;
-                tokenDetail += `Cache write:  ${formatTokens(entry.cacheCreationTokens).padStart(10)}\n`;
-                tokenDetail += `Cache read:   ${formatTokens(entry.cacheReadTokens).padStart(10)}\n`;
-                tokenDetail += "```";
-                embed.addFields({ name: "🔢 Token Breakdown", value: tokenDetail, inline: false });
-
-                const maxCost = Math.max(...(entry.modelBreakdowns || []).map((m: any) => m.cost));
-                for (const m of entry.modelBreakdowns || []) {
-                    const pct = entry.totalCost > 0 ? ((m.cost / entry.totalCost) * 100).toFixed(1) : "0";
-                    const bar = progressBar(m.cost, maxCost, 12);
-                    let detail = `\`${bar}\` **${formatCost(m.cost)}** (${pct}%)\n`;
-                    detail += `In: ${formatTokens(m.inputTokens)} · Out: ${formatTokens(m.outputTokens)}`;
-                    if (m.cacheCreationTokens > 0 || m.cacheReadTokens > 0) {
-                        detail += `\nCache W: ${formatTokens(m.cacheCreationTokens)} · Cache R: ${formatTokens(m.cacheReadTokens)}`;
-                    }
-                    embed.addFields({
-                        name: `${modelEmoji(m.modelName)} ${shortModel(m.modelName)}`,
-                        value: detail,
-                        inline: false,
-                    });
-                }
-
-                embed.setTimestamp();
-                embeds.push(embed);
+                embeds.push(buildHistoricalUsageEmbed(title, embedColor, entry.date, entry));
             }
         }
 
