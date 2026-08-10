@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("MCP history filters matching files and preserves pending indentation", async (t) => {
+test("MCP history filters matching regular files and preserves pending indentation", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-history-"),
     );
@@ -49,6 +49,38 @@ test("MCP history filters matching files and preserves pending indentation", asy
         "[12:00:00] user: namespaced entry\n",
         "utf8",
     );
+    const outsideFile = path.join(
+        os.tmpdir(),
+        `claudify-history-secret-${process.pid}-${Date.now()}.txt`,
+    );
+    t.after(() => fs.rmSync(outsideFile, { force: true }));
+    fs.writeFileSync(outsideFile, "symlinked secret\n", "utf8");
+    fs.symlinkSync(
+        outsideFile,
+        path.join(historyDir, "linked_2026-08-01.txt"),
+    );
+    fs.mkdirSync(path.join(historyDir, "directory_2026-08-01.txt"));
+    fs.symlinkSync(
+        outsideFile,
+        path.join(
+            historyV2Dir,
+            "v2_222222222222222222__linked_2026-08-01.txt",
+        ),
+    );
+    fs.mkdirSync(
+        path.join(
+            historyV2Dir,
+            "v2_333333333333333333__directory_2026-08-01.txt",
+        ),
+    );
+    const pendingDir = path.join(messagesDir, "pending");
+    fs.writeFileSync(
+        path.join(pendingDir, "regular.txt"),
+        "ordinary pending entry\n",
+        "utf8",
+    );
+    fs.symlinkSync(outsideFile, path.join(pendingDir, "linked.txt"));
+    fs.mkdirSync(path.join(pendingDir, "directory.txt"));
 
     const [clientTransport, serverTransport] =
         InMemoryTransport.createLinkedPair();
@@ -78,6 +110,24 @@ test("MCP history filters matching files and preserves pending indentation", asy
     assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
+    assert.doesNotMatch(text, /linked_2026-08-01\.txt/);
+    assert.doesNotMatch(text, /directory_2026-08-01\.txt/);
+    assert.doesNotMatch(text, /symlinked secret/);
+
+    const pendingResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { type: "pending" },
+    });
+    const pendingText = pendingResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof pendingText, "string");
+    assert.match(pendingText, /regular\.txt/);
+    assert.match(pendingText, /ordinary pending entry/);
+    assert.doesNotMatch(pendingText, /linked\.txt/);
+    assert.doesNotMatch(pendingText, /directory\.txt/);
+    assert.doesNotMatch(pendingText, /symlinked secret/);
 
     savePending({
         id: "222222222222222222",
