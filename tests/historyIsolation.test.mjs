@@ -101,6 +101,32 @@ test("same-named channels use isolated history and summaries", async () => {
     );
 });
 
+test("history search finds older messages using Unicode terms", () => {
+    const channelId = "444444444444444444";
+    const channelName = "international";
+    const logPath = getDailyLogPath(channelId, new Date(), channelName);
+    const lines = [
+        "[09:00:00] user: 東京で決定した内容",
+        ...Array.from(
+            { length: 80 },
+            (_, index) => {
+                const minute = String(Math.floor(index / 60)).padStart(2, "0");
+                const second = String(index % 60).padStart(2, "0");
+                return `[10:${minute}:${second}] user: filler ${index}`;
+            },
+        ),
+    ];
+    fs.writeFileSync(logPath, `${lines.join("\n")}\n`, "utf8");
+
+    const history = loadRecentHistory(
+        channelId,
+        "What did we decide about 東京?",
+        channelName,
+    );
+    assert.match(history, /Today relevant snippets/);
+    assert.match(history, /東京で決定した内容/);
+});
+
 test("automatic history loading does not fall back to legacy name-only files", () => {
     const date = new Date().toISOString().split("T")[0];
     const legacyPath = path.join(messagesDir, "history", `general_${date}.txt`);

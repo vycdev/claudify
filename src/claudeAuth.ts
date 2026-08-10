@@ -127,11 +127,43 @@ export function parseClaudeAuthStatus(
     return { loggedIn: exitCode === 0 };
 }
 
+function trimTrailingUrlPunctuation(url: string): string {
+    let trimmed = url;
+    const openingDelimiter: Record<string, string> = {
+        ")": "(",
+        "]": "[",
+        "}": "{",
+    };
+
+    while (trimmed.length > 0) {
+        const lastCharacter = trimmed.at(-1)!;
+        if (".,;".includes(lastCharacter)) {
+            trimmed = trimmed.slice(0, -1);
+            continue;
+        }
+
+        const opening = openingDelimiter[lastCharacter];
+        if (!opening) break;
+
+        const openingCount = [...trimmed].filter(
+            (character) => character === opening,
+        ).length;
+        const closingCount = [...trimmed].filter(
+            (character) => character === lastCharacter,
+        ).length;
+        if (closingCount <= openingCount) break;
+
+        trimmed = trimmed.slice(0, -1);
+    }
+
+    return trimmed;
+}
+
 export function extractClaudeLoginUrl(output: string): string | undefined {
     const urls =
         stripTerminalSequences(output).match(/https:\/\/[^\s<>"']+/g) || [];
     return urls
-        .map((url) => url.replace(/[.,;]+$/, ""))
+        .map(trimTrailingUrlPunctuation)
         .find(isTrustedClaudeLoginUrl);
 }
 
