@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Reject impossible calendar dates in MCP saved-history filters.
 - Fetch Discord messages linked from guild thread and announcement channels.
 - Reject `fetch-messages` links that use insecure or non-Discord origins.
 - Match Unicode search terms when retrieving relevant saved-history snippets.
