@@ -92,4 +92,12 @@ test("history filters match exact dates and legacy channels", async (t) => {
     assert.match(channelText, /namespaced entry/);
     assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
     assert.doesNotMatch(channelText, /similarly named channel entry/);
+
+    await assert.rejects(
+        client.callTool({
+            name: "read-message-history",
+            arguments: { date: "2026-02-30" },
+        }),
+        /Invalid arguments: date: Invalid calendar date/,
+    );
 });
