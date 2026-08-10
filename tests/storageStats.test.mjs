@@ -30,4 +30,9 @@ test("storage statistics ignore symlinked files and directories", async (t) => {
         getStorageDirectorySize(storageDir),
         Buffer.byteLength("inside") + Buffer.byteLength("bin"),
     );
+    assert.equal(countStorageFiles(path.join(storageDir, "linked-directory")), 0);
+    assert.equal(
+        getStorageDirectorySize(path.join(storageDir, "linked-directory")),
+        0,
+    );
 });

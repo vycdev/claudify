@@ -15,6 +15,9 @@ function walkStorageTree(
     onFile: (name: string, filePath: string) => number,
 ): number {
     try {
+        const dirStat = fs.lstatSync(dir);
+        if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) return 0;
+
         return fs.readdirSync(dir, { withFileTypes: true }).reduce(
             (total, entry) => {
                 // Storage directories may be operator-mounted, so do not follow

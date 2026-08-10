@@ -14,7 +14,7 @@ export function writeMcpConfig() {
         mcpServers: {
             discord: {
                 type: "http",
-                url: `http://localhost:${MCP_PORT}/mcp`,
+                url: `http://127.0.0.1:${MCP_PORT}/mcp`,
             },
         },
     };
@@ -88,7 +88,10 @@ export function startMcpHttpServer(): http.Server {
                 await mcpServer.close().catch(() => {});
             }
         } else if (req.method === "GET" || req.method === "DELETE") {
-            res.writeHead(405).end(
+            res.writeHead(405, {
+                Allow: "POST",
+                "Content-Type": "application/json",
+            }).end(
                 JSON.stringify({
                     jsonrpc: "2.0",
                     error: {
@@ -99,7 +102,7 @@ export function startMcpHttpServer(): http.Server {
                 }),
             );
         } else {
-            res.writeHead(405).end();
+            res.writeHead(405, { Allow: "POST" }).end();
         }
     });
 
