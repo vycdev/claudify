@@ -33,16 +33,39 @@ function serializeUpdate<T>(
     });
 }
 
+function readBounded(filePath: string, maxChars: number): string {
+    if (!fs.existsSync(filePath)) return "";
+    const text = fs.readFileSync(filePath, "utf-8");
+    let end = Math.min(text.length, maxChars);
+
+    if (end > 0 && end < text.length) {
+        const precedingCodeUnit = text.charCodeAt(end - 1);
+        const followingCodeUnit = text.charCodeAt(end);
+        if (
+            precedingCodeUnit >= 0xd800 &&
+            precedingCodeUnit <= 0xdbff &&
+            followingCodeUnit >= 0xdc00 &&
+            followingCodeUnit <= 0xdfff
+        ) {
+            end--;
+        }
+    }
+
+    return text.slice(0, end);
+}
+
 export function getUserProfile(userId: string): string {
-    const filePath = path.join(PROFILES_DIR, `${userId}.txt`);
-    if (fs.existsSync(filePath)) return fs.readFileSync(filePath, "utf-8");
-    return "";
+    return readBounded(
+        path.join(PROFILES_DIR, `${userId}.txt`),
+        PROFILE_MAX_CHARS,
+    );
 }
 
 export function getServerMemory(guildId: string): string {
-    const filePath = path.join(PROFILES_DIR, `server_${guildId}.txt`);
-    if (fs.existsSync(filePath)) return fs.readFileSync(filePath, "utf-8");
-    return "";
+    return readBounded(
+        path.join(PROFILES_DIR, `server_${guildId}.txt`),
+        SERVER_MEMORY_MAX_CHARS,
+    );
 }
 
 export async function backgroundProfileUpdate(
