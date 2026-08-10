@@ -37,3 +37,14 @@ test("preserves text and attachment context in reaction-triggered questions", ()
         "[Alice said this, and Bob wants you to respond to it]: Please review [1 attachment(s)]",
     );
 });
+
+test("includes URL-only embeds in reaction-triggered questions", () => {
+    const message = makeMessage({
+        embeds: [{ url: "https://example.com/release" }],
+    });
+
+    assert.equal(
+        buildReactionQuestion("Alice", "Bob", message),
+        "[Alice said this, and Bob wants you to respond to it]: [Embed: https://example.com/release]",
+    );
+});
