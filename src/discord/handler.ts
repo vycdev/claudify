@@ -17,6 +17,7 @@ import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
+import { formatContextTime } from "./context.js";
 
 // Consistent display name for a user — used in logs, prompts, and history
 function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
@@ -35,6 +36,7 @@ function summarizeEmbeds(msg: Message): string {
             const parts: string[] = [];
             if (e.title) parts.push(e.title);
             if (e.description) parts.push(e.description);
+            if (e.url) parts.push(e.url);
             if (e.fields?.length) {
                 parts.push(...e.fields.map((f) => `${f.name}: ${f.value}`));
             }
@@ -55,8 +57,17 @@ function messageContentForMemory(msg: Message): string {
     return content.trim();
 }
 
+export function buildReactionQuestion(
+    msgAuthorLabel: string,
+    userLabel: string,
+    msg: Message,
+): string {
+    const targetContent = messageContentForMemory(msg);
+    return `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${targetContent}`;
+}
+
 function formatMessageForContext(msg: Message): string {
-    const time = msg.createdAt.toTimeString().split(" ")[0];
+    const time = formatContextTime(msg.createdAt);
     const label = authorLabel(msg.author);
     return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
 }
@@ -350,7 +361,7 @@ export function registerHandler() {
             const botName = client.user?.displayName || client.user?.username || "Claudify";
             const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
             const userLabel = authorLabel(user as any);
-            const question = `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${msg.content}`;
+            const question = buildReactionQuestion(msgAuthorLabel, userLabel, msg);
 
             // Fetch live messages for context
             let liveMessages = "";
@@ -409,7 +420,7 @@ export function registerHandler() {
 
             appendToLog(
                 userLabel,
-                `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`,
+                `[🤖 reaction on: ${messageContentForMemory(msg).slice(0, 100)}]`,
                 msg.channel.id,
                 msg.channel.name,
             );
@@ -534,6 +545,8 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
+        // A bare bot mention is intentionally a valid prompt: Claude should infer
+        // a response from live channel context, with replyContext added for replies.
         const rawQuestion = normalizeBotMentions(
             askQuestion ?? msg.content,
             client.user!.id,
