@@ -30,6 +30,11 @@ test("MCP history filters select matching saved files", async (t) => {
         "utf8",
     );
     fs.writeFileSync(
+        path.join(historyDir, "general_chat_2026-08-01.txt"),
+        "[10:30:00] user: similarly named channel entry\n",
+        "utf8",
+    );
+    fs.writeFileSync(
         path.join(historyDir, "release_2026-08-01_2026-08-02.txt"),
         "[11:00:00] user: wrong-day entry\n",
         "utf8",
@@ -125,4 +130,31 @@ test("MCP history filters select matching saved files", async (t) => {
             assert.doesNotMatch(pendingText, /legacy pending entry/);
         }
     }
+
+    const channelResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { channel: "general", date: "2026-08-01" },
+    });
+    const channelText = channelResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof channelText, "string");
+    assert.match(channelText, /general_2026-08-01\.txt/);
+    assert.match(channelText, /expected entry/);
+    assert.match(
+        channelText,
+        /v2\/v2_111111111111111111__general_2026-08-01\.txt/,
+    );
+    assert.match(channelText, /namespaced entry/);
+    assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
+    assert.doesNotMatch(channelText, /similarly named channel entry/);
+
+    await assert.rejects(
+        client.callTool({
+            name: "read-message-history",
+            arguments: { date: "2026-02-30" },
+        }),
+        /Invalid arguments: date: Invalid calendar date/,
+    );
 });

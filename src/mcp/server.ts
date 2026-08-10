@@ -3,10 +3,10 @@ import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { TextChannel } from "discord.js";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import { URL } from "node:url";
 import {
     DISCORD_MESSAGE_MAX_CHARS,
     HISTORY_DIR,
@@ -16,7 +16,11 @@ import {
 import { client } from "../discord/client.js";
 import { findChannel } from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
-import { compareHistoryFilenames } from "./historyFiles.js";
+import {
+    compareHistoryFilenames,
+    getLegacyHistoryChannel,
+    isCalendarDate,
+} from "./historyFiles.js";
 import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
 
 const ReactToMessageSchema = z.object({
@@ -26,7 +30,11 @@ const ReactToMessageSchema = z.object({
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
     messageId: z.string().describe("The Discord message ID to react to"),
-    emoji: z.string().describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
+    emoji: z
+        .string()
+        .trim()
+        .min(1, "Emoji must not be empty")
+        .describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
 });
 
 function isWithinDiscordMessageLimit(message: string): boolean {
@@ -68,6 +76,10 @@ export const SendMessageSchema = z.object({
         .string()
         .min(1)
         .refine(
+            (message) => /\S/u.test(message),
+            "String must contain at least one non-whitespace character",
+        )
+        .refine(
             isWithinDiscordMessageLimit,
             `String must contain at most ${DISCORD_MESSAGE_MAX_CHARS} character(s)`,
         ),
@@ -86,7 +98,11 @@ const ReadMessageHistorySchema = z.object({
     limit: z.number().int().min(1).max(100).default(20),
     type: z.enum(["history", "pending"]).default("history"),
     channel: z.string().optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .refine(isCalendarDate, "Invalid calendar date")
+        .optional(),
     search: z.string().min(1).optional(),
     maxLines: z.number().int().min(1).max(2000).default(300),
 });
@@ -96,6 +112,48 @@ const FetchMessagesSchema = z.object({
         .array(z.string())
         .min(1, "Please provide at least one Discord message link"),
 });
+
+interface DiscordMessageLinkParts {
+    serverId: string;
+    channelId: string;
+    messageId: string;
+}
+
+const DISCORD_MESSAGE_LINK_HOSTS = new Set([
+    "discord.com",
+    "www.discord.com",
+    "canary.discord.com",
+    "ptb.discord.com",
+]);
+
+function parseDiscordMessageLink(
+    link: string,
+): DiscordMessageLinkParts | undefined {
+    let url: URL;
+    try {
+        url = new URL(link);
+    } catch {
+        return undefined;
+    }
+
+    if (
+        url.protocol !== "https:" ||
+        !DISCORD_MESSAGE_LINK_HOSTS.has(url.hostname) ||
+        url.port !== "" ||
+        url.username !== "" ||
+        url.password !== ""
+    ) {
+        return undefined;
+    }
+
+    const match = url.pathname.match(
+        /^\/channels\/(\d+)\/(\d+)\/(\d+)\/?$/,
+    );
+    if (!match) return undefined;
+
+    const [, serverId, channelId, messageId] = match;
+    return { serverId, channelId, messageId };
+}
 
 export function createMcpServer(): Server {
     const mcpServer = new Server(
@@ -122,9 +180,11 @@ export function createMcpServer(): Server {
                         },
                         message: {
                             type: "string",
-                            description: "Message content to send",
+                            description:
+                                "Message content to send; must contain at least one non-whitespace character",
                             minLength: 1,
                             maxLength: DISCORD_MESSAGE_MAX_CHARS,
+                            pattern: "\\S",
                         },
                     },
                     required: ["channel", "message"],
@@ -154,6 +214,7 @@ export function createMcpServer(): Server {
                             type: "string",
                             description:
                                 'Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")',
+                            minLength: 1,
                         },
                     },
                     required: ["channel", "messageId", "emoji"],
@@ -170,6 +231,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Number of matching history files to read (default 20)",
+                            minimum: 1,
+                            maximum: 100,
                             default: 20,
                         },
                         type: {
@@ -197,6 +260,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Maximum lines returned per file (default 300, max 2000)",
+                            minimum: 1,
+                            maximum: 2000,
                             default: 300,
                         },
                     },
@@ -212,6 +277,7 @@ export function createMcpServer(): Server {
                         links: {
                             type: "array",
                             items: { type: "string" },
+                            minItems: 1,
                             description:
                                 "Array of Discord message links to fetch",
                         },
@@ -239,6 +305,8 @@ export function createMcpServer(): Server {
                             type: "integer",
                             description:
                                 "Number of messages to fetch (max 100)",
+                            minimum: 1,
+                            maximum: 100,
                             default: 50,
                         },
                     },
@@ -315,7 +383,10 @@ export function createMcpServer(): Server {
                                 displayName: file,
                                 filePath,
                                 channelId: pendingChannel?.channelId,
-                                channelName: pendingChannel?.channelName,
+                                channelName:
+                                    type === "history"
+                                        ? getLegacyHistoryChannel(file)
+                                        : pendingChannel?.channelName,
                             };
                         });
 
@@ -347,7 +418,9 @@ export function createMcpServer(): Server {
                             file.channelName !== undefined
                                 ? file.channelId === safeChannel ||
                                   file.channelName === safeChannel
-                                : file.displayName.startsWith(`${safeChannel}_`),
+                                : type === "history"
+                                  ? file.channelName === safeChannel
+                                  : file.displayName.startsWith(`${safeChannel}_`),
                         );
                     }
                     if (date) {
@@ -413,26 +486,24 @@ export function createMcpServer(): Server {
                 }
                 case "fetch-messages": {
                     const { links } = FetchMessagesSchema.parse(args);
-                    const linkPattern =
-                        /discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/;
                     const results = [];
                     for (const link of links) {
-                        const match = link.match(linkPattern);
-                        if (!match) {
+                        const parsedLink = parseDiscordMessageLink(link);
+                        if (!parsedLink) {
                             results.push({
                                 link,
                                 error: "Invalid Discord message link format",
                             });
                             continue;
                         }
-                        const [, serverId, channelId, messageId] = match;
+                        const { serverId, channelId, messageId } = parsedLink;
                         try {
                             const channel =
                                 await client.channels.fetch(channelId);
-                            if (!(channel instanceof TextChannel)) {
+                            if (!channel?.isTextBased() || channel.isDMBased()) {
                                 results.push({
                                     link,
-                                    error: "Channel is not a text channel",
+                                    error: "Channel is not a guild text channel",
                                 });
                                 continue;
                             }
@@ -476,7 +547,10 @@ export function createMcpServer(): Server {
                                         description: e.description,
                                         url: e.url,
                                     }))
-                                    .filter((e) => e.title || e.description);
+                                    .filter(
+                                        (e) =>
+                                            e.title || e.description || e.url,
+                                    );
                             }
                             results.push(entry);
                         } catch (err: any) {
