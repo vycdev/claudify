@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Reject required prompt values that contain no non-whitespace content.
 - Match legacy MCP history channel filters exactly instead of including similarly named channels.
 - Preserve URL-only embeds returned by the MCP `fetch-messages` tool.
 - Reject impossible calendar dates in MCP saved-history filters.
