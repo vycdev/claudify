@@ -29,10 +29,7 @@ test("attachment downloads do not follow symbolic-link destinations", async (t) 
     fs.symlinkSync(outsidePath, symlinkPath);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({
-        ok: true,
-        arrayBuffer: async () => new TextEncoder().encode("overwritten"),
-    });
+    globalThis.fetch = async () => new Response("overwritten");
     t.after(() => {
         globalThis.fetch = originalFetch;
     });

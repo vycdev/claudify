@@ -1,6 +1,54 @@
 import fs from "fs";
 import path from "path";
-import { IMAGES_DIR } from "../config.js";
+import { IMAGES_DIR, MCP_ATTACHMENT_MAX_BYTES } from "../config.js";
+
+async function readResponseBody(response: Response): Promise<Buffer> {
+    const contentLength = response.headers.get("content-length");
+    const declaredLength = contentLength === null ? undefined : Number(contentLength);
+    if (
+        declaredLength !== undefined &&
+        Number.isSafeInteger(declaredLength) &&
+        declaredLength > MCP_ATTACHMENT_MAX_BYTES
+    ) {
+        await response.body?.cancel().catch(() => {});
+        throw new Error(
+            `Attachment exceeds the ${MCP_ATTACHMENT_MAX_BYTES}-byte download limit`,
+        );
+    }
+
+    if (!response.body) {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length > MCP_ATTACHMENT_MAX_BYTES) {
+            throw new Error(
+                `Attachment exceeds the ${MCP_ATTACHMENT_MAX_BYTES}-byte download limit`,
+            );
+        }
+        return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = Buffer.from(value);
+            totalBytes += chunk.length;
+            if (totalBytes > MCP_ATTACHMENT_MAX_BYTES) {
+                await reader.cancel().catch(() => {});
+                throw new Error(
+                    `Attachment exceeds the ${MCP_ATTACHMENT_MAX_BYTES}-byte download limit`,
+                );
+            }
+            chunks.push(chunk);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks, totalBytes);
+}
 
 const NO_FOLLOW_FLAG =
     typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
@@ -69,7 +117,7 @@ export async function downloadAttachment(
         );
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const buffer = await readResponseBody(response);
     writeAttachmentFile(filePath, buffer);
     return filePath;
 }
