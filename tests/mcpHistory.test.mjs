@@ -68,4 +68,12 @@ test("history date filters match only the log date suffix", async (t) => {
     assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
+
+    await assert.rejects(
+        client.callTool({
+            name: "read-message-history",
+            arguments: { date: "2026-02-30" },
+        }),
+        /Invalid arguments: date: Invalid calendar date/,
+    );
 });
