@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Match Unicode search terms when retrieving relevant saved-history snippets.
 - Keep historical daily and monthly usage embeds within Discord's field limit when many models are present.
 - Keep astral Unicode characters intact when long Discord responses are split across messages.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
