@@ -11,6 +11,7 @@ import {
     DISCORD_MESSAGE_MAX_CHARS,
     HISTORY_DIR,
     HISTORY_V2_DIR,
+    MCP_HISTORY_MAX_CHARS,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -36,6 +37,45 @@ function isWithinDiscordMessageLimit(message: string): boolean {
         if (characters > DISCORD_MESSAGE_MAX_CHARS) return false;
     }
     return true;
+}
+
+const HISTORY_RESPONSE_SEPARATOR = "\n\n===\n\n";
+
+function boundHistoryResponse(messages: string[]): string {
+    const fullLength = messages.reduce(
+        (length, message) => length + message.length,
+        Math.max(0, messages.length - 1) * HISTORY_RESPONSE_SEPARATOR.length,
+    );
+    if (fullLength <= MCP_HISTORY_MAX_CHARS) {
+        return messages.join(HISTORY_RESPONSE_SEPARATOR);
+    }
+
+    const note = `\n\n[History response truncated at ${MCP_HISTORY_MAX_CHARS} characters; older history omitted.]`;
+    if (note.length >= MCP_HISTORY_MAX_CHARS) {
+        return note.slice(0, MCP_HISTORY_MAX_CHARS);
+    }
+
+    let remaining = MCP_HISTORY_MAX_CHARS - note.length;
+    const selected: string[] = [];
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const separatorLength = selected.length
+            ? HISTORY_RESPONSE_SEPARATOR.length
+            : 0;
+        const budget = remaining - separatorLength;
+        if (budget <= 0) break;
+
+        if (messages[index].length <= budget) {
+            selected.unshift(messages[index]);
+            remaining -= separatorLength + messages[index].length;
+            continue;
+        }
+
+        selected.unshift(messages[index].slice(-budget));
+        remaining = 0;
+        break;
+    }
+
+    return selected.join(HISTORY_RESPONSE_SEPARATOR) + note;
 }
 
 export const SendMessageSchema = z.object({
@@ -378,7 +418,7 @@ export function createMcpServer(): Server {
                         content: [
                             {
                                 type: "text",
-                                text: messages.join("\n\n===\n\n"),
+                                text: boundHistoryResponse(messages),
                             },
                         ],
                     };

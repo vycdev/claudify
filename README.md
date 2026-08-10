@@ -27,6 +27,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `BOT_MODEL` — global Claude model fallback for every workload (default: `claude-haiku-4-5`)
    - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
+   - `MCP_HISTORY_MAX_CHARS` — optional; maximum characters returned by `read-message-history` (default: `120000`, maximum: `1000000`)
 
 3. Run it:
 ```bash

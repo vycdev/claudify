@@ -13,8 +13,9 @@ const limitNames = [
     "HISTORY_RECAP_MAX_CHARS",
     "HISTORY_SEARCH_MAX_BLOCKS",
     "HISTORY_SEARCH_CONTEXT_LINES",
+    "MCP_HISTORY_MAX_CHARS",
 ];
-const defaults = [35, 500, 80, 1000, 140000, 10, 2];
+const defaults = [35, 500, 80, 1000, 140000, 10, 2, 120000];
 
 function readConfigValues(names, values) {
     const messagesDir = fs.mkdtempSync(
@@ -129,13 +130,14 @@ test("context limits fall back for malformed values", () => {
             "9007199254740992",
             "",
             "NaN",
+            "0",
         ]),
         defaults,
     );
 });
 
 test("context limits preserve valid integers including zero", () => {
-    assert.deepEqual(readLimits(["0", "1", "2", "3", "4", "5", "6"]), [
+    assert.deepEqual(readLimits(["0", "1", "2", "3", "4", "5", "6", "12345"]), [
         0,
         1,
         2,
@@ -143,6 +145,7 @@ test("context limits preserve valid integers including zero", () => {
         4,
         5,
         6,
+        12345,
     ]);
 });
 

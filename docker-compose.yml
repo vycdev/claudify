@@ -18,6 +18,7 @@ services:
       - CLAUDE_SERVER_MEMORY_EFFORT=
       - CLAUDE_SUMMARY_MODEL=
       - CLAUDE_SUMMARY_EFFORT=
+      - MCP_HISTORY_MAX_CHARS=120000
     volumes:
       - messages:/app/messages
       - claude-home:/root
