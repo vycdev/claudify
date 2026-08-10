@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Fetch Discord messages linked from guild thread and announcement channels.
 - Reject `fetch-messages` links that use insecure or non-Discord origins.
 - Match Unicode search terms when retrieving relevant saved-history snippets.
 - Keep historical daily and monthly usage embeds within Discord's field limit when many models are present.

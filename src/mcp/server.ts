@@ -3,7 +3,6 @@ import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { TextChannel } from "discord.js";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
@@ -442,10 +441,10 @@ export function createMcpServer(): Server {
                         try {
                             const channel =
                                 await client.channels.fetch(channelId);
-                            if (!(channel instanceof TextChannel)) {
+                            if (!channel?.isTextBased() || channel.isDMBased()) {
                                 results.push({
                                     link,
-                                    error: "Channel is not a text channel",
+                                    error: "Channel is not a guild text channel",
                                 });
                                 continue;
                             }
