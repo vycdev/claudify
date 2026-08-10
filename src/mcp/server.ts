@@ -438,8 +438,7 @@ export function createMcpServer(): Server {
                             let lines = fs
                                 .readFileSync(file.filePath, "utf-8")
                                 .split("\n")
-                                .map((line) => line.trim())
-                                .filter(Boolean);
+                                .filter((line) => line.trim().length > 0);
 
                             if (searchLower) {
                                 lines = lines.filter((line) =>

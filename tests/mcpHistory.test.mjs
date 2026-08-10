@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("MCP history filters select matching saved files", async (t) => {
+test("MCP history filters matching files and preserves pending indentation", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-history-"),
     );
@@ -85,7 +85,7 @@ test("MCP history filters select matching saved files", async (t) => {
         channel: { name: "general" },
         channelId: "111111111111111111",
         createdAt: new Date("2026-08-01T12:30:00.000Z"),
-        content: "pending entry",
+        content: "pending entry\nExample:\n    const answer = 42;",
     });
     savePending({
         id: "444444444444444444",
@@ -120,6 +120,7 @@ test("MCP history filters select matching saved files", async (t) => {
         assert.equal(typeof pendingText, "string");
         assert.match(pendingText, /222222222222222222\.txt/);
         assert.match(pendingText, /pending entry/);
+        assert.match(pendingText, /\n    const answer = 42;/);
         assert.doesNotMatch(pendingText, /444444444444444444\.txt/);
         assert.doesNotMatch(pendingText, /other-channel pending entry/);
         if (channel === "general") {

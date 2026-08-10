@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserve line indentation when MCP clients read saved message history or pending messages.
 - Match the generated MCP endpoint hostname to the server's IPv4 loopback listener.
 - Strip inherited `CLAUDECODE` markers from Claude CLI subprocesses so Claudify can launch them from Claude Code-managed environments.
 - Reject required prompt values that contain no non-whitespace content.
