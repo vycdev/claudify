@@ -56,6 +56,10 @@ export const SendMessageSchema = z.object({
         .string()
         .min(1)
         .refine(
+            (message) => /\S/u.test(message),
+            "String must contain at least one non-whitespace character",
+        )
+        .refine(
             isWithinDiscordMessageLimit,
             `String must contain at most ${DISCORD_MESSAGE_MAX_CHARS} character(s)`,
         ),
@@ -156,9 +160,11 @@ export function createMcpServer(): Server {
                         },
                         message: {
                             type: "string",
-                            description: "Message content to send",
+                            description:
+                                "Message content to send; must contain at least one non-whitespace character",
                             minLength: 1,
                             maxLength: DISCORD_MESSAGE_MAX_CHARS,
+                            pattern: "\\S",
                         },
                     },
                     required: ["channel", "message"],
