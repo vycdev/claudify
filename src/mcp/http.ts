@@ -14,7 +14,7 @@ export function writeMcpConfig() {
         mcpServers: {
             discord: {
                 type: "http",
-                url: `http://localhost:${MCP_PORT}/mcp`,
+                url: `http://127.0.0.1:${MCP_PORT}/mcp`,
             },
         },
     };

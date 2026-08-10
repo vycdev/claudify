@@ -4,24 +4,34 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("history date filters match only the log date suffix", async (t) => {
+test("MCP history filters matching files and preserves pending indentation", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-history-"),
     );
     t.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
     process.env.MESSAGES_DIR = messagesDir;
 
-    const [{ Client }, { InMemoryTransport }, { createMcpServer }] =
-        await Promise.all([
-            import("@modelcontextprotocol/sdk/client/index.js"),
-            import("@modelcontextprotocol/sdk/inMemory.js"),
-            import("../build/mcp/server.js"),
-        ]);
+    const [
+        { Client },
+        { InMemoryTransport },
+        { createMcpServer },
+        { savePending },
+    ] = await Promise.all([
+        import("@modelcontextprotocol/sdk/client/index.js"),
+        import("@modelcontextprotocol/sdk/inMemory.js"),
+        import("../build/mcp/server.js"),
+        import("../build/storage/pending.js"),
+    ]);
 
     const historyDir = path.join(messagesDir, "history");
     fs.writeFileSync(
         path.join(historyDir, "general_2026-08-01.txt"),
         "[10:00:00] user: expected entry\n",
+        "utf8",
+    );
+    fs.writeFileSync(
+        path.join(historyDir, "general_chat_2026-08-01.txt"),
+        "[10:30:00] user: similarly named channel entry\n",
         "utf8",
     );
     fs.writeFileSync(
@@ -68,4 +78,84 @@ test("history date filters match only the log date suffix", async (t) => {
     assert.match(text, /namespaced entry/);
     assert.doesNotMatch(text, /release_2026-08-01_2026-08-02\.txt/);
     assert.doesNotMatch(text, /wrong-day entry/);
+
+    savePending({
+        id: "222222222222222222",
+        author: { tag: "user#0001" },
+        channel: { name: "general" },
+        channelId: "111111111111111111",
+        createdAt: new Date("2026-08-01T12:30:00.000Z"),
+        content: "pending entry\nExample:\n    const answer = 42;",
+    });
+    savePending({
+        id: "444444444444444444",
+        author: { tag: "user#0002" },
+        channel: { name: "random" },
+        channelId: "999999999999999999",
+        createdAt: new Date("2026-08-01T12:45:00.000Z"),
+        content: "other-channel pending entry",
+    });
+    fs.writeFileSync(
+        path.join(messagesDir, "pending", "333333333333333333.txt"),
+        [
+            "Author: legacy#0001",
+            "Channel: #general",
+            "Timestamp: 2026-08-01T12:15:00.000Z",
+            "---",
+            "Channel ID: 111111111111111111",
+            "legacy pending entry",
+        ].join("\n"),
+        "utf8",
+    );
+
+    for (const channel of ["general", "111111111111111111"]) {
+        const pendingResult = await client.callTool({
+            name: "read-message-history",
+            arguments: { type: "pending", channel },
+        });
+        const pendingText = pendingResult.content.find(
+            (item) => item.type === "text",
+        )?.text;
+
+        assert.equal(typeof pendingText, "string");
+        assert.match(pendingText, /222222222222222222\.txt/);
+        assert.match(pendingText, /pending entry/);
+        assert.match(pendingText, /\n    const answer = 42;/);
+        assert.doesNotMatch(pendingText, /444444444444444444\.txt/);
+        assert.doesNotMatch(pendingText, /other-channel pending entry/);
+        if (channel === "general") {
+            assert.match(pendingText, /333333333333333333\.txt/);
+            assert.match(pendingText, /legacy pending entry/);
+        } else {
+            assert.doesNotMatch(pendingText, /333333333333333333\.txt/);
+            assert.doesNotMatch(pendingText, /legacy pending entry/);
+        }
+    }
+
+    const channelResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { channel: "general", date: "2026-08-01" },
+    });
+    const channelText = channelResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof channelText, "string");
+    assert.match(channelText, /general_2026-08-01\.txt/);
+    assert.match(channelText, /expected entry/);
+    assert.match(
+        channelText,
+        /v2\/v2_111111111111111111__general_2026-08-01\.txt/,
+    );
+    assert.match(channelText, /namespaced entry/);
+    assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
+    assert.doesNotMatch(channelText, /similarly named channel entry/);
+
+    await assert.rejects(
+        client.callTool({
+            name: "read-message-history",
+            arguments: { date: "2026-02-30" },
+        }),
+        /Invalid arguments: date: Invalid calendar date/,
+    );
 });
