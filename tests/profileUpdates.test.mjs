@@ -19,6 +19,10 @@ const {
     getServerMemory,
     getUserProfile,
 } = await import("../build/storage/profiles.js");
+const {
+    PROFILE_MAX_CHARS,
+    SERVER_MEMORY_MAX_CHARS,
+} = await import("../build/config.js");
 
 test.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
 
@@ -114,4 +118,30 @@ test("serializes server memory updates for the same guild", async () => {
         model: "server-memory-test-model",
         effort: "medium",
     })));
+});
+
+test("does not split astral Unicode when capping stored context", async () => {
+    const profilePrefix = "p".repeat(PROFILE_MAX_CHARS - 1);
+    const memoryPrefix = "m".repeat(SERVER_MEMORY_MAX_CHARS - 1);
+
+    await backgroundProfileUpdate(
+        [{ tag: "UnicodeUser", id: "unicode-user" }],
+        "Unicode profile update",
+        async () => ({
+            stdout: `===PROFILE unicode-user===\n${profilePrefix}😀\n===END===`,
+            stderr: "",
+        }),
+    );
+    await backgroundServerMemoryUpdate(
+        "unicode-guild",
+        "Unicode Guild",
+        "general",
+        "Unicode server memory update",
+        async () => ({ stdout: `${memoryPrefix}😀`, stderr: "" }),
+    );
+
+    assert.equal(getUserProfile("unicode-user"), profilePrefix);
+    assert.equal(getServerMemory("unicode-guild"), memoryPrefix);
+    assert.doesNotMatch(getUserProfile("unicode-user"), /�/);
+    assert.doesNotMatch(getServerMemory("unicode-guild"), /�/);
 });
