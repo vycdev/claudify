@@ -78,7 +78,7 @@ export function appendToLog(
     timestamp: Date = new Date(),
 ) {
     const filePath = getDailyLogPath(channelId, timestamp, channelName);
-    const time = timestamp.toTimeString().split(" ")[0];
+    const time = `${timestamp.toISOString().slice(11, 19)} UTC`;
     const normalized = content.replace(/\s+/g, " ").trim() || "[no text]";
     const line = `[${time}] ${author}: ${normalized}\n`;
     fs.appendFileSync(filePath, line, "utf-8");
