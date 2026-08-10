@@ -105,6 +105,10 @@ export function parseClaudeAuthStatus(
     stdout: string,
     exitCode: number | null,
 ): ClaudeAuthStatus {
+    if (exitCode !== 0) {
+        return { loggedIn: false };
+    }
+
     try {
         const parsed: unknown = JSON.parse(stdout);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {

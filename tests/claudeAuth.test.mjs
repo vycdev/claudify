@@ -35,6 +35,20 @@ test("parses only non-sensitive Claude auth status fields", () => {
     assert.equal("token" in status, false);
 });
 
+test("does not trust authenticated JSON from a failed status command", () => {
+    assert.deepEqual(
+        parseClaudeAuthStatus(
+            JSON.stringify({
+                loggedIn: true,
+                authMethod: "claude.ai",
+                apiProvider: "firstParty",
+            }),
+            1,
+        ),
+        { loggedIn: false },
+    );
+});
+
 test("extracts a trusted OAuth URL from terminal hyperlink output", () => {
     const loginUrl = "https://claude.com/cai/oauth/authorize?code=test";
     const output =
