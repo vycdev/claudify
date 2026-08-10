@@ -1,5 +1,11 @@
-import { TextChannel } from "discord.js";
+import type { GuildTextBasedChannel } from "discord.js";
 import { client } from "./client.js";
+
+function isGuildTextBasedChannel(
+    channel: { isTextBased(): boolean; isDMBased(): boolean },
+): channel is GuildTextBasedChannel {
+    return channel.isTextBased() && !channel.isDMBased();
+}
 
 export async function findGuild(guildIdentifier?: string) {
     if (!guildIdentifier) {
@@ -46,18 +52,22 @@ export async function findGuild(guildIdentifier?: string) {
 export async function findChannel(
     channelIdentifier: string,
     guildIdentifier?: string,
-): Promise<TextChannel> {
+): Promise<GuildTextBasedChannel> {
     const guild = await findGuild(guildIdentifier);
 
     try {
         const channel = await client.channels.fetch(channelIdentifier);
-        if (channel instanceof TextChannel && channel.guild.id === guild.id) {
+        if (
+            channel &&
+            isGuildTextBasedChannel(channel) &&
+            channel.guild.id === guild.id
+        ) {
             return channel;
         }
     } catch {
         const channels = guild.channels.cache.filter(
-            (channel): channel is TextChannel =>
-                channel instanceof TextChannel &&
+            (channel): channel is GuildTextBasedChannel =>
+                isGuildTextBasedChannel(channel) &&
                 (channel.name.toLowerCase() ===
                     channelIdentifier.toLowerCase() ||
                     channel.name.toLowerCase() ===
@@ -66,7 +76,9 @@ export async function findChannel(
 
         if (channels.size === 0) {
             const availableChannels = guild.channels.cache
-                .filter((c): c is TextChannel => c instanceof TextChannel)
+                .filter((c): c is GuildTextBasedChannel =>
+                    isGuildTextBasedChannel(c),
+                )
                 .map((c) => `"#${c.name}"`)
                 .join(", ");
             throw new Error(

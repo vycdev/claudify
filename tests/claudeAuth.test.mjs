@@ -35,6 +35,20 @@ test("parses only non-sensitive Claude auth status fields", () => {
     assert.equal("token" in status, false);
 });
 
+test("does not trust authenticated JSON from a failed status command", () => {
+    assert.deepEqual(
+        parseClaudeAuthStatus(
+            JSON.stringify({
+                loggedIn: true,
+                authMethod: "claude.ai",
+                apiProvider: "firstParty",
+            }),
+            1,
+        ),
+        { loggedIn: false },
+    );
+});
+
 test("extracts a trusted OAuth URL from terminal hyperlink output", () => {
     const loginUrl = "https://claude.com/cai/oauth/authorize?code=test";
     const output =
@@ -47,6 +61,23 @@ test("extracts a trusted OAuth URL from terminal hyperlink output", () => {
         extractClaudeLoginUrl("https://example.com/oauth/authorize?code=test"),
         undefined,
     );
+});
+
+test("removes unmatched prose delimiters from Claude login URLs", () => {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?code=test";
+
+    for (const output of [
+        `Open (${loginUrl}).`,
+        `Open [${loginUrl}]`,
+        `Open {${loginUrl}}`,
+    ]) {
+        assert.equal(extractClaudeLoginUrl(output), loginUrl);
+    }
+});
+
+test("preserves balanced delimiters within Claude login URLs", () => {
+    const loginUrl = "https://claude.com/cai/oauth/authorize?state=a(b)";
+    assert.equal(extractClaudeLoginUrl(loginUrl), loginUrl);
 });
 
 test("runs a private login session and verifies its final status", async (t) => {
@@ -76,6 +107,11 @@ test("runs a private login session and verifies its final status", async (t) => 
         () => manager.submitCode("someone-else", "valid-code"),
         /another allowed user/,
     );
+    await assert.rejects(
+        () => manager.submitCode("owner", "code\u001b[2J"),
+        /code is not valid/,
+    );
+    assert.equal(manager.hasActiveLogin(), true);
     await assert.rejects(
         () => manager.submitCode("owner", "invalid-code"),
         /rejected.*try again/,
@@ -113,6 +149,33 @@ test("runs a private login session and verifies its final status", async (t) => 
         /could not accept|rejected/,
     );
     assert.equal(closedInputManager.hasActiveLogin(), false);
+});
+
+test("cancelling before the login URL rejects the pending login", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
+    const markerPath = path.join(tempDir, "authenticated");
+    const fakeCliPath = path.join(tempDir, "fake-claude.mjs");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeAuth.mjs");
+    fs.copyFileSync(fixturePath, fakeCliPath);
+    t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+    const manager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        loginTimeoutMs: 2_000,
+        env: {
+            ...process.env,
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_DELAY_URL_MS: "1_000",
+        },
+    });
+
+    const login = manager.startLogin("owner");
+    assert.equal(manager.hasActiveLogin(), true);
+    manager.cancelLogin("owner");
+
+    await assert.rejects(login, /cancelled/);
+    assert.equal(manager.hasActiveLogin(), false);
 });
 
 test("force-kills a timed-out login process that ignores SIGTERM", async (t) => {

@@ -14,9 +14,17 @@ const MAX_CAPTURED_OUTPUT = 64 * 1024;
 
 function appendBounded(current: string, chunk: string): string {
     const combined = current + chunk;
-    return combined.length <= MAX_CAPTURED_OUTPUT
-        ? combined
-        : combined.slice(-MAX_CAPTURED_OUTPUT);
+    if (combined.length <= MAX_CAPTURED_OUTPUT) return combined;
+
+    const start = combined.length - MAX_CAPTURED_OUTPUT;
+    const firstCodeUnit = combined.charCodeAt(start);
+    const previousCodeUnit = combined.charCodeAt(start - 1);
+    const splitsSurrogatePair =
+        firstCodeUnit >= 0xDC00
+        && firstCodeUnit <= 0xDFFF
+        && previousCodeUnit >= 0xD800
+        && previousCodeUnit <= 0xDBFF;
+    return combined.slice(splitsSurrogatePair ? start + 1 : start);
 }
 let activeCount = 0;
 let lastSpawnTime = 0;
@@ -66,6 +74,7 @@ function spawnClaude(
         const { workload, model, effort } = options;
         const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(process.env)) {
+            if (key.toUpperCase() === "CLAUDECODE") continue;
             if (value !== undefined) env[key] = value;
         }
         delete env.MCP_SERVER_NAME;
