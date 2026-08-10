@@ -32,6 +32,13 @@ test("leaves messages that fit the Discord limit unchanged", () => {
     assert.deepEqual(smartSplit(text, 40), [text]);
 });
 
+test("does not split astral Unicode characters between surrogate pairs", () => {
+    const prefix = "x".repeat(1999);
+    const text = `${prefix}😀`;
+
+    assert.deepEqual(smartSplit(text, 2000), [prefix, "😀"]);
+});
+
 test("balances fenced code blocks across split messages", () => {
     const code = "x".repeat(220);
     const text = `Intro\n\n\`\`\`typescript\n${code}\n\`\`\`\n\nOutro`;

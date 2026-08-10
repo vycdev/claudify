@@ -105,6 +105,10 @@ export function parseClaudeAuthStatus(
     stdout: string,
     exitCode: number | null,
 ): ClaudeAuthStatus {
+    if (exitCode !== 0) {
+        return { loggedIn: false };
+    }
+
     try {
         const parsed: unknown = JSON.parse(stdout);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -127,11 +131,43 @@ export function parseClaudeAuthStatus(
     return { loggedIn: exitCode === 0 };
 }
 
+function trimTrailingUrlPunctuation(url: string): string {
+    let trimmed = url;
+    const openingDelimiter: Record<string, string> = {
+        ")": "(",
+        "]": "[",
+        "}": "{",
+    };
+
+    while (trimmed.length > 0) {
+        const lastCharacter = trimmed.at(-1)!;
+        if (".,;".includes(lastCharacter)) {
+            trimmed = trimmed.slice(0, -1);
+            continue;
+        }
+
+        const opening = openingDelimiter[lastCharacter];
+        if (!opening) break;
+
+        const openingCount = [...trimmed].filter(
+            (character) => character === opening,
+        ).length;
+        const closingCount = [...trimmed].filter(
+            (character) => character === lastCharacter,
+        ).length;
+        if (closingCount <= openingCount) break;
+
+        trimmed = trimmed.slice(0, -1);
+    }
+
+    return trimmed;
+}
+
 export function extractClaudeLoginUrl(output: string): string | undefined {
     const urls =
         stripTerminalSequences(output).match(/https:\/\/[^\s<>"']+/g) || [];
     return urls
-        .map((url) => url.replace(/[.,;]+$/, ""))
+        .map(trimTrailingUrlPunctuation)
         .find(isTrustedClaudeLoginUrl);
 }
 
@@ -322,7 +358,7 @@ export class ClaudeAuthManager {
         if (
             normalizedCode.length === 0 ||
             normalizedCode.length > 4096 ||
-            /[\r\n\u0000]/.test(normalizedCode)
+            /\p{Cc}/u.test(normalizedCode)
         ) {
             throw new Error("The authentication code is not valid.");
         }
@@ -402,6 +438,19 @@ export class ClaudeAuthManager {
 
     cancelLogin(ownerId: string): void {
         const session = this.requireOwnedSession(ownerId);
+        const cancellationError = new Error(
+            "Claude authentication session was cancelled.",
+        );
+        if (!session.urlResolved) {
+            session.rejectUrl(cancellationError);
+        }
+        const attempt = session.codeAttempt;
+        if (attempt) {
+            session.codeAttempt = undefined;
+            session.codeSubmitted = false;
+            attempt.reject(cancellationError);
+        }
+        session.resolveCompletion({ code: null, timedOut: false });
         this.finishSession(session);
         this.terminateSession(session);
     }
