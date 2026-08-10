@@ -166,6 +166,41 @@ test("fetch-messages rejects direct-message channels", async (t) => {
     }
 });
 
+test("fetch-messages rejects links with non-Discord origins", async (t) => {
+    const fetchedChannelIds = [];
+    const originalFetch = discordClient.channels.fetch;
+    discordClient.channels.fetch = async (id) => {
+        fetchedChannelIds.push(id);
+        throw new Error("unexpected channel fetch");
+    };
+
+    try {
+        const client = await createTestClient(t);
+        const links = [
+            "https://notdiscord.com/channels/111/222/333",
+            "https://example.com/discord.com/channels/111/222/333",
+            "http://discord.com/channels/111/222/333",
+            "https://discord.com:444/channels/111/222/333",
+        ];
+        const response = await client.callTool({
+            name: "fetch-messages",
+            arguments: { links },
+        });
+        const results = JSON.parse(response.content[0].text);
+
+        assert.deepEqual(
+            results,
+            links.map((link) => ({
+                link,
+                error: "Invalid Discord message link format",
+            })),
+        );
+        assert.deepEqual(fetchedChannelIds, []);
+    } finally {
+        discordClient.channels.fetch = originalFetch;
+    }
+});
+
 test("fetch-messages validates the server ID in message links", async (t) => {
     const fetchedMessageIds = [];
     const channel = Object.create(TextChannel.prototype);
@@ -203,7 +238,7 @@ test("fetch-messages validates the server ID in message links", async (t) => {
             arguments: {
                 links: [
                     "https://discord.com/channels/999999999999999999/222222222222222222/333333333333333333",
-                    "https://discord.com/channels/111111111111111111/222222222222222222/444444444444444444",
+                    "https://canary.discord.com:443/channels/111111111111111111/222222222222222222/444444444444444444/?source=test#message",
                 ],
             },
         });

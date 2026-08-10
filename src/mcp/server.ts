@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import { URL } from "node:url";
 import {
     DISCORD_MESSAGE_MAX_CHARS,
     HISTORY_DIR,
@@ -75,6 +76,48 @@ const FetchMessagesSchema = z.object({
         .array(z.string())
         .min(1, "Please provide at least one Discord message link"),
 });
+
+interface DiscordMessageLinkParts {
+    serverId: string;
+    channelId: string;
+    messageId: string;
+}
+
+const DISCORD_MESSAGE_LINK_HOSTS = new Set([
+    "discord.com",
+    "www.discord.com",
+    "canary.discord.com",
+    "ptb.discord.com",
+]);
+
+function parseDiscordMessageLink(
+    link: string,
+): DiscordMessageLinkParts | undefined {
+    let url: URL;
+    try {
+        url = new URL(link);
+    } catch {
+        return undefined;
+    }
+
+    if (
+        url.protocol !== "https:" ||
+        !DISCORD_MESSAGE_LINK_HOSTS.has(url.hostname) ||
+        url.port !== "" ||
+        url.username !== "" ||
+        url.password !== ""
+    ) {
+        return undefined;
+    }
+
+    const match = url.pathname.match(
+        /^\/channels\/(\d+)\/(\d+)\/(\d+)\/?$/,
+    );
+    if (!match) return undefined;
+
+    const [, serverId, channelId, messageId] = match;
+    return { serverId, channelId, messageId };
+}
 
 export function createMcpServer(): Server {
     const mcpServer = new Server(
@@ -384,19 +427,17 @@ export function createMcpServer(): Server {
                 }
                 case "fetch-messages": {
                     const { links } = FetchMessagesSchema.parse(args);
-                    const linkPattern =
-                        /discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/;
                     const results = [];
                     for (const link of links) {
-                        const match = link.match(linkPattern);
-                        if (!match) {
+                        const parsedLink = parseDiscordMessageLink(link);
+                        if (!parsedLink) {
                             results.push({
                                 link,
                                 error: "Invalid Discord message link format",
                             });
                             continue;
                         }
-                        const [, serverId, channelId, messageId] = match;
+                        const { serverId, channelId, messageId } = parsedLink;
                         try {
                             const channel =
                                 await client.channels.fetch(channelId);
