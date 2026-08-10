@@ -10,6 +10,7 @@ async function readResponseBody(response: Response): Promise<Buffer> {
         Number.isSafeInteger(declaredLength) &&
         declaredLength > MCP_ATTACHMENT_MAX_BYTES
     ) {
+        await response.body?.cancel().catch(() => {});
         throw new Error(
             `Attachment exceeds the ${MCP_ATTACHMENT_MAX_BYTES}-byte download limit`,
         );
@@ -49,6 +50,49 @@ async function readResponseBody(response: Response): Promise<Buffer> {
     return Buffer.concat(chunks, totalBytes);
 }
 
+const NO_FOLLOW_FLAG =
+    typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
+
+function assertSafeAttachmentDestination(filePath: string): void {
+    if (!fs.lstatSync(IMAGES_DIR).isDirectory()) {
+        throw new Error("Images path must be a directory, not a symbolic link");
+    }
+
+    try {
+        if (fs.lstatSync(filePath).isSymbolicLink()) {
+            throw new Error("Attachment destination must not be a symbolic link");
+        }
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+}
+
+function writeAttachmentFile(filePath: string, buffer: Buffer): void {
+    assertSafeAttachmentDestination(filePath);
+
+    let fileDescriptor: number;
+    try {
+        fileDescriptor = fs.openSync(
+            filePath,
+            fs.constants.O_WRONLY |
+                fs.constants.O_CREAT |
+                fs.constants.O_TRUNC |
+                NO_FOLLOW_FLAG,
+        );
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+            throw new Error("Attachment destination must not be a symbolic link");
+        }
+        throw error;
+    }
+
+    try {
+        fs.writeFileSync(fileDescriptor, buffer);
+    } finally {
+        fs.closeSync(fileDescriptor);
+    }
+}
+
 export async function downloadAttachment(
     url: string,
     filename: string,
@@ -62,6 +106,9 @@ export async function downloadAttachment(
     ) {
         throw new Error("Attachment filename resolves outside the images directory");
     }
+    if (path.basename(filename) !== filename) {
+        throw new Error("Attachment filename must not include a directory path");
+    }
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -71,6 +118,6 @@ export async function downloadAttachment(
     }
 
     const buffer = await readResponseBody(response);
-    fs.writeFileSync(filePath, buffer);
+    writeAttachmentFile(filePath, buffer);
     return filePath;
 }

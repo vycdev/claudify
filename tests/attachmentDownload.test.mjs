@@ -30,6 +30,10 @@ test("rejects oversized attachment responses before writing them", () => {
         const script = `
             const { MCP_ATTACHMENT_MAX_BYTES } = await import(${JSON.stringify(configUrl)});
             const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            let bodyCancelled = false;
+            const body = new ReadableStream({
+                cancel() { bodyCancelled = true; },
+            });
             globalThis.fetch = async () => ({
                 ok: true,
                 status: 200,
@@ -37,13 +41,14 @@ test("rejects oversized attachment responses before writing them", () => {
                 headers: new Headers({
                     "content-length": String(MCP_ATTACHMENT_MAX_BYTES + 1),
                 }),
-                body: { getReader() { throw new Error("body should not be read"); } },
+                body,
             });
             try {
                 await downloadAttachment("https://example.test/large.png", "large.png");
                 process.exit(1);
             } catch (error) {
                 if (!String(error?.message).includes("download limit")) process.exit(2);
+                if (!bodyCancelled) process.exit(3);
             }
         `;
         const result = runAttachmentScript(messagesDir, script);
