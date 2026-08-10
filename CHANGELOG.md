@@ -23,7 +23,7 @@
 - Fall back to the Claude CLI default when `BOT_EFFORT` is unsupported.
 - Reject empty or oversized MCP `send-message` content before calling Discord.
 - Reject MCP HTTP requests from untrusted browser origins.
-- Reject declared MCP HTTP request bodies larger than 1 MiB before handing them to the transport.
+- Reject MCP HTTP request bodies larger than 1 MiB before handing them to the transport.
 - Honor zero history limits when a question matches saved-history snippets.
 - Reject Discord message links whose server ID does not match the fetched channel.
 - Keep long fenced code blocks valid when Discord responses are split across messages.
