@@ -36,6 +36,7 @@ function summarizeEmbeds(msg: Message): string {
             const parts: string[] = [];
             if (e.title) parts.push(e.title);
             if (e.description) parts.push(e.description);
+            if (e.url) parts.push(e.url);
             if (e.fields?.length) {
                 parts.push(...e.fields.map((f) => `${f.name}: ${f.value}`));
             }
@@ -54,6 +55,15 @@ function messageContentForMemory(msg: Message): string {
     }
     content += summarizeEmbeds(msg);
     return content.trim();
+}
+
+export function buildReactionQuestion(
+    msgAuthorLabel: string,
+    userLabel: string,
+    msg: Message,
+): string {
+    const targetContent = messageContentForMemory(msg);
+    return `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${targetContent}`;
 }
 
 function formatMessageForContext(msg: Message): string {
@@ -351,7 +361,7 @@ export function registerHandler() {
             const botName = client.user?.displayName || client.user?.username || "Claudify";
             const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
             const userLabel = authorLabel(user as any);
-            const question = `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${msg.content}`;
+            const question = buildReactionQuestion(msgAuthorLabel, userLabel, msg);
 
             // Fetch live messages for context
             let liveMessages = "";
@@ -410,7 +420,7 @@ export function registerHandler() {
 
             appendToLog(
                 userLabel,
-                `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`,
+                `[🤖 reaction on: ${messageContentForMemory(msg).slice(0, 100)}]`,
                 msg.channel.id,
                 msg.channel.name,
             );
