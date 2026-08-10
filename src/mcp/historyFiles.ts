@@ -1,5 +1,14 @@
 const HISTORY_DATE_SUFFIX = /_(\d{4}-\d{2}-\d{2})\.txt$/;
 
+export function getLegacyHistoryChannel(filename: string): string | undefined {
+    const dateSuffix = filename.match(HISTORY_DATE_SUFFIX);
+    if (dateSuffix?.index === undefined || dateSuffix.index === 0) {
+        return undefined;
+    }
+
+    return filename.slice(0, dateSuffix.index);
+}
+
 export function isCalendarDate(value: string): boolean {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 
