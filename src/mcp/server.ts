@@ -246,6 +246,7 @@ export function createMcpServer(): Server {
                         links: {
                             type: "array",
                             items: { type: "string" },
+                            minItems: 1,
                             description:
                                 "Array of Discord message links to fetch",
                         },
