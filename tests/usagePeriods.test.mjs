@@ -5,6 +5,7 @@ import {
     buildCurrentPeriodUsageEmbed,
     buildHistoricalUsageEmbed,
     createUsageRequest,
+    formatUsageBlockTime,
     getCurrentUsagePeriod,
 } from "../build/discord/commands/usage.js";
 
@@ -64,20 +65,28 @@ test("builds bounded UTC ccusage requests for current week and month", () => {
     ]);
 });
 
-test("keeps existing usage request arguments unchanged", () => {
+test("keeps existing non-current-period usage request arguments unchanged", () => {
     assert.deepEqual(createUsageRequest("today", fixedNow)?.ccArgs, [
         "ccusage@latest", "claude", "daily", "--json", "--since", "20260805",
     ]);
     assert.deepEqual(createUsageRequest("daily", fixedNow)?.ccArgs, [
         "ccusage@latest", "claude", "daily", "--json",
     ]);
-    assert.deepEqual(createUsageRequest("blocks", fixedNow)?.ccArgs, [
-        "ccusage@latest", "claude", "blocks", "--json", "--since", "20260805",
-    ]);
     assert.deepEqual(createUsageRequest("monthly", fixedNow)?.ccArgs, [
         "ccusage@latest", "claude", "monthly", "--json",
     ]);
     assert.equal(createUsageRequest("unknown", fixedNow), undefined);
+});
+
+test("requests and renders today's billing windows in UTC", () => {
+    assert.deepEqual(createUsageRequest("blocks", fixedNow)?.ccArgs, [
+        "ccusage@latest", "claude", "blocks", "--json", "--since", "20260805",
+        "--timezone", "UTC",
+    ]);
+    assert.equal(
+        formatUsageBlockTime(new Date("2026-08-05T00:30:00.000Z")),
+        "12:30 AM UTC",
+    );
 });
 
 test("renders aggregate totals, date range, and per-model usage", () => {
