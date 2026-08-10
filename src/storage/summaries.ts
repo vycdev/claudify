@@ -1,6 +1,8 @@
 import fs from "fs";
 import {
     CLAUDE_WORKLOAD_CONFIG,
+    HISTORY_RECAP_MAX_CHARS,
+    HISTORY_RECAP_MAX_LINES,
     HISTORY_V2_DIR,
     SUMMARIES_V2_DIR,
 } from "../config.js";
@@ -12,6 +14,22 @@ import {
 } from "./historyPaths.js";
 
 const summariesInProgress = new Set<string>();
+
+function trimSummaryInput(log: string): string {
+    const lines = log.split("\n");
+    const selected = HISTORY_RECAP_MAX_LINES === 0
+        ? []
+        : lines.slice(-HISTORY_RECAP_MAX_LINES);
+
+    while (
+        selected.length > 0 &&
+        selected.join("\n").length > HISTORY_RECAP_MAX_CHARS
+    ) {
+        selected.shift();
+    }
+
+    return selected.join("\n").trim();
+}
 type ClaudeRunner = typeof runClaude;
 
 export function getSummaryPath(
@@ -65,8 +83,9 @@ export async function generateDailySummary(
     summariesInProgress.add(summaryPath);
     try {
         const log = fs.readFileSync(logPath, "utf-8").trim();
-        if (!log || log.split("\n").length < 3) {
-            fs.writeFileSync(summaryPath, log, "utf-8");
+        const summaryInput = trimSummaryInput(log);
+        if (!summaryInput || summaryInput.split("\n").length < 3) {
+            fs.writeFileSync(summaryPath, summaryInput, "utf-8");
             return;
         }
 
@@ -81,7 +100,7 @@ export async function generateDailySummary(
                     "--system-prompt",
                     renderPrompt("dailySummarySystem"),
                 ],
-                log,
+                summaryInput,
                 CLAUDE_WORKLOAD_CONFIG["daily-summary"],
             );
 

@@ -21,11 +21,15 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
     const original = {
         capture: process.env.CLAUDIFY_ROUTING_CAPTURE_PATH,
         model: process.env.ANTHROPIC_MODEL,
+        claudeCode: process.env.CLAUDECODE,
+        mixedClaudeCode: process.env.ClAuDeCoDe,
         consoleError: console.error,
     };
     const logs = [];
     process.env.CLAUDIFY_ROUTING_CAPTURE_PATH = capturePath;
     process.env.ANTHROPIC_MODEL = "ambient-model-must-not-leak";
+    process.env.CLAUDECODE = "1";
+    process.env.ClAuDeCoDe = "mixed-case-must-not-leak";
     console.error = (...args) => logs.push(args.join(" "));
 
     t.after(() => {
@@ -33,6 +37,8 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
         for (const [name, value] of [
             ["CLAUDIFY_ROUTING_CAPTURE_PATH", original.capture],
             ["ANTHROPIC_MODEL", original.model],
+            ["CLAUDECODE", original.claudeCode],
+            ["ClAuDeCoDe", original.mixedClaudeCode],
         ]) {
             if (value === undefined) delete process.env[name];
             else process.env[name] = value;
@@ -72,8 +78,10 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
         "-p",
     ]);
     assert.equal(byInput["response-input"].anthropicModel, "response-model");
+    assert.equal(byInput["response-input"].claudeCode, null);
     assert.deepEqual(byInput["summary-input"].args, ["--effort", "low", "-p"]);
     assert.equal(byInput["summary-input"].anthropicModel, null);
+    assert.equal(byInput["summary-input"].claudeCode, null);
     assert.ok(logs.some((line) => line.includes("[Claude CLI][response]")));
     assert.ok(logs.some((line) => line.includes("[Claude CLI][daily-summary]")));
     assert.ok(logs.every((line) => !line.includes("response-input")));
