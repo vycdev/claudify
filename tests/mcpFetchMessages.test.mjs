@@ -74,6 +74,26 @@ test("fetch-messages rejects non-string link values", async (t) => {
     );
 });
 
+test("fetch-messages advertises and enforces its link limit", async (t) => {
+    const client = await createTestClient(t);
+    const { tools } = await client.listTools();
+    const fetchMessages = tools.find((tool) => tool.name === "fetch-messages");
+
+    assert.equal(fetchMessages.inputSchema.properties.links.maxItems, 100);
+    await assert.rejects(
+        client.callTool({
+            name: "fetch-messages",
+            arguments: {
+                links: Array.from(
+                    { length: 101 },
+                    (_, index) => `https://discord.com/channels/1/2/${index}`,
+                ),
+            },
+        }),
+        /Please provide at most 100 Discord message links/,
+    );
+});
+
 test("fetch-messages still reports malformed string links per item", async (t) => {
     const client = await createTestClient(t);
 
