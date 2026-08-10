@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Reject symbolic-link attachment destinations instead of following them when saving downloads.
 - Avoid corrupting astral Unicode characters when profile or server-memory updates reach their storage limits.
 - Advertise the supported HTTP method when rejecting unsupported MCP requests.
 - Keep `!usage blocks` billing-window selection and displayed times in UTC regardless of the host timezone.
