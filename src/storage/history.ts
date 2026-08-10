@@ -61,6 +61,7 @@ const HISTORY_STOP_WORDS = new Set([
     "with",
     "you",
 ]);
+const SNIPPET_SEPARATOR = "\n\n...\n\n";
 
 export function getDailyLogPath(
     channelId: string,
@@ -78,7 +79,7 @@ export function appendToLog(
     timestamp: Date = new Date(),
 ) {
     const filePath = getDailyLogPath(channelId, timestamp, channelName);
-    const time = timestamp.toTimeString().split(" ")[0];
+    const time = `${timestamp.toISOString().slice(11, 19)} UTC`;
     const normalized = content.replace(/\s+/g, " ").trim() || "[no text]";
     const line = `[${time}] ${author}: ${normalized}\n`;
     fs.appendFileSync(filePath, line, "utf-8");
@@ -102,6 +103,7 @@ function trimLinesToBudget(
     lines: string[],
     maxLines: number,
     maxChars: number,
+    separator: string = "\n",
 ): { lines: string[]; omitted: number } {
     let selected = [...lines];
     let omitted = 0;
@@ -115,11 +117,12 @@ function trimLinesToBudget(
         selected = selected.slice(-maxLines);
     }
 
-    let charCount = selected.join("\n").length;
+    let charCount = selected.join(separator).length;
     while (charCount > maxChars && selected.length > 0) {
         const removed = selected.shift();
         omitted++;
-        charCount -= (removed?.length || 0) + 1;
+        charCount -= removed?.length || 0;
+        if (selected.length > 0) charCount -= separator.length;
     }
 
     return { lines: selected, omitted };
@@ -127,15 +130,20 @@ function trimLinesToBudget(
 
 function extractSearchTerms(question: string): string[] {
     const cleaned = question
+        .normalize("NFC")
         .toLowerCase()
         .replace(/<@!?\d+>/g, " ")
         .replace(/https?:\/\/\S+/g, " ")
-        .replace(/[^a-z0-9_-]+/g, " ");
+        .replace(/[^\p{L}\p{M}\p{N}_-]+/gu, " ");
 
     const terms = cleaned
         .split(/\s+/)
         .map((term) => term.trim())
-        .filter((term) => term.length >= 3 && !HISTORY_STOP_WORDS.has(term));
+        .filter((term) => {
+            const minimumLength = /^[\x00-\x7F]+$/.test(term) ? 3 : 2;
+            return Array.from(term).length >= minimumLength
+                && !HISTORY_STOP_WORDS.has(term);
+        });
 
     return Array.from(new Set(terms)).slice(0, 8);
 }
@@ -147,7 +155,7 @@ function buildRelevantSnippets(lines: string[], terms: string[]): string[] {
     const usedIndexes = new Set<number>();
 
     for (let i = 0; i < lines.length && snippets.length < HISTORY_SEARCH_MAX_BLOCKS; i++) {
-        const lowerLine = lines[i].toLowerCase();
+        const lowerLine = lines[i].normalize("NFC").toLowerCase();
         if (!terms.some((term) => lowerLine.includes(term))) continue;
 
         const start = Math.max(0, i - HISTORY_SEARCH_CONTEXT_LINES);
@@ -185,12 +193,24 @@ export function loadRecentHistory(
         const lines = readLogLines(yesterdayLog);
         if (lines.length > 0) {
             const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
-            if (relevantSnippets.length > 0) {
+            const charLimit = deepHistory
+                ? HISTORY_RECAP_MAX_CHARS
+                : Math.floor(HISTORY_RECAP_MAX_CHARS / 4);
+            const selectedSnippets = trimLinesToBudget(
+                relevantSnippets,
+                HISTORY_SEARCH_MAX_BLOCKS,
+                charLimit,
+                SNIPPET_SEPARATOR,
+            ).lines;
+            if (selectedSnippets.length > 0) {
                 parts.push(
-                    `--- Yesterday relevant snippets (${relevantSnippets.length} match blocks) ---\n${relevantSnippets.join("\n\n...\n\n")}`,
+                    `--- Yesterday relevant snippets (${selectedSnippets.length} match blocks) ---\n${selectedSnippets.join(SNIPPET_SEPARATOR)}`,
                 );
             } else {
-                parts.push(`--- Yesterday recent tail ---\n${lines.slice(-30).join("\n")}`);
+                const selectedLines = trimLinesToBudget(lines, 30, charLimit).lines;
+                if (selectedLines.length > 0) {
+                    parts.push(`--- Yesterday recent tail ---\n${selectedLines.join("\n")}`);
+                }
             }
         }
     }
@@ -201,7 +221,8 @@ export function loadRecentHistory(
         const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
         const lineLimit = deepHistory ? HISTORY_RECAP_MAX_LINES : HISTORY_RECENT_LINES;
         const charLimit = deepHistory ? HISTORY_RECAP_MAX_CHARS : Math.floor(HISTORY_RECAP_MAX_CHARS / 4);
-        const { lines: selectedLines, omitted } = trimLinesToBudget(lines, lineLimit, charLimit);
+        let selectedSnippets: string[] = [];
+        let remainingCharLimit = charLimit;
 
         if (
             relevantSnippets.length > 0
@@ -209,8 +230,24 @@ export function loadRecentHistory(
             && lineLimit > 0
             && charLimit > 0
         ) {
+            selectedSnippets = trimLinesToBudget(
+                relevantSnippets,
+                HISTORY_SEARCH_MAX_BLOCKS,
+                charLimit,
+                SNIPPET_SEPARATOR,
+            ).lines;
+            remainingCharLimit -= selectedSnippets.join(SNIPPET_SEPARATOR).length;
+        }
+
+        const { lines: selectedLines, omitted } = trimLinesToBudget(
+            lines,
+            lineLimit,
+            remainingCharLimit,
+        );
+
+        if (selectedSnippets.length > 0) {
             parts.push(
-                `--- Today relevant snippets (${relevantSnippets.length} match blocks) ---\n${relevantSnippets.join("\n\n...\n\n")}`,
+                `--- Today relevant snippets (${selectedSnippets.length} match blocks) ---\n${selectedSnippets.join(SNIPPET_SEPARATOR)}`,
             );
         }
 
