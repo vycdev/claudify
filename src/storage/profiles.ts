@@ -13,6 +13,29 @@ type ClaudeRunner = typeof runClaude;
 
 const updateTails = new Map<string, Promise<void>>();
 
+function truncateWithoutSplittingSurrogatePair(
+    text: string,
+    maxLength: number,
+): string {
+    let truncated = text.slice(0, maxLength);
+    if (truncated.length === text.length || truncated.length === 0) {
+        return truncated;
+    }
+
+    const precedingCodeUnit = truncated.charCodeAt(truncated.length - 1);
+    const followingCodeUnit = text.charCodeAt(truncated.length);
+    if (
+        precedingCodeUnit >= 0xd800 &&
+        precedingCodeUnit <= 0xdbff &&
+        followingCodeUnit >= 0xdc00 &&
+        followingCodeUnit <= 0xdfff
+    ) {
+        truncated = truncated.slice(0, -1);
+    }
+
+    return truncated;
+}
+
 function serializeUpdate<T>(
     keys: string[],
     update: () => Promise<T>,
@@ -96,7 +119,10 @@ export async function backgroundProfileUpdate(
 
                     const existing = getUserProfile(userId);
                     if (profileText !== existing.trim()) {
-                        const capped = profileText.slice(0, PROFILE_MAX_CHARS);
+                        const capped = truncateWithoutSplittingSurrogatePair(
+                            profileText,
+                            PROFILE_MAX_CHARS,
+                        );
                         const profilePath = path.join(PROFILES_DIR, `${userId}.txt`);
                         fs.writeFileSync(profilePath, capped, "utf-8");
                         console.error(
@@ -146,7 +172,10 @@ export async function backgroundServerMemoryUpdate(
 
             const newMemory = stdout.trim();
             if (newMemory && newMemory !== existingMemory.trim()) {
-                const capped = newMemory.slice(0, SERVER_MEMORY_MAX_CHARS);
+                const capped = truncateWithoutSplittingSurrogatePair(
+                    newMemory,
+                    SERVER_MEMORY_MAX_CHARS,
+                );
                 fs.writeFileSync(memoryPath, capped, "utf-8");
                 console.error(
                     `[ServerMemory] Updated memory for ${guildName} (${capped.length} chars)`,
