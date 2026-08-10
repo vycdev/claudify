@@ -254,7 +254,7 @@ export function createMcpServer(): Server {
 
                     try {
                         await targetMsg.react(emoji);
-                    } catch {
+                    } catch (error) {
                         // Try custom guild emoji by name
                         const customEmoji = reactChannel.guild.emojis.cache.find(
                             (e) => e.name?.toLowerCase() === emoji.toLowerCase(),
@@ -262,9 +262,7 @@ export function createMcpServer(): Server {
                         if (customEmoji) {
                             await targetMsg.react(customEmoji);
                         } else {
-                            throw new Error(
-                                `Could not find emoji "${emoji}". Use a unicode emoji or a custom emoji name from this server.`,
-                            );
+                            throw error;
                         }
                     }
 

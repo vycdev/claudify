@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserve Discord API errors when MCP message reactions fail instead of reporting them as missing custom emoji.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
 - Run Discord-initiated Claude login in a pseudo-terminal so the CLI accepts submitted OAuth codes.
 - Isolate saved history and summaries by Discord channel ID in dedicated storage namespaces so same-named channels do not share automatic context.
