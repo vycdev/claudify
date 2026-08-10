@@ -51,6 +51,7 @@
 - Fall back to safe defaults when context or history limit environment variables are invalid.
 - Prevent simultaneous Claude requests from the same user across message and reaction triggers.
 - Serialize overlapping profile and server-memory updates to avoid losing newer context.
+- Ignore symlinked files and directories when calculating storage statistics.
 - Bound MCP attachment downloads before writing them to disk.
 - Ignore symlinked and other non-regular entries when reading MCP history or pending files.
 - Filter pending MCP history by its saved Discord channel name or ID.
