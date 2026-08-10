@@ -4,6 +4,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
 
@@ -42,6 +43,7 @@ function sendRequest(port, requestPath, options = {}) {
                 response.on("end", () =>
                     resolve({
                         statusCode: response.statusCode,
+                        allow: response.headers.allow,
                         contentType: response.headers["content-type"],
                         body,
                     }),
@@ -55,6 +57,44 @@ function sendRequest(port, requestPath, options = {}) {
         request.end(options.body);
     });
 }
+
+test("generated MCP config uses the IPv4 listener address", () => {
+    const workingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-mcp-config-"),
+    );
+    const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ],
+            {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MCP_PORT: "43100",
+                    MESSAGES_DIR: path.join(workingDir, "messages"),
+                },
+            },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        const config = JSON.parse(
+            fs.readFileSync(path.join(workingDir, ".mcp-config.json"), "utf8"),
+        );
+        assert.equal(
+            config.mcpServers.discord.url,
+            "http://127.0.0.1:43100/mcp",
+        );
+    } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+    }
+});
 
 test("MCP HTTP requests are validated without stopping the server", async (t) => {
     const messagesDir = fs.mkdtempSync(
@@ -152,4 +192,17 @@ test("MCP HTTP requests are validated without stopping the server", async (t) =>
 
     const followUpResponse = await sendRequest(port, "/not-mcp");
     assert.equal(followUpResponse.statusCode, 404);
+
+    const getResponse = await sendRequest(port, "/mcp");
+    assert.equal(getResponse.statusCode, 405);
+    assert.equal(getResponse.allow, "POST");
+    assert.equal(getResponse.contentType, "application/json");
+    assert.equal(
+        JSON.parse(getResponse.body).error.message,
+        "Method not allowed (stateless mode)",
+    );
+
+    const putResponse = await sendRequest(port, "/mcp", { method: "PUT" });
+    assert.equal(putResponse.statusCode, 405);
+    assert.equal(putResponse.allow, "POST");
 });
