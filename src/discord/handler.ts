@@ -1,5 +1,11 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
-import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
+import {
+    REQUIRED_ROLE_ID,
+    COOLDOWN_MS,
+    LIVE_CONTEXT_LIMIT,
+    DEEP_LIVE_CONTEXT_LIMIT,
+    LIVE_CONTEXT_MAX_CHARS,
+} from "../config.js";
 import { client } from "./client.js";
 import { normalizeBotMentions } from "./mentions.js";
 import { parseClaudeResponse } from "./response.js";
@@ -97,6 +103,46 @@ async function fetchChannelMessages(channel: TextChannel, limit: number): Promis
     return collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 }
 
+export function formatLiveMessagesContext(
+    messages: Message[],
+    requestedLimit: number,
+    maxChars: number,
+): string {
+    if (messages.length === 0 || maxChars <= 0) return "";
+
+    const formattedMessages = messages.map(formatMessageForContext);
+    const buildHeader = (firstSelectedIndex: number): string => {
+        const selectedCount = messages.length - firstSelectedIndex;
+        const oldest = messages[firstSelectedIndex]?.createdAt.toISOString()
+            ?? "unknown";
+        const newest = selectedCount > 0
+            ? messages.at(-1)!.createdAt.toISOString()
+            : "unknown";
+        return `Fetched ${selectedCount} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${requestedLimit}, omitted_oldest=${firstSelectedIndex}.`;
+    };
+
+    let firstSelectedIndex = messages.length;
+    let selectedMessageChars = 0;
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const candidateMessageChars =
+            selectedMessageChars
+            + formattedMessages[index].length
+            + (selectedMessageChars > 0 ? 1 : 0);
+        const candidateLength =
+            buildHeader(index).length + 1 + candidateMessageChars;
+        if (candidateLength > maxChars) break;
+
+        firstSelectedIndex = index;
+        selectedMessageChars = candidateMessageChars;
+    }
+
+    const text = [
+        buildHeader(firstSelectedIndex),
+        ...formattedMessages.slice(firstSelectedIndex),
+    ].join("\n");
+    return text.slice(0, maxChars);
+}
+
 async function buildLiveMessagesContext(
     channel: TextChannel,
     question: string,
@@ -108,12 +154,11 @@ async function buildLiveMessagesContext(
 
     if (messages.length === 0) return { text: "", messages };
 
-    const oldest = messages[0].createdAt.toISOString();
-    const newest = messages[messages.length - 1].createdAt.toISOString();
-    const text = [
-        `Fetched ${messages.length} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${limit}.`,
-        ...messages.map(formatMessageForContext),
-    ].join("\n");
+    const text = formatLiveMessagesContext(
+        messages,
+        limit,
+        LIVE_CONTEXT_MAX_CHARS,
+    );
 
     return { text, messages };
 }

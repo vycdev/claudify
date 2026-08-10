@@ -156,6 +156,17 @@ test("context limits preserve valid integers including zero", () => {
     ]);
 });
 
+test("live context character budget falls back for malformed values", () => {
+    assert.deepEqual(
+        readConfigValues(["LIVE_CONTEXT_MAX_CHARS"], ["not-a-number"]),
+        [140000],
+    );
+    assert.deepEqual(
+        readConfigValues(["LIVE_CONTEXT_MAX_CHARS"], ["0"]),
+        [0],
+    );
+});
+
 test("cooldown stays within Node's supported timer range", () => {
     assert.deepEqual(
         readConfigValues(["COOLDOWN_MS"], ["2147483647"]),
