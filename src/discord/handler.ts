@@ -1,5 +1,11 @@
 import { Message, TextChannel, MessageReaction, User, PartialMessageReaction, PartialUser } from "discord.js";
-import { REQUIRED_ROLE_ID, COOLDOWN_MS, LIVE_CONTEXT_LIMIT, DEEP_LIVE_CONTEXT_LIMIT } from "../config.js";
+import {
+    REQUIRED_ROLE_ID,
+    COOLDOWN_MS,
+    LIVE_CONTEXT_LIMIT,
+    DEEP_LIVE_CONTEXT_LIMIT,
+    LIVE_CONTEXT_MAX_CHARS,
+} from "../config.js";
 import { client } from "./client.js";
 import { normalizeBotMentions } from "./mentions.js";
 import { parseClaudeResponse } from "./response.js";
@@ -17,6 +23,7 @@ import { downloadAttachment } from "../storage/images.js";
 import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
+import { formatContextTime } from "./context.js";
 
 // Consistent display name for a user — used in logs, prompts, and history
 function authorLabel(user: { displayName?: string; globalName?: string | null; username: string; id: string }): string {
@@ -35,6 +42,7 @@ function summarizeEmbeds(msg: Message): string {
             const parts: string[] = [];
             if (e.title) parts.push(e.title);
             if (e.description) parts.push(e.description);
+            if (e.url) parts.push(e.url);
             if (e.fields?.length) {
                 parts.push(...e.fields.map((f) => `${f.name}: ${f.value}`));
             }
@@ -55,8 +63,17 @@ function messageContentForMemory(msg: Message): string {
     return content.trim();
 }
 
+export function buildReactionQuestion(
+    msgAuthorLabel: string,
+    userLabel: string,
+    msg: Message,
+): string {
+    const targetContent = messageContentForMemory(msg);
+    return `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${targetContent}`;
+}
+
 function formatMessageForContext(msg: Message): string {
-    const time = msg.createdAt.toTimeString().split(" ")[0];
+    const time = formatContextTime(msg.createdAt);
     const label = authorLabel(msg.author);
     return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
 }
@@ -86,6 +103,46 @@ async function fetchChannelMessages(channel: TextChannel, limit: number): Promis
     return collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 }
 
+export function formatLiveMessagesContext(
+    messages: Message[],
+    requestedLimit: number,
+    maxChars: number,
+): string {
+    if (messages.length === 0 || maxChars <= 0) return "";
+
+    const formattedMessages = messages.map(formatMessageForContext);
+    const buildHeader = (firstSelectedIndex: number): string => {
+        const selectedCount = messages.length - firstSelectedIndex;
+        const oldest = messages[firstSelectedIndex]?.createdAt.toISOString()
+            ?? "unknown";
+        const newest = selectedCount > 0
+            ? messages.at(-1)!.createdAt.toISOString()
+            : "unknown";
+        return `Fetched ${selectedCount} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${requestedLimit}, omitted_oldest=${firstSelectedIndex}.`;
+    };
+
+    let firstSelectedIndex = messages.length;
+    let selectedMessageChars = 0;
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const candidateMessageChars =
+            selectedMessageChars
+            + formattedMessages[index].length
+            + (selectedMessageChars > 0 ? 1 : 0);
+        const candidateLength =
+            buildHeader(index).length + 1 + candidateMessageChars;
+        if (candidateLength > maxChars) break;
+
+        firstSelectedIndex = index;
+        selectedMessageChars = candidateMessageChars;
+    }
+
+    const text = [
+        buildHeader(firstSelectedIndex),
+        ...formattedMessages.slice(firstSelectedIndex),
+    ].join("\n");
+    return text.slice(0, maxChars);
+}
+
 async function buildLiveMessagesContext(
     channel: TextChannel,
     question: string,
@@ -97,12 +154,11 @@ async function buildLiveMessagesContext(
 
     if (messages.length === 0) return { text: "", messages };
 
-    const oldest = messages[0].createdAt.toISOString();
-    const newest = messages[messages.length - 1].createdAt.toISOString();
-    const text = [
-        `Fetched ${messages.length} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${limit}.`,
-        ...messages.map(formatMessageForContext),
-    ].join("\n");
+    const text = formatLiveMessagesContext(
+        messages,
+        limit,
+        LIVE_CONTEXT_MAX_CHARS,
+    );
 
     return { text, messages };
 }
@@ -350,7 +406,7 @@ export function registerHandler() {
             const botName = client.user?.displayName || client.user?.username || "Claudify";
             const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
             const userLabel = authorLabel(user as any);
-            const question = `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${msg.content}`;
+            const question = buildReactionQuestion(msgAuthorLabel, userLabel, msg);
 
             // Fetch live messages for context
             let liveMessages = "";
@@ -409,7 +465,7 @@ export function registerHandler() {
 
             appendToLog(
                 userLabel,
-                `[🤖 reaction on: ${msg.content?.slice(0, 100)}]`,
+                `[🤖 reaction on: ${messageContentForMemory(msg).slice(0, 100)}]`,
                 msg.channel.id,
                 msg.channel.name,
             );
@@ -534,6 +590,8 @@ async function processMessage(msg: Message): Promise<void> {
         // Extract the question
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
+        // A bare bot mention is intentionally a valid prompt: Claude should infer
+        // a response from live channel context, with replyContext added for replies.
         const rawQuestion = normalizeBotMentions(
             askQuestion ?? msg.content,
             client.user!.id,

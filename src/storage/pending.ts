@@ -8,6 +8,7 @@ export function savePending(msg: Message) {
     const content = [
         `Author: ${msg.author.tag}`,
         `Channel: #${(msg.channel as TextChannel).name}`,
+        `Channel ID: ${msg.channelId}`,
         `Timestamp: ${msg.createdAt.toISOString()}`,
         `---`,
         msg.content,

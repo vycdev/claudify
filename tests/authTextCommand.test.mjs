@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseAuthTextCommand } from "../build/discord/commands/auth.js";
+import {
+    authCommand,
+    isPrivateAuthContext,
+    parseAuthTextCommand,
+} from "../build/discord/commands/auth.js";
+
+test("slash auth is available only in private contexts", () => {
+    assert.equal(isPrivateAuthContext(null), true);
+    assert.equal(isPrivateAuthContext("guild-id"), false);
+    assert.equal(authCommand.toJSON().dm_permission, true);
+});
 
 test("parses private auth text commands", () => {
     assert.deepEqual(parseAuthTextCommand("!auth"), {

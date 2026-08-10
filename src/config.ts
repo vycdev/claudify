@@ -189,6 +189,8 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const DISCORD_MESSAGE_MAX_CHARS = 2000;
+export const MCP_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+export const MCP_FETCH_MESSAGES_MAX_LINKS = 100;
 
 export const COOLDOWN_MS = parseNonNegativeInteger(
     process.env.COOLDOWN_MS,
@@ -240,6 +242,10 @@ export const SUPPRESS_MENTIONS =
 
 export const LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.LIVE_CONTEXT_LIMIT, 35);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.DEEP_LIVE_CONTEXT_LIMIT, 500);
+export const LIVE_CONTEXT_MAX_CHARS = parseNonNegativeInteger(
+    process.env.LIVE_CONTEXT_MAX_CHARS,
+    140000,
+);
 export const HISTORY_RECENT_LINES = parseNonNegativeInteger(process.env.HISTORY_RECENT_LINES, 80);
 export const HISTORY_RECAP_MAX_LINES = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_LINES, 1000);
 export const HISTORY_RECAP_MAX_CHARS = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_CHARS, 140000);
@@ -247,6 +253,7 @@ export const HISTORY_SEARCH_MAX_BLOCKS = parseNonNegativeInteger(process.env.HIS
 export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.HISTORY_SEARCH_CONTEXT_LINES, 2);
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
+export const MCP_MAX_REQUEST_BYTES = 1_048_576;
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");
