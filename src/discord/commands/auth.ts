@@ -18,11 +18,11 @@ const authManager = new ClaudeAuthManager({
     loginTimeoutMs: CLAUDE_AUTH_LOGIN_TIMEOUT_MS,
 });
 
-const authCommand = new SlashCommandBuilder()
+export const authCommand = new SlashCommandBuilder()
     .setName("auth")
     .setDescription("Manage Claudify's Claude CLI authentication")
     .setDefaultMemberPermissions(null)
-    .setDMPermission(false)
+    .setDMPermission(true)
     .addSubcommand((subcommand) =>
         subcommand
             .setName("status")
@@ -85,6 +85,10 @@ function safeErrorMessage(error: unknown): string {
     return error instanceof Error
         ? error.message
         : "Claude authentication failed.";
+}
+
+export function isPrivateAuthContext(guildId: string | null): boolean {
+    return guildId === null;
 }
 
 export type AuthTextCommand =
@@ -269,6 +273,14 @@ async function handleAuthInteraction(
     if (!AUTH_ADMIN_USER_IDS.has(interaction.user.id)) {
         await interaction.reply({
             content: "You are not allowed to manage Claude authentication.",
+            ephemeral: true,
+        });
+        return;
+    }
+
+    if (!isPrivateAuthContext(interaction.guildId)) {
+        await interaction.reply({
+            content: "For security, use this command in a private DM.",
             ephemeral: true,
         });
         return;
