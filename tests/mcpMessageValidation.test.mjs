@@ -72,3 +72,39 @@ test("MCP send-message enforces Discord's content length limits", async (t) => {
         /Invalid arguments: message: String must contain at most 2000 character/,
     );
 });
+
+test("MCP react-to-message validates message IDs before Discord lookup", async (t) => {
+    const { createMcpServer } = await import("../build/mcp/server.js");
+    const server = createMcpServer();
+    t.after(() => server.close().catch(() => {}));
+    const listToolsHandler = server._requestHandlers.get("tools/list");
+    const callToolHandler = server._requestHandlers.get("tools/call");
+    assert.ok(listToolsHandler);
+    assert.ok(callToolHandler);
+
+    const { tools } = await listToolsHandler(
+        { method: "tools/list", params: {} },
+        {},
+    );
+    const reactTool = tools.find(({ name }) => name === "react-to-message");
+    assert.equal(reactTool.inputSchema.properties.messageId.pattern, "^\\d+$");
+
+    await assert.rejects(
+        () =>
+            callToolHandler(
+                {
+                    method: "tools/call",
+                    params: {
+                        name: "react-to-message",
+                        arguments: {
+                            channel: "general",
+                            messageId: "not-a-discord-message-id",
+                            emoji: "👍",
+                        },
+                    },
+                },
+                {},
+            ),
+        /Invalid arguments: messageId: Invalid Discord message ID/,
+    );
+});

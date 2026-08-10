@@ -25,7 +25,10 @@ const ReactToMessageSchema = z.object({
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
-    messageId: z.string().describe("The Discord message ID to react to"),
+    messageId: z
+        .string()
+        .regex(/^\d+$/, "Invalid Discord message ID")
+        .describe("The Discord message ID to react to"),
     emoji: z.string().describe('Emoji to react with — unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pepeclap")'),
 });
 
@@ -128,6 +131,7 @@ export function createMcpServer(): Server {
                         },
                         messageId: {
                             type: "string",
+                            pattern: "^\\d+$",
                             description: "The Discord message ID to react to",
                         },
                         emoji: {
