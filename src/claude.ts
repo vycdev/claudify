@@ -133,11 +133,13 @@ function spawnClaude(
             }
         };
 
+        proc.stdout.setEncoding("utf8");
+        proc.stderr.setEncoding("utf8");
         proc.stdout.on("data", (data) => {
-            stdout = appendBounded(stdout, data.toString());
+            stdout = appendBounded(stdout, data);
         });
         proc.stderr.on("data", (data) => {
-            stderr = appendBounded(stderr, data.toString());
+            stderr = appendBounded(stderr, data);
         });
 
         const timeout = setTimeout(() => {
