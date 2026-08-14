@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Keep astral Unicode characters intact when long profile and server-memory displays are split across Discord messages.
 - Bound recent live Discord context passed to Claude so deep-context requests cannot contribute unbounded live-message input.
 - Support announcement and other guild text-based channels in MCP channel tools.
 - Reject symbolic-link attachment destinations instead of following them when saving downloads.
