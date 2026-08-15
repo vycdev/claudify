@@ -3,6 +3,11 @@ import fs from "node:fs";
 const [, , group, action] = process.argv;
 const markerPath = process.env.CLAUDIFY_AUTH_TEST_MARKER;
 
+if (Object.keys(process.env).some((key) => key.toUpperCase() === "CLAUDECODE")) {
+    process.stderr.write("Nested Claude sessions are not supported.\n");
+    process.exit(1);
+}
+
 if (!markerPath || group !== "auth") {
     process.exit(2);
 }

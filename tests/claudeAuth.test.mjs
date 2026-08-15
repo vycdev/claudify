@@ -80,6 +80,38 @@ test("preserves balanced delimiters within Claude login URLs", () => {
     assert.equal(extractClaudeLoginUrl(loginUrl), loginUrl);
 });
 
+test("does not pass nested Claude markers to auth subprocesses", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
+    const markerPath = path.join(tempDir, "authenticated");
+    const fakeCliPath = path.join(tempDir, "fake-claude.mjs");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeAuth.mjs");
+    fs.copyFileSync(fixturePath, fakeCliPath);
+    fs.writeFileSync(markerPath, "authenticated", "utf8");
+    t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+    const manager = new ClaudeAuthManager({
+        command: process.execPath,
+        prefixArgs: [fakeCliPath],
+        commandTimeoutMs: 2_000,
+        loginTimeoutMs: 2_000,
+        env: {
+            ...process.env,
+            CLAUDECODE: "1",
+            ClAuDeCoDe: "also-set",
+            CLAUDIFY_AUTH_TEST_MARKER: markerPath,
+            CLAUDIFY_AUTH_TEST_REQUIRE_TTY: "1",
+        },
+    });
+
+    assert.equal((await manager.getStatus()).loggedIn, true);
+    fs.unlinkSync(markerPath);
+    assert.equal(
+        await manager.startLogin("owner"),
+        "https://claude.com/cai/oauth/authorize?test=1",
+    );
+    manager.cancelLogin("owner");
+});
+
 test("runs a private login session and verifies its final status", async (t) => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-auth-"));
     const markerPath = path.join(tempDir, "authenticated");

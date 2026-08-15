@@ -19,7 +19,7 @@
 - Keep `!usage blocks` billing-window selection and displayed times in UTC regardless of the host timezone.
 - Preserve line indentation when MCP clients read saved message history or pending messages.
 - Match the generated MCP endpoint hostname to the server's IPv4 loopback listener.
-- Strip inherited `CLAUDECODE` markers from Claude CLI subprocesses so Claudify can launch them from Claude Code-managed environments.
+- Strip inherited `CLAUDECODE` markers from Claude CLI response and authentication subprocesses so Claudify can launch them from Claude Code-managed environments.
 - Reject required prompt values that contain no non-whitespace content.
 - Match legacy MCP history channel filters exactly instead of including similarly named channels.
 - Preserve URL-only embeds returned by the MCP `fetch-messages` tool.
