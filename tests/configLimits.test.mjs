@@ -85,7 +85,15 @@ function readBotEffort(value) {
     }
 }
 
-function readHistory({ recentLines, recapLines, recapChars, question }) {
+function readHistory({
+    recentLines,
+    recapLines,
+    recapChars,
+    question,
+    content = "[10:00:00] user: this content must be excluded\n",
+    daysAgo = 0,
+    searchContextLines = "2",
+}) {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-zero-history-"),
     );
@@ -93,7 +101,8 @@ function readHistory({ recentLines, recapLines, recapChars, question }) {
     const script = [
         `const fs = await import("node:fs");`,
         `const history = await import(${JSON.stringify(historyUrl)});`,
-        `fs.writeFileSync(history.getDailyLogPath("zero-limit"), "[10:00:00] user: this content must be excluded\\n", "utf8");`,
+        `const logDate = new Date(Date.now() - ${daysAgo} * 86400000);`,
+        `fs.writeFileSync(history.getDailyLogPath("zero-limit", logDate), ${JSON.stringify(content)}, "utf8");`,
         `process.stdout.write(history.loadRecentHistory("zero-limit", ${JSON.stringify(question)}));`,
     ].join("\n");
 
@@ -109,6 +118,7 @@ function readHistory({ recentLines, recapLines, recapChars, question }) {
                     HISTORY_RECENT_LINES: recentLines,
                     HISTORY_RECAP_MAX_LINES: recapLines,
                     HISTORY_RECAP_MAX_CHARS: recapChars,
+                    HISTORY_SEARCH_CONTEXT_LINES: searchContextLines,
                 },
             },
         );
@@ -144,6 +154,17 @@ test("context limits preserve valid integers including zero", () => {
         5,
         6,
     ]);
+});
+
+test("live context character budget falls back for malformed values", () => {
+    assert.deepEqual(
+        readConfigValues(["LIVE_CONTEXT_MAX_CHARS"], ["not-a-number"]),
+        [140000],
+    );
+    assert.deepEqual(
+        readConfigValues(["LIVE_CONTEXT_MAX_CHARS"], ["0"]),
+        [0],
+    );
 });
 
 test("cooldown stays within Node's supported timer range", () => {
@@ -197,4 +218,45 @@ test("zero history budgets exclude saved history", () => {
         }),
         /this content must be excluded/,
     );
+});
+
+test("relevant history snippets honor the history character budget", () => {
+    const result = readHistory({
+        recentLines: "80",
+        recapLines: "1000",
+        recapChars: "100",
+        question: "excluded content",
+    });
+
+    assert.doesNotMatch(result, /this content must be excluded/);
+});
+
+test("relevant snippets leave only their remaining budget for recent history", () => {
+    const result = readHistory({
+        recentLines: "80",
+        recapLines: "1000",
+        recapChars: "160",
+        question: "needle",
+        content: [
+            "[10:00:00] user: needle detail",
+            "[10:01:00] user: recent detail",
+            "",
+        ].join("\n"),
+        searchContextLines: "0",
+    });
+
+    assert.match(result, /needle detail/);
+    assert.doesNotMatch(result, /recent detail/);
+});
+
+test("yesterday search snippets honor the history character budget", () => {
+    const result = readHistory({
+        recentLines: "80",
+        recapLines: "1000",
+        recapChars: "100",
+        question: "excluded content",
+        daysAgo: 1,
+    });
+
+    assert.doesNotMatch(result, /this content must be excluded/);
 });

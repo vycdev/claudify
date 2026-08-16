@@ -115,6 +115,17 @@ function isInsideFenceLine(spans: FenceSpan[], position: number): boolean {
     );
 }
 
+function splitsSurrogatePair(text: string, position: number): boolean {
+    const precedingCodeUnit = text.charCodeAt(position - 1);
+    const followingCodeUnit = text.charCodeAt(position);
+    return (
+        precedingCodeUnit >= 0xd800 &&
+        precedingCodeUnit <= 0xdbff &&
+        followingCodeUnit >= 0xdc00 &&
+        followingCodeUnit <= 0xdfff
+    );
+}
+
 function continuationOpener(fence: FenceSpan, maxLen: number): string {
     const minimumClosingLength = fence.marker.length + 1;
     return fence.opener.length + 1 + minimumClosingLength < maxLen
@@ -165,7 +176,12 @@ function findLargestFittingCandidate(
 
     for (let splitAt = largestSourceLength; splitAt >= 1; splitAt--) {
         const absoluteSplit = offset + splitAt;
-        if (isInsideFenceLine(spans, absoluteSplit)) continue;
+        if (
+            isInsideFenceLine(spans, absoluteSplit) ||
+            splitsSurrogatePair(text, absoluteSplit)
+        ) {
+            continue;
+        }
 
         const candidate = makeCandidate(text, offset, splitAt, spans);
         if (
@@ -252,6 +268,7 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
                 );
                 if (
                     !isInsideFenceLine(spans, offset + preferredSplit) &&
+                    !splitsSurrogatePair(text, offset + preferredSplit) &&
                     prefix.length +
                         preferred.content.length +
                         preferred.suffix.length <=

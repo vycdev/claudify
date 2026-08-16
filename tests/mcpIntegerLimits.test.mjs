@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("MCP limit fields require integers", async (t) => {
+test("MCP limit fields advertise and enforce integer bounds", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-limits-"),
     );
@@ -35,8 +35,14 @@ test("MCP limit fields require integers", async (t) => {
         ({ name }) => name === "read-messages",
     )?.inputSchema;
     assert.equal(historySchema?.properties?.limit?.type, "integer");
+    assert.equal(historySchema?.properties?.limit?.minimum, 1);
+    assert.equal(historySchema?.properties?.limit?.maximum, 100);
     assert.equal(historySchema?.properties?.maxLines?.type, "integer");
+    assert.equal(historySchema?.properties?.maxLines?.minimum, 1);
+    assert.equal(historySchema?.properties?.maxLines?.maximum, 2000);
     assert.equal(liveSchema?.properties?.limit?.type, "integer");
+    assert.equal(liveSchema?.properties?.limit?.minimum, 1);
+    assert.equal(liveSchema?.properties?.limit?.maximum, 100);
 
     const fractionalCalls = [
         {
@@ -57,6 +63,28 @@ test("MCP limit fields require integers", async (t) => {
         await assert.rejects(
             client.callTool(request),
             /Invalid arguments: (limit|maxLines): Expected integer/,
+        );
+    }
+
+    const outOfRangeCalls = [
+        {
+            name: "read-messages",
+            arguments: { channel: "general", limit: 101 },
+        },
+        {
+            name: "read-message-history",
+            arguments: { limit: 0 },
+        },
+        {
+            name: "read-message-history",
+            arguments: { maxLines: 2001 },
+        },
+    ];
+
+    for (const request of outOfRangeCalls) {
+        await assert.rejects(
+            client.callTool(request),
+            /Invalid arguments: (limit|maxLines): Number must be/,
         );
     }
 });

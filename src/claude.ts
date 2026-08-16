@@ -10,6 +10,22 @@ export interface ClaudeExecutable {
 const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
 const FORCE_KILL_GRACE_MS = 5_000;
+const MAX_CAPTURED_OUTPUT = 64 * 1024;
+
+function appendBounded(current: string, chunk: string): string {
+    const combined = current + chunk;
+    if (combined.length <= MAX_CAPTURED_OUTPUT) return combined;
+
+    const start = combined.length - MAX_CAPTURED_OUTPUT;
+    const firstCodeUnit = combined.charCodeAt(start);
+    const previousCodeUnit = combined.charCodeAt(start - 1);
+    const splitsSurrogatePair =
+        firstCodeUnit >= 0xDC00
+        && firstCodeUnit <= 0xDFFF
+        && previousCodeUnit >= 0xD800
+        && previousCodeUnit <= 0xDBFF;
+    return combined.slice(splitsSurrogatePair ? start + 1 : start);
+}
 let activeCount = 0;
 let lastSpawnTime = 0;
 const queue: Array<{
@@ -58,6 +74,7 @@ function spawnClaude(
         const { workload, model, effort } = options;
         const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(process.env)) {
+            if (key.toUpperCase() === "CLAUDECODE") continue;
             if (value !== undefined) env[key] = value;
         }
         delete env.MCP_SERVER_NAME;
@@ -117,10 +134,10 @@ function spawnClaude(
         };
 
         proc.stdout.on("data", (data) => {
-            stdout += data.toString();
+            stdout = appendBounded(stdout, data.toString());
         });
         proc.stderr.on("data", (data) => {
-            stderr += data.toString();
+            stderr = appendBounded(stderr, data.toString());
         });
 
         const timeout = setTimeout(() => {
