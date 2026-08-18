@@ -61,3 +61,4 @@
 - Bound MCP attachment downloads before writing them to disk.
 - Ignore symlinked and other non-regular entries when reading MCP history or pending files.
 - Filter pending MCP history by its saved Discord channel name or ID.
+- Filter pending MCP history by the saved message timestamp when a date is requested.

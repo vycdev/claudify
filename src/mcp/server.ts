@@ -47,9 +47,10 @@ function isWithinDiscordMessageLimit(message: string): boolean {
     return true;
 }
 
-function readPendingChannel(filePath: string): {
+function readPendingMetadata(filePath: string): {
     channelId: string | undefined;
     channelName: string | undefined;
+    date: string | undefined;
 } {
     const lines = fs.readFileSync(filePath, "utf-8").split("\n");
     const separatorIndex = lines.indexOf("---");
@@ -58,12 +59,22 @@ function readPendingChannel(filePath: string): {
     const channelIdLine = headerLines.find((line) =>
         line.startsWith("Channel ID: "),
     );
+    const timestampLine = headerLines.find((line) =>
+        line.startsWith("Timestamp: "),
+    );
+    const timestamp = timestampLine
+        ? new Date(timestampLine.slice("Timestamp: ".length))
+        : undefined;
 
     return {
         channelId: channelIdLine?.slice("Channel ID: ".length),
         channelName: channelLine
             ?.slice("Channel: #".length)
             .replace(/[^a-zA-Z0-9-_]/g, "_"),
+        date:
+            timestamp && !Number.isNaN(timestamp.getTime())
+                ? timestamp.toISOString().slice(0, 10)
+                : undefined,
     };
 }
 
@@ -384,18 +395,19 @@ export function createMcpServer(): Server {
                         )
                         .map((entry) => {
                             const filePath = path.join(dir, entry.name);
-                            const pendingChannel =
+                            const pendingMetadata =
                                 type === "pending"
-                                    ? readPendingChannel(filePath)
+                                    ? readPendingMetadata(filePath)
                                     : undefined;
                             return {
                                 displayName: entry.name,
                                 filePath,
-                                channelId: pendingChannel?.channelId,
+                                channelId: pendingMetadata?.channelId,
                                 channelName:
                                     type === "history"
                                         ? getLegacyHistoryChannel(entry.name)
-                                        : pendingChannel?.channelName,
+                                        : pendingMetadata?.channelName,
+                                date: pendingMetadata?.date,
                             };
                         });
 
@@ -419,6 +431,7 @@ export function createMcpServer(): Server {
                                     ),
                                     channelId: parsed?.channelId,
                                     channelName: parsed?.channelName,
+                                    date: undefined,
                                 };
                             });
                         files.push(...channelFiles);
@@ -442,8 +455,10 @@ export function createMcpServer(): Server {
                         );
                     }
                     if (date) {
-                        files = files.filter((f) =>
-                            f.displayName.endsWith(`_${date}.txt`),
+                        files = files.filter((file) =>
+                            type === "pending"
+                                ? file.date === date
+                                : file.displayName.endsWith(`_${date}.txt`),
                         );
                     }
 
