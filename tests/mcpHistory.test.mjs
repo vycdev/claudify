@@ -94,6 +94,15 @@ test("MCP history filters matching regular files and preserves pending indentati
         await server.close();
     });
 
+    const { tools } = await client.listTools();
+    const historyTool = tools.find(
+        ({ name }) => name === "read-message-history",
+    );
+    assert.equal(
+        historyTool?.inputSchema.properties?.date?.pattern,
+        "^\\d{4}-\\d{2}-\\d{2}$",
+    );
+
     const result = await client.callTool({
         name: "read-message-history",
         arguments: { date: "2026-08-01" },
