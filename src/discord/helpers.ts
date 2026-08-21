@@ -65,37 +65,36 @@ export async function findChannel(
             return channel;
         }
     } catch {
-        const channels = guild.channels.cache.filter(
-            (channel): channel is GuildTextBasedChannel =>
-                isGuildTextBasedChannel(channel) &&
-                (channel.name.toLowerCase() ===
-                    channelIdentifier.toLowerCase() ||
-                    channel.name.toLowerCase() ===
-                        channelIdentifier.toLowerCase().replace("#", "")),
-        );
-
-        if (channels.size === 0) {
-            const availableChannels = guild.channels.cache
-                .filter((c): c is GuildTextBasedChannel =>
-                    isGuildTextBasedChannel(c),
-                )
-                .map((c) => `"#${c.name}"`)
-                .join(", ");
-            throw new Error(
-                `Channel "${channelIdentifier}" not found in server "${guild.name}". Available channels: ${availableChannels}`,
-            );
-        }
-        if (channels.size > 1) {
-            const channelList = channels
-                .map((c) => `#${c.name} (${c.id})`)
-                .join(", ");
-            throw new Error(
-                `Multiple channels found with name "${channelIdentifier}" in server "${guild.name}": ${channelList}. Please specify the channel ID.`,
-            );
-        }
-        return channels.first()!;
+        // The identifier may be a channel name rather than a Discord ID.
     }
-    throw new Error(
-        `Channel "${channelIdentifier}" is not a text channel or not found in server "${guild.name}"`,
+
+    const channels = guild.channels.cache.filter(
+        (channel): channel is GuildTextBasedChannel =>
+            isGuildTextBasedChannel(channel) &&
+            (channel.name.toLowerCase() ===
+                channelIdentifier.toLowerCase() ||
+                channel.name.toLowerCase() ===
+                    channelIdentifier.toLowerCase().replace("#", "")),
     );
+
+    if (channels.size === 0) {
+        const availableChannels = guild.channels.cache
+            .filter((c): c is GuildTextBasedChannel =>
+                isGuildTextBasedChannel(c),
+            )
+            .map((c) => `"#${c.name}"`)
+            .join(", ");
+        throw new Error(
+            `Channel "${channelIdentifier}" not found in server "${guild.name}". Available channels: ${availableChannels}`,
+        );
+    }
+    if (channels.size > 1) {
+        const channelList = channels
+            .map((c) => `#${c.name} (${c.id})`)
+            .join(", ");
+        throw new Error(
+            `Multiple channels found with name "${channelIdentifier}" in server "${guild.name}": ${channelList}. Please specify the channel ID.`,
+        );
+    }
+    return channels.first()!;
 }
