@@ -145,6 +145,14 @@ test("MCP history filters matching regular files and preserves pending indentati
         createdAt: new Date("2026-08-01T12:45:00.000Z"),
         content: "other-channel pending entry",
     });
+    savePending({
+        id: "555555555555555555",
+        author: { tag: "user#0003" },
+        channel: { name: "general" },
+        channelId: "111111111111111111",
+        createdAt: new Date("2026-08-02T00:15:00.000Z"),
+        content: "next-day pending entry",
+    });
     fs.writeFileSync(
         path.join(messagesDir, "pending", "333333333333333333.txt"),
         [
@@ -157,6 +165,22 @@ test("MCP history filters matching regular files and preserves pending indentati
         ].join("\n"),
         "utf8",
     );
+
+    const pendingDateResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { type: "pending", date: "2026-08-01" },
+    });
+    const pendingDateText = pendingDateResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof pendingDateText, "string");
+    assert.match(pendingDateText, /222222222222222222\.txt/);
+    assert.match(pendingDateText, /333333333333333333\.txt/);
+    assert.match(pendingDateText, /444444444444444444\.txt/);
+    assert.doesNotMatch(pendingDateText, /regular\.txt/);
+    assert.doesNotMatch(pendingDateText, /555555555555555555\.txt/);
+    assert.doesNotMatch(pendingDateText, /next-day pending entry/);
 
     for (const channel of ["general", "111111111111111111"]) {
         const pendingResult = await client.callTool({

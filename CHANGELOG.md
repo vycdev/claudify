@@ -63,3 +63,4 @@
 - Ignore symlinked and other non-regular entries when reading MCP history or pending files.
 - Filter pending MCP history by its saved Discord channel name or ID.
 - Reject blank MCP saved-history channel filters instead of silently reading every channel.
+- Filter pending MCP history by the saved message timestamp when a date is requested.
