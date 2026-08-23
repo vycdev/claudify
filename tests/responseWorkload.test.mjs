@@ -46,6 +46,13 @@ test("responses route through response settings and report the response model", 
     assert.notEqual(systemPromptIndex, -1);
     assert.match(captured.args[systemPromptIndex + 1], /response-model/);
     assert.doesNotMatch(captured.args[systemPromptIndex + 1], /global-model/);
+    const allowedToolsIndex = captured.args.indexOf("--allowedTools");
+    assert.notEqual(allowedToolsIndex, -1);
+    assert.ok(
+        captured.args[allowedToolsIndex + 1]
+            .split(",")
+            .includes("mcp__morpheus__*"),
+    );
 
     let helpReply = "";
     await handleHelp({

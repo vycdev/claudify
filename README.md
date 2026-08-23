@@ -175,6 +175,23 @@ npx @modelcontextprotocol/inspector
 In the Inspector, select **Streamable HTTP** and connect to
 `http://127.0.0.1:3100/mcp` (or your configured `MCP_PORT`).
 
+### Morpheus MCP Client
+
+Claudify can also expose Morpheus tools to its Claude Code response process.
+Set both variables together:
+
+```env
+MORPHEUS_MCP_URL=http://morpheus_bot_prod:5268/api/mcp
+MORPHEUS_MCP_API_KEY=replace-with-the-morpheus-api-key
+```
+
+At startup, Claudify writes the authenticated HTTP server into its generated
+`.mcp-config.json`. Claude Code receives that file explicitly and allows only
+the `mcp__morpheus__*` tool namespace, so running `claude mcp add` inside the
+container is neither required nor relied upon for persistence. The URL must be
+reachable from the Claudify container; the Portainer deployment attaches it to
+Morpheus's internal Docker network without publishing the MCP port on the host.
+
 ## Security
 
 - Claude CLI is restricted to `WebSearch`, `WebFetch`, `Read`, and `Write` tools only

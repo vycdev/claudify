@@ -130,6 +130,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `CLAUDE_SUMMARY_EFFORT` | No | inherit | Effort for daily summaries |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
+| `MORPHEUS_MCP_URL` | No | — | Morpheus Streamable HTTP MCP endpoint; requires `MORPHEUS_MCP_API_KEY` |
+| `MORPHEUS_MCP_API_KEY` | No | — | Bearer token for the configured Morpheus MCP endpoint |
 
 Per-workload model and effort properties resolve independently. Blank, unset,
 or `inherit` values inherit the corresponding global value; `default` omits the

@@ -126,7 +126,7 @@ export async function askClaude(
                 "--system-prompt",
                 getSystemPrompt(),
                 "--allowedTools",
-                "WebSearch,WebFetch,Read,Grep,Glob,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages,mcp__discord__react-to-message",
+                "WebSearch,WebFetch,Read,Grep,Glob,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages,mcp__discord__react-to-message,mcp__morpheus__*",
                 "--add-dir",
                 MESSAGES_DIR,
                 "--mcp-config",

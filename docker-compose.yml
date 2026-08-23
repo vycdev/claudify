@@ -18,6 +18,8 @@ services:
       - CLAUDE_SERVER_MEMORY_EFFORT=
       - CLAUDE_SUMMARY_MODEL=
       - CLAUDE_SUMMARY_EFFORT=
+      - MORPHEUS_MCP_URL=
+      - MORPHEUS_MCP_API_KEY=
     volumes:
       - messages:/app/messages
       - claude-home:/root

@@ -169,6 +169,44 @@ function parsePort(value: string | undefined, fallback: number): number {
         : fallback;
 }
 
+function parseOptionalHttpUrl(
+    envName: string,
+    value: string | undefined,
+): string | undefined {
+    const normalized = value?.trim();
+    if (!normalized) return undefined;
+
+    let url: URL;
+    try {
+        url = new URL(normalized);
+    } catch {
+        throw new Error(`${envName} must be a valid HTTP or HTTPS URL`);
+    }
+    if (
+        (url.protocol !== "http:" && url.protocol !== "https:")
+        || url.username
+        || url.password
+        || url.hash
+    ) {
+        throw new Error(
+            `${envName} must use HTTP or HTTPS without credentials or a fragment`,
+        );
+    }
+    return url.toString();
+}
+
+function parseOptionalSecret(
+    envName: string,
+    value: string | undefined,
+): string | undefined {
+    const normalized = value?.trim();
+    if (!normalized) return undefined;
+    if (/\p{Cc}/u.test(normalized)) {
+        throw new Error(`${envName} cannot contain control characters`);
+    }
+    return normalized;
+}
+
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
 export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
@@ -255,6 +293,19 @@ export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_MAX_REQUEST_BYTES = 1_048_576;
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
+export const MORPHEUS_MCP_URL = parseOptionalHttpUrl(
+    "MORPHEUS_MCP_URL",
+    process.env.MORPHEUS_MCP_URL,
+);
+export const MORPHEUS_MCP_API_KEY = parseOptionalSecret(
+    "MORPHEUS_MCP_API_KEY",
+    process.env.MORPHEUS_MCP_API_KEY,
+);
+if (Boolean(MORPHEUS_MCP_URL) !== Boolean(MORPHEUS_MCP_API_KEY)) {
+    throw new Error(
+        "MORPHEUS_MCP_URL and MORPHEUS_MCP_API_KEY must be configured together",
+    );
+}
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");
 
