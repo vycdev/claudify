@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserve multibyte UTF-8 characters when Claude subprocess output is split across stream chunks.
 - Bound downloaded attachment filenames to filesystem-safe byte lengths while preserving path validation.
 - Advertise the MCP saved-history date format in the tool schema so clients can validate it before calling the server.
 - Fall back to channel-name matching when a numeric channel name collides with a channel ID in another server.

@@ -101,3 +101,24 @@ test("terminates a timed-out Claude process", async (t) => {
         (error) => error?.code === "ESRCH",
     );
 });
+
+test("decodes multibyte Claude output split across stream chunks", async () => {
+    const script = `
+        const character = Buffer.from("😀");
+        process.stdout.write(character.subarray(0, 1));
+        process.stderr.write(character.subarray(0, 2));
+        setTimeout(() => {
+            process.stdout.write(character.subarray(1));
+            process.stderr.write(character.subarray(2));
+        }, 25);
+    `;
+    const runFakeClaude = createClaudeRunner({
+        command: process.execPath,
+        args: ["--input-type=module", "--eval", script],
+    });
+
+    const result = await runFakeClaude([], "", { workload: "response" });
+
+    assert.equal(result.stdout, "😀");
+    assert.equal(result.stderr, "😀");
+});
