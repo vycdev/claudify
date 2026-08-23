@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Bound downloaded attachment filenames to filesystem-safe byte lengths while preserving path validation.
 - Bound recent live Discord context passed to Claude so deep-context requests cannot contribute unbounded live-message input.
 - Support announcement and other guild text-based channels in MCP channel tools.
 - Reject symbolic-link attachment destinations instead of following them when saving downloads.
