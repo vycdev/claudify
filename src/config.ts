@@ -226,6 +226,21 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
+export const MEMORY_UPDATE_DEBOUNCE_MS = parsePositiveInteger(
+    process.env.MEMORY_UPDATE_DEBOUNCE_MS,
+    120_000,
+    MAX_TIMER_DELAY_MS,
+);
+export const MEMORY_UPDATE_MAX_DELAY_MS = parsePositiveInteger(
+    process.env.MEMORY_UPDATE_MAX_DELAY_MS,
+    600_000,
+    MAX_TIMER_DELAY_MS,
+);
+export const MEMORY_UPDATE_BATCH_MAX_CHARS = parsePositiveInteger(
+    process.env.MEMORY_UPDATE_BATCH_MAX_CHARS,
+    20_000,
+    1_000_000,
+);
 export const DISCORD_MESSAGE_MAX_CHARS = 2000;
 export const ATTACHMENT_FILENAME_MAX_BYTES = 240;
 export const MCP_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;

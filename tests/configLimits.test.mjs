@@ -181,6 +181,22 @@ test("cooldown stays within Node's supported timer range", () => {
     );
 });
 
+test("memory batching limits use bounded positive integers", () => {
+    const names = [
+        "MEMORY_UPDATE_DEBOUNCE_MS",
+        "MEMORY_UPDATE_MAX_DELAY_MS",
+        "MEMORY_UPDATE_BATCH_MAX_CHARS",
+    ];
+    assert.deepEqual(
+        readConfigValues(names, ["0", "2147483648", "1000001"]),
+        [120000, 600000, 20000],
+    );
+    assert.deepEqual(
+        readConfigValues(names, ["30000", "120000", "50000"]),
+        [30000, 120000, 50000],
+    );
+});
+
 test("required role IDs ignore surrounding configuration whitespace", () => {
     assert.deepEqual(
         readConfigValues(["REQUIRED_ROLE_ID"], [" 123456789012345678 "]),

@@ -53,6 +53,7 @@ src/
 │   ├── history.ts        → Daily conversation logs (append-only text files)
 │   ├── pending.ts        → In-flight message tracking
 │   ├── profiles.ts       → User profiles + server memory (background Claude updates)
+│   ├── memoryBatcher.ts  → Debounced profile/server-memory update batching
 │   ├── summaries.ts      → Daily conversation summaries (background Claude generation)
 │   └── images.ts         → Attachment downloads
 │
@@ -99,7 +100,7 @@ User message (trigger: !ask / @mention / reply / 🤖 reaction)
       - Text → smartSplit() → Send as reply (chunked if needed)
   → Log to history
   → Remove from pending/
-  → Background: profile update, server memory update, yesterday summaries
+  → Queue debounced profile/server-memory batch; check yesterday summaries
 ```
 
 ### MCP request
@@ -128,6 +129,9 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `CLAUDE_SERVER_MEMORY_EFFORT` | No | inherit | Effort for background server-memory updates |
 | `CLAUDE_SUMMARY_MODEL` | No | inherit | Model for daily summaries |
 | `CLAUDE_SUMMARY_EFFORT` | No | inherit | Effort for daily summaries |
+| `MEMORY_UPDATE_DEBOUNCE_MS` | No | `120000` | Idle time before batched profile/server-memory updates |
+| `MEMORY_UPDATE_MAX_DELAY_MS` | No | `600000` | Maximum time a busy server may defer a memory batch |
+| `MEMORY_UPDATE_BATCH_MAX_CHARS` | No | `20000` | Maximum conversation context sent in one memory batch |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
 | `MCP_READ_MESSAGES_MAX_CHARS` | No | `120000` | Maximum characters returned by the `read-messages` MCP tool (capped at 1000000) |

@@ -20,7 +20,7 @@ import { askClaude, type DiscordInvocationContext } from "../askClaude.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
-import { backgroundProfileUpdate, backgroundServerMemoryUpdate } from "../storage/profiles.js";
+import { queueBackgroundMemoryUpdate } from "../storage/memoryBatcher.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
 import { formatContextTime } from "./context.js";
@@ -739,7 +739,10 @@ async function processMessage(msg: Message): Promise<void> {
         );
 
         // Background jobs
-        const conversationContext = liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}\n${botName} (bot): ${response}`;
+        const conversationContext = [
+            liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}`,
+            `[Latest response] ${botName} (bot): ${parsedResponse.historyContent}`,
+        ].join("\n");
 
         const participantUsers: { tag: string; id: string }[] = [];
         if (recentMessages.length > 0) {
@@ -755,18 +758,16 @@ async function processMessage(msg: Message): Promise<void> {
             participantUsers.push({ tag: authorLabel(msg.author), id: msg.author.id });
         }
 
-        backgroundProfileUpdate(
-            participantUsers,
+        queueBackgroundMemoryUpdate({
+            scopeId: msg.guild
+                ? `guild:${msg.guild.id}`
+                : `channel:${msg.channel.id}`,
+            guildId: msg.guild?.id,
+            guildName: msg.guild?.name,
+            channelName: msg.channel.name,
+            users: participantUsers,
             conversationContext,
-        ).catch(() => {});
-        if (msg.guild) {
-            backgroundServerMemoryUpdate(
-                msg.guild.id,
-                msg.guild.name,
-                msg.channel.name,
-                conversationContext,
-            ).catch(() => {});
-        }
+        });
         ensureYesterdaySummaries().catch(() => {});
     } catch (error: any) {
         console.error(
