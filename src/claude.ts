@@ -27,10 +27,16 @@ function appendBounded(current: string, chunk: string): string {
     return combined.slice(splitsSurrogatePair ? start + 1 : start);
 }
 let activeCount = 0;
+let activeBackgroundCount = 0;
 let lastSpawnTime = 0;
 const queue: Array<{
+    workload: ClaudeRunOptions["workload"];
     run: () => void;
 }> = [];
+
+function isBackgroundWorkload(workload: ClaudeRunOptions["workload"]): boolean {
+    return workload !== "response";
+}
 
 function tryRunNext(): void {
     if (queue.length === 0 || activeCount >= MAX_CONCURRENT) return;
@@ -42,20 +48,36 @@ function tryRunNext(): void {
         return;
     }
 
-    const next = queue.shift();
+    const responseIndex = queue.findIndex((item) => item.workload === "response");
+    const nextIndex = responseIndex >= 0
+        ? responseIndex
+        : activeBackgroundCount === 0
+            ? 0
+            : -1;
+    if (nextIndex < 0) return;
+
+    const [next] = queue.splice(nextIndex, 1);
     if (next) {
         activeCount++;
+        if (isBackgroundWorkload(next.workload)) activeBackgroundCount++;
         lastSpawnTime = Date.now();
         next.run();
     }
 }
 
-function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+function enqueue<T>(
+    workload: ClaudeRunOptions["workload"],
+    fn: () => Promise<T>,
+): Promise<T> {
     return new Promise<T>((resolve, reject) => {
         queue.push({
+            workload,
             run: () => {
                 fn().then(resolve, reject).finally(() => {
                     activeCount--;
+                    if (isBackgroundWorkload(workload)) {
+                        activeBackgroundCount--;
+                    }
                     tryRunNext();
                 });
             },
@@ -196,6 +218,7 @@ export function createClaudeRunner(
     options: ClaudeRunOptions,
 ) => Promise<{ stdout: string; stderr: string }> {
     return (args, input, options) => enqueue(
+        options.workload,
         () => spawnClaude(args, input, options, executable),
     );
 }

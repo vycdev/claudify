@@ -16,7 +16,7 @@ import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
 import { parseAskCommand } from "./commands/ask.js";
-import { askClaude } from "../askClaude.js";
+import { askClaude, type DiscordInvocationContext } from "../askClaude.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
@@ -537,7 +537,7 @@ async function processMessage(msg: Message): Promise<void> {
         if (!(await enforceRequiredRole(msg))) return;
 
         // Fetch referenced message if this is a reply
-        let replyContext = "";
+        let replyTarget: DiscordInvocationContext["replyTarget"];
         const allAttachments: { url: string; name: string }[] = [];
         if (msg.reference?.messageId) {
             const refMsg = await msg.channel.messages
@@ -568,7 +568,11 @@ async function processMessage(msg: Message): Promise<void> {
                             embedTexts.join("\n---\n");
                     }
                 }
-                replyContext = `[Replying to ${authorLabel(refMsg.author)}: "${refText}"]\n`;
+                replyTarget = {
+                    messageId: refMsg.id,
+                    author: authorLabel(refMsg.author),
+                    content: refText,
+                };
                 console.error(
                     `[Bot] Reply context from ${refMsg.author.tag}: ${refText.slice(0, 200)}`,
                 );
@@ -597,13 +601,14 @@ async function processMessage(msg: Message): Promise<void> {
         const botName =
             client.user?.displayName || client.user?.username || "Claudify";
         // A bare bot mention is intentionally a valid prompt: Claude should infer
-        // a response from live channel context, with replyContext added for replies.
+        // a response from live channel context, with a structured reply target
+        // provided separately for replies.
         const rawQuestion = normalizeBotMentions(
             askQuestion ?? msg.content,
             client.user!.id,
             botName,
         ).trim();
-        const question = replyContext + rawQuestion;
+        const question = rawQuestion;
 
         if (!rawQuestion) {
             console.error(`[Bot] Empty question from ${msg.author.tag}`);
@@ -668,6 +673,7 @@ async function processMessage(msg: Message): Promise<void> {
                     sourceMessageId: msg.id,
                     messageContent: msg.content,
                     replyToMessageId: msg.reference?.messageId,
+                    replyTarget,
                     attachments: Array.from(msg.attachments.values()).map((attachment) => ({
                         filename: attachment.name || "attachment",
                         url: attachment.url,
