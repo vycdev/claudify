@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserve the original Discord API error when an MCP reaction fails and no matching custom emoji exists.
 - Preserve multibyte UTF-8 characters when Claude subprocess output is split across stream chunks.
 - Bound downloaded attachment filenames to filesystem-safe byte lengths while preserving path validation.
 - Advertise the MCP saved-history date format in the tool schema so clients can validate it before calling the server.
