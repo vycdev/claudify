@@ -260,6 +260,11 @@ export const MCP_READ_MESSAGES_MAX_CHARS = parsePositiveInteger(
     120_000,
     1_000_000,
 );
+export const MCP_HISTORY_MAX_CHARS = parsePositiveInteger(
+    process.env.MCP_HISTORY_MAX_CHARS,
+    120_000,
+    1_000_000,
+);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const PROMPTS_PATH =
     process.env.PROMPTS_PATH || path.join(process.cwd(), "prompts", "prompts.json");

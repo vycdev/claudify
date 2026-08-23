@@ -29,6 +29,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `LIVE_CONTEXT_MAX_CHARS` — optional maximum size of recent live Discord context passed to Claude (default: `140000`)
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
    - `MCP_READ_MESSAGES_MAX_CHARS` — optional; maximum characters returned by `read-messages` (default: `120000`, maximum: `1000000`)
+   - `MCP_HISTORY_MAX_CHARS` — optional; maximum characters returned by `read-message-history` (default: `120000`, maximum: `1000000`)
 
 3. Run it:
 ```bash
