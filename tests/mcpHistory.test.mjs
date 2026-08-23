@@ -26,7 +26,8 @@ test("MCP history filters matching regular files and preserves pending indentati
     const historyDir = path.join(messagesDir, "history");
     fs.writeFileSync(
         path.join(historyDir, "general_2026-08-01.txt"),
-        "[10:00:00] user: expected entry\n",
+        "[10:00:00] user: expected entry\n" +
+            "[10:15:00] user: ordered a café\n",
         "utf8",
     );
     fs.writeFileSync(
@@ -200,6 +201,17 @@ test("MCP history filters matching regular files and preserves pending indentati
     assert.match(channelText, /namespaced entry/);
     assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
     assert.doesNotMatch(channelText, /similarly named channel entry/);
+
+    const unicodeSearchResult = await client.callTool({
+        name: "read-message-history",
+        arguments: { search: "cafe\u0301" },
+    });
+    const unicodeSearchText = unicodeSearchResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+
+    assert.equal(typeof unicodeSearchText, "string");
+    assert.match(unicodeSearchText, /ordered a café/);
 
     await assert.rejects(
         client.callTool({
