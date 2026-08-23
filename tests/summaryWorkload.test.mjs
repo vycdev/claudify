@@ -65,3 +65,26 @@ test("daily summaries cap input to the recent history budget", async () => {
 
     assert.equal(capturedInput, "middle\nrecent\nlatest");
 });
+
+test("daily summaries include a single user-and-bot exchange", async () => {
+    const date = new Date("2026-08-03T12:00:00Z");
+    const logPath = getDailyLogPath("channel-3", date, "general");
+    fs.writeFileSync(logPath, "u: q\nb: a\n", "utf8");
+
+    let capturedLog;
+    await generateDailySummary(
+        "channel-3",
+        "general",
+        date,
+        async (_args, input) => {
+            capturedLog = input;
+            return { stdout: "A single-exchange summary", stderr: "" };
+        },
+    );
+
+    assert.equal(capturedLog, "u: q\nb: a");
+    assert.equal(
+        fs.readFileSync(getSummaryPath("channel-3", date, "general"), "utf8"),
+        "A single-exchange summary",
+    );
+});
