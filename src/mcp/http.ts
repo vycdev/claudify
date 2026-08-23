@@ -5,6 +5,8 @@ import {
     MCP_MAX_REQUEST_BYTES,
     MCP_PORT,
     MCP_CONFIG_PATH,
+    MORPHEUS_MCP_API_KEY,
+    MORPHEUS_MCP_URL,
 } from "../config.js";
 import { createMcpServer } from "./server.js";
 
@@ -85,13 +87,27 @@ async function readBoundedRequestBody(
 }
 
 export function writeMcpConfig() {
-    const config = {
-        mcpServers: {
-            discord: {
-                type: "http",
-                url: `http://127.0.0.1:${MCP_PORT}/mcp`,
-            },
+    const mcpServers: Record<string, {
+        type: "http";
+        url: string;
+        headers?: Record<string, string>;
+    }> = {
+        discord: {
+            type: "http",
+            url: `http://127.0.0.1:${MCP_PORT}/mcp`,
         },
+    };
+    if (MORPHEUS_MCP_URL && MORPHEUS_MCP_API_KEY) {
+        mcpServers.morpheus = {
+            type: "http",
+            url: MORPHEUS_MCP_URL,
+            headers: {
+                Authorization: `Bearer ${MORPHEUS_MCP_API_KEY}`,
+            },
+        };
+    }
+    const config = {
+        mcpServers,
     };
     fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
     console.error(`[MCP] Config written to ${MCP_CONFIG_PATH}`);

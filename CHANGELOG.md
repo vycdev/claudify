@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add persistent, authenticated Morpheus MCP configuration for Claude-powered Discord responses.
 - Add current-week and current-month usage aggregates with UTC date ranges and per-model breakdowns.
 - Add owner-only Discord slash commands for Claude CLI authentication.
 - Add opt-in Discord mention suppression through the `SUPPRESS_MENTIONS` environment variable.

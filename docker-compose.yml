@@ -22,6 +22,8 @@ services:
       - MCP_PORT=3100
       - MCP_READ_MESSAGES_MAX_CHARS=120000
       - MCP_HISTORY_MAX_CHARS=120000
+      - MORPHEUS_MCP_URL=
+      - MORPHEUS_MCP_API_KEY=
     volumes:
       - messages:/app/messages
       - claude-home:/root

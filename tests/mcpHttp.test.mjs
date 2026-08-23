@@ -79,6 +79,8 @@ test("generated MCP config uses the IPv4 listener address", () => {
                     ...process.env,
                     MCP_PORT: "43100",
                     MESSAGES_DIR: path.join(workingDir, "messages"),
+                    MORPHEUS_MCP_URL: "",
+                    MORPHEUS_MCP_API_KEY: "",
                 },
             },
         );
@@ -91,6 +93,51 @@ test("generated MCP config uses the IPv4 listener address", () => {
             config.mcpServers.discord.url,
             "http://127.0.0.1:43100/mcp",
         );
+        assert.equal(config.mcpServers.morpheus, undefined);
+    } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+    }
+});
+
+test("generated MCP config includes authenticated Morpheus HTTP transport", () => {
+    const workingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-morpheus-mcp-config-"),
+    );
+    const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+    const apiKey = "test-morpheus-api-key";
+
+    try {
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ],
+            {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: path.join(workingDir, "messages"),
+                    MORPHEUS_MCP_URL: "http://morpheus_bot_prod:5268/api/mcp",
+                    MORPHEUS_MCP_API_KEY: apiKey,
+                },
+            },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stderr, new RegExp(apiKey));
+        const config = JSON.parse(
+            fs.readFileSync(path.join(workingDir, ".mcp-config.json"), "utf8"),
+        );
+        assert.deepEqual(config.mcpServers.morpheus, {
+            type: "http",
+            url: "http://morpheus_bot_prod:5268/api/mcp",
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+            },
+        });
     } finally {
         fs.rmSync(workingDir, { recursive: true, force: true });
     }
