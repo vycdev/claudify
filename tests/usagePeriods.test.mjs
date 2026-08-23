@@ -7,9 +7,20 @@ import {
     createUsageRequest,
     formatUsageBlockTime,
     getCurrentUsagePeriod,
+    runUsageCommand,
 } from "../build/discord/commands/usage.js";
 
 const fixedNow = new Date("2026-08-05T14:30:45.000Z");
+
+test("times out a usage subprocess that does not exit", async () => {
+    await assert.rejects(
+        () => runUsageCommand(
+            ["-e", "setInterval(() => {}, 1000)"],
+            { command: process.execPath, timeoutMs: 50 },
+        ),
+        /ccusage timed out after 50 milliseconds/,
+    );
+});
 
 test("calculates the current UTC week from Monday through now", () => {
     assert.deepEqual(getCurrentUsagePeriod("week", fixedNow), {
