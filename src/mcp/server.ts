@@ -98,7 +98,13 @@ const ReadMessagesSchema = z.object({
 const ReadMessageHistorySchema = z.object({
     limit: z.number().int().min(1).max(100).default(20),
     type: z.enum(["history", "pending"]).default("history"),
-    channel: z.string().optional(),
+    channel: z
+        .string()
+        .refine(
+            (channel) => /\S/u.test(channel),
+            "Channel must contain at least one non-whitespace character",
+        )
+        .optional(),
     date: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -249,7 +255,9 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description:
-                                "Optional channel name or ID to narrow history files",
+                                "Optional non-blank channel name or ID to narrow history files",
+                            minLength: 1,
+                            pattern: "\\S",
                         },
                         date: {
                             type: "string",
