@@ -18,6 +18,8 @@ services:
       - CLAUDE_SERVER_MEMORY_EFFORT=
       - CLAUDE_SUMMARY_MODEL=
       - CLAUDE_SUMMARY_EFFORT=
+      - SUPPRESS_MENTIONS=false
+      - MCP_PORT=3100
     volumes:
       - messages:/app/messages
       - claude-home:/root
