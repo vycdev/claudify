@@ -21,6 +21,7 @@ services:
       - SUPPRESS_MENTIONS=false
       - MCP_PORT=3100
       - MCP_READ_MESSAGES_MAX_CHARS=120000
+      - MCP_HISTORY_MAX_CHARS=120000
     volumes:
       - messages:/app/messages
       - claude-home:/root
