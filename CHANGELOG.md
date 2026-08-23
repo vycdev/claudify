@@ -40,6 +40,7 @@
 - Keep literal reaction syntax inside fenced code blocks from triggering bot reactions.
 - Bound `read-messages` MCP responses so large live-history requests retain the newest messages without producing unbounded output.
 - Bound `!usage` ccusage subprocess lifetime so a hung usage query is terminated and reported instead of keeping the request pending.
+- Normalize whitespace and `#` display prefixes in MCP server and channel identifiers before lookup.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
 - Restrict Claude authentication slash commands to private DMs, matching text-command security behavior.
 - Reject empty MCP `react-to-message` emoji values before calling Discord.
