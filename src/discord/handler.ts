@@ -444,6 +444,11 @@ export function registerHandler() {
                     msg.guild.id,
                     imagePaths,
                     liveMessages,
+                    {
+                        triggerKind: "reaction",
+                        messageContent: question,
+                        replyToMessageId: msg.id,
+                    },
                 );
             } finally {
                 clearInterval(typingInterval);
@@ -658,6 +663,19 @@ async function processMessage(msg: Message): Promise<void> {
                 msg.guild?.id || "unknown",
                 imagePaths,
                 liveMessages,
+                {
+                    triggerKind: "message",
+                    sourceMessageId: msg.id,
+                    messageContent: msg.content,
+                    replyToMessageId: msg.reference?.messageId,
+                    attachments: Array.from(msg.attachments.values()).map((attachment) => ({
+                        filename: attachment.name || "attachment",
+                        url: attachment.url,
+                        size: attachment.size,
+                        contentType: attachment.contentType ?? undefined,
+                        description: attachment.description ?? undefined,
+                    })),
+                },
             );
         } finally {
             clearInterval(typingInterval);

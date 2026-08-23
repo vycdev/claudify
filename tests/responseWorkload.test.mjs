@@ -30,6 +30,11 @@ test("responses route through response settings and report the response model", 
         "guild-1",
         [],
         "",
+        {
+            triggerKind: "message",
+            sourceMessageId: "message-1",
+            messageContent: "What changed?",
+        },
         async (args, input, options) => {
             captured = { args, input, options };
             return { stdout: "The answer", stderr: "" };
@@ -52,6 +57,19 @@ test("responses route through response settings and report the response model", 
         captured.args[allowedToolsIndex + 1]
             .split(",")
             .includes("mcp__morpheus__*"),
+    );
+    assert.match(captured.input, /Morpheus MCP invocation context/);
+    assert.match(captured.input, /"userId": "user-1"/);
+    assert.match(captured.input, /"channelId": "channel-1"/);
+    assert.match(captured.input, /"guildId": "guild-1"/);
+    assert.match(captured.input, /"sourceMessageId": "message-1"/);
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /Use run_command in validate mode first/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /never tell the user that they must wire up or run a tool you have/,
     );
 
     let helpReply = "";
