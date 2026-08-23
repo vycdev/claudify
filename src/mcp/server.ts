@@ -470,8 +470,8 @@ export function createMcpServer(): Server {
                         );
                     }
 
-                    const searchLower = search?.toLowerCase();
-                    const candidateFiles = searchLower
+                    const searchNormalized = search?.normalize("NFC").toLowerCase();
+                    const candidateFiles = searchNormalized
                         ? files
                         : files.slice(-limit);
                     let matchingFiles = candidateFiles
@@ -481,17 +481,22 @@ export function createMcpServer(): Server {
                                 .split("\n")
                                 .filter((line) => line.trim().length > 0);
 
-                            if (searchLower) {
+                            if (searchNormalized) {
                                 lines = lines.filter((line) =>
-                                    line.toLowerCase().includes(searchLower),
+                                    line
+                                        .normalize("NFC")
+                                        .toLowerCase()
+                                        .includes(searchNormalized),
                                 );
                             }
 
                             return { file: file.displayName, lines };
                         })
-                        .filter(({ lines }) => !searchLower || lines.length > 0);
+                        .filter(({ lines }) =>
+                            !searchNormalized || lines.length > 0,
+                        );
 
-                    if (searchLower) {
+                    if (searchNormalized) {
                         matchingFiles = matchingFiles.slice(-limit);
                     }
 
