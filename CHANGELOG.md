@@ -38,6 +38,7 @@
 - Keep astral Unicode characters intact when long Discord responses are split across messages.
 - Reject non-numeric Discord message IDs in MCP reaction requests before contacting Discord.
 - Keep literal reaction syntax inside fenced code blocks from triggering bot reactions.
+- Bound `read-messages` MCP responses so large live-history requests retain the newest messages without producing unbounded output.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
 - Restrict Claude authentication slash commands to private DMs, matching text-command security behavior.
 - Reject empty MCP `react-to-message` emoji values before calling Discord.
