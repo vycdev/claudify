@@ -43,8 +43,56 @@ function maskFencedCode(text: string): string {
         .join("");
 }
 
+interface InlineCodeSpan {
+    start: number;
+    end: number;
+}
+
+function findInlineCodeSpans(text: string): InlineCodeSpan[] {
+    const spans: InlineCodeSpan[] = [];
+    let index = 0;
+
+    while (index < text.length) {
+        if (text[index] !== "`") {
+            index++;
+            continue;
+        }
+
+        let markerEnd = index + 1;
+        while (text[markerEnd] === "`") markerEnd++;
+        const marker = text.slice(index, markerEnd);
+        const lineBreakOffset = text.slice(markerEnd).search(/[\r\n]/);
+        const lineEnd =
+            lineBreakOffset === -1 ? text.length : markerEnd + lineBreakOffset;
+        const closingStart = text.indexOf(marker, markerEnd);
+        if (closingStart === -1 || closingStart >= lineEnd) {
+            index = markerEnd;
+            continue;
+        }
+
+        spans.push({
+            start: index,
+            end: closingStart + marker.length,
+        });
+        index = closingStart + marker.length;
+    }
+
+    return spans;
+}
+
+function maskInlineCode(text: string): string {
+    let masked = text;
+    for (const span of findInlineCodeSpans(text).reverse()) {
+        masked =
+            masked.slice(0, span.start) +
+            " ".repeat(span.end - span.start) +
+            masked.slice(span.end);
+    }
+    return masked;
+}
+
 export function parseClaudeResponse(response: string): ParsedClaudeResponse {
-    const maskedResponse = maskFencedCode(response);
+    const maskedResponse = maskInlineCode(maskFencedCode(response));
     const matches = [
         ...maskedResponse.matchAll(/\[REACT:(.+?)\]\s*/g),
     ];
