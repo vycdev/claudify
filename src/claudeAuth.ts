@@ -190,7 +190,11 @@ export class ClaudeAuthManager {
             options.loginTimeoutMs,
             DEFAULT_LOGIN_TIMEOUT_MS,
         );
-        this.env = options.env || process.env;
+        this.env = {};
+        for (const [key, value] of Object.entries(options.env || process.env)) {
+            if (key.toUpperCase() === "CLAUDECODE") continue;
+            if (value !== undefined) this.env[key] = value;
+        }
     }
 
     async getStatus(): Promise<ClaudeAuthStatus> {

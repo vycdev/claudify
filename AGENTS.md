@@ -130,6 +130,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `CLAUDE_SUMMARY_EFFORT` | No | inherit | Effort for daily summaries |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
+| `MCP_READ_MESSAGES_MAX_CHARS` | No | `120000` | Maximum characters returned by the `read-messages` MCP tool (capped at 1000000) |
+| `MCP_HISTORY_MAX_CHARS` | No | `120000` | Maximum characters returned by the `read-message-history` MCP tool (capped at 1000000) |
 | `MORPHEUS_MCP_URL` | No | — | Morpheus Streamable HTTP MCP endpoint; requires `MORPHEUS_MCP_API_KEY` |
 | `MORPHEUS_MCP_API_KEY` | No | — | Bearer token for the configured Morpheus MCP endpoint |
 

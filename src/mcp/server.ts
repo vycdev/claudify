@@ -12,6 +12,8 @@ import {
     HISTORY_DIR,
     HISTORY_V2_DIR,
     MCP_FETCH_MESSAGES_MAX_LINKS,
+    MCP_READ_MESSAGES_MAX_CHARS,
+    MCP_HISTORY_MAX_CHARS,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -30,7 +32,10 @@ const ReactToMessageSchema = z.object({
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
     channel: z.string().describe('Channel name (e.g., "general") or ID'),
-    messageId: z.string().describe("The Discord message ID to react to"),
+    messageId: z
+        .string()
+        .regex(/^\d+$/, "Invalid Discord message ID")
+        .describe("The Discord message ID to react to"),
     emoji: z
         .string()
         .trim()
@@ -47,9 +52,10 @@ function isWithinDiscordMessageLimit(message: string): boolean {
     return true;
 }
 
-function readPendingChannel(filePath: string): {
+function readPendingMetadata(filePath: string): {
     channelId: string | undefined;
     channelName: string | undefined;
+    date: string | undefined;
 } {
     const lines = fs.readFileSync(filePath, "utf-8").split("\n");
     const separatorIndex = lines.indexOf("---");
@@ -58,13 +64,75 @@ function readPendingChannel(filePath: string): {
     const channelIdLine = headerLines.find((line) =>
         line.startsWith("Channel ID: "),
     );
+    const timestampLine = headerLines.find((line) =>
+        line.startsWith("Timestamp: "),
+    );
+    const timestamp = timestampLine
+        ? new Date(timestampLine.slice("Timestamp: ".length))
+        : undefined;
 
     return {
         channelId: channelIdLine?.slice("Channel ID: ".length),
         channelName: channelLine
             ?.slice("Channel: #".length)
             .replace(/[^a-zA-Z0-9-_]/g, "_"),
+        date:
+            timestamp && !Number.isNaN(timestamp.getTime())
+                ? timestamp.toISOString().slice(0, 10)
+                : undefined,
     };
+}
+
+const HISTORY_RESPONSE_SEPARATOR = "\n\n===\n\n";
+
+function takeUtf16Suffix(text: string, maxChars: number): string {
+    let start = Math.max(0, text.length - maxChars);
+    if (
+        start > 0 &&
+        start < text.length &&
+        /[\uDC00-\uDFFF]/.test(text[start]) &&
+        /[\uD800-\uDBFF]/.test(text[start - 1])
+    ) {
+        start++;
+    }
+    return text.slice(start);
+}
+
+function boundHistoryResponse(messages: string[]): string {
+    const fullLength = messages.reduce(
+        (length, message) => length + message.length,
+        Math.max(0, messages.length - 1) * HISTORY_RESPONSE_SEPARATOR.length,
+    );
+    if (fullLength <= MCP_HISTORY_MAX_CHARS) {
+        return messages.join(HISTORY_RESPONSE_SEPARATOR);
+    }
+
+    const note = `\n\n[History response truncated at ${MCP_HISTORY_MAX_CHARS} characters; older history omitted.]`;
+    if (note.length >= MCP_HISTORY_MAX_CHARS) {
+        return note.slice(0, MCP_HISTORY_MAX_CHARS);
+    }
+
+    let remaining = MCP_HISTORY_MAX_CHARS - note.length;
+    const selected: string[] = [];
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const separatorLength = selected.length
+            ? HISTORY_RESPONSE_SEPARATOR.length
+            : 0;
+        const budget = remaining - separatorLength;
+        if (budget <= 0) break;
+
+        if (messages[index].length <= budget) {
+            selected.unshift(messages[index]);
+            remaining -= separatorLength + messages[index].length;
+            continue;
+        }
+
+        selected.unshift(takeUtf16Suffix(messages[index], budget));
+        remaining = 0;
+        break;
+    }
+
+    return selected.join(HISTORY_RESPONSE_SEPARATOR) + note;
 }
 
 export const SendMessageSchema = z.object({
@@ -86,6 +154,41 @@ export const SendMessageSchema = z.object({
         ),
 });
 
+const READ_MESSAGES_RESPONSE_HINT = "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above.";
+
+type ReadMessageEntry = { images?: string[] } & Record<string, unknown>;
+
+function renderReadMessagesResponse(entries: ReadMessageEntry[], truncated: boolean): string {
+    const hint = entries.some((entry) => entry.images?.length)
+        ? READ_MESSAGES_RESPONSE_HINT
+        : "";
+    const note = truncated
+        ? `\n\n[Read-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; older messages omitted.]`
+        : "";
+    return JSON.stringify(entries, null, 2) + hint + note;
+}
+
+function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
+    const full = renderReadMessagesResponse(entries, false);
+    if (full.length <= MCP_READ_MESSAGES_MAX_CHARS) return full;
+
+    const note = `\n\n[Read-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; older messages omitted.]`;
+    if (note.length >= MCP_READ_MESSAGES_MAX_CHARS) {
+        return note.slice(0, MCP_READ_MESSAGES_MAX_CHARS);
+    }
+
+    const selected: ReadMessageEntry[] = [];
+    for (let index = entries.length - 1; index >= 0; index--) {
+        const candidate = [entries[index], ...selected];
+        if (renderReadMessagesResponse(candidate, true).length > MCP_READ_MESSAGES_MAX_CHARS) {
+            break;
+        }
+        selected.unshift(entries[index]);
+    }
+
+    return renderReadMessagesResponse(selected, true);
+}
+
 const ReadMessagesSchema = z.object({
     server: z
         .string()
@@ -98,7 +201,13 @@ const ReadMessagesSchema = z.object({
 const ReadMessageHistorySchema = z.object({
     limit: z.number().int().min(1).max(100).default(20),
     type: z.enum(["history", "pending"]).default("history"),
-    channel: z.string().optional(),
+    channel: z
+        .string()
+        .refine(
+            (channel) => /\S/u.test(channel),
+            "Channel must contain at least one non-whitespace character",
+        )
+        .optional(),
     date: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -213,6 +322,7 @@ export function createMcpServer(): Server {
                         },
                         messageId: {
                             type: "string",
+                            pattern: "^\\d+$",
                             description: "The Discord message ID to react to",
                         },
                         emoji: {
@@ -249,12 +359,15 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description:
-                                "Optional channel name or ID to narrow history files",
+                                "Optional non-blank channel name or ID to narrow history files",
+                            minLength: 1,
+                            pattern: "\\S",
                         },
                         date: {
                             type: "string",
                             description:
                                 "Optional date in YYYY-MM-DD format",
+                            pattern: "^\\d{4}-\\d{2}-\\d{2}$",
                         },
                         search: {
                             type: "string",
@@ -348,7 +461,7 @@ export function createMcpServer(): Server {
 
                     try {
                         await targetMsg.react(emoji);
-                    } catch {
+                    } catch (error) {
                         // Try custom guild emoji by name
                         const customEmoji = reactChannel.guild.emojis.cache.find(
                             (e) => e.name?.toLowerCase() === emoji.toLowerCase(),
@@ -356,9 +469,7 @@ export function createMcpServer(): Server {
                         if (customEmoji) {
                             await targetMsg.react(customEmoji);
                         } else {
-                            throw new Error(
-                                `Could not find emoji "${emoji}". Use a unicode emoji or a custom emoji name from this server.`,
-                            );
+                            throw error;
                         }
                     }
 
@@ -384,18 +495,19 @@ export function createMcpServer(): Server {
                         )
                         .map((entry) => {
                             const filePath = path.join(dir, entry.name);
-                            const pendingChannel =
+                            const pendingMetadata =
                                 type === "pending"
-                                    ? readPendingChannel(filePath)
+                                    ? readPendingMetadata(filePath)
                                     : undefined;
                             return {
                                 displayName: entry.name,
                                 filePath,
-                                channelId: pendingChannel?.channelId,
+                                channelId: pendingMetadata?.channelId,
                                 channelName:
                                     type === "history"
                                         ? getLegacyHistoryChannel(entry.name)
-                                        : pendingChannel?.channelName,
+                                        : pendingMetadata?.channelName,
+                                date: pendingMetadata?.date,
                             };
                         });
 
@@ -419,6 +531,7 @@ export function createMcpServer(): Server {
                                     ),
                                     channelId: parsed?.channelId,
                                     channelName: parsed?.channelName,
+                                    date: undefined,
                                 };
                             });
                         files.push(...channelFiles);
@@ -442,13 +555,15 @@ export function createMcpServer(): Server {
                         );
                     }
                     if (date) {
-                        files = files.filter((f) =>
-                            f.displayName.endsWith(`_${date}.txt`),
+                        files = files.filter((file) =>
+                            type === "pending"
+                                ? file.date === date
+                                : file.displayName.endsWith(`_${date}.txt`),
                         );
                     }
 
-                    const searchLower = search?.toLowerCase();
-                    const candidateFiles = searchLower
+                    const searchNormalized = search?.normalize("NFC").toLowerCase();
+                    const candidateFiles = searchNormalized
                         ? files
                         : files.slice(-limit);
                     let matchingFiles = candidateFiles
@@ -458,17 +573,22 @@ export function createMcpServer(): Server {
                                 .split("\n")
                                 .filter((line) => line.trim().length > 0);
 
-                            if (searchLower) {
+                            if (searchNormalized) {
                                 lines = lines.filter((line) =>
-                                    line.toLowerCase().includes(searchLower),
+                                    line
+                                        .normalize("NFC")
+                                        .toLowerCase()
+                                        .includes(searchNormalized),
                                 );
                             }
 
                             return { file: file.displayName, lines };
                         })
-                        .filter(({ lines }) => !searchLower || lines.length > 0);
+                        .filter(({ lines }) =>
+                            !searchNormalized || lines.length > 0,
+                        );
 
-                    if (searchLower) {
+                    if (searchNormalized) {
                         matchingFiles = matchingFiles.slice(-limit);
                     }
 
@@ -496,7 +616,7 @@ export function createMcpServer(): Server {
                         content: [
                             {
                                 type: "text",
-                                text: messages.join("\n\n===\n\n"),
+                                text: boundHistoryResponse(messages),
                             },
                         ],
                     };
@@ -593,9 +713,9 @@ export function createMcpServer(): Server {
                         ReadMessagesSchema.parse(args);
                     const channel = await findChannel(channelIdentifier, server);
                     const messages = await channel.messages.fetch({ limit });
-                    const formatted = [];
+                    const formatted: ReadMessageEntry[] = [];
                     for (const msg of messages.values()) {
-                        const entry: any = {
+                        const entry: ReadMessageEntry = {
                             id: msg.id,
                             channel: `#${channel.name}`,
                             server: channel.guild.name,
@@ -631,15 +751,11 @@ export function createMcpServer(): Server {
                         if (images.length > 0) entry.images = images;
                         formatted.push(entry);
                     }
-                    const resultText = JSON.stringify(formatted, null, 2);
-                    const hasImages = formatted.some(
-                        (m: any) => m.images?.length,
-                    );
-                    const hint = hasImages
-                        ? "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above."
-                        : "";
                     return {
-                        content: [{ type: "text", text: resultText + hint }],
+                        content: [{
+                            type: "text",
+                            text: boundReadMessagesResponse(formatted),
+                        }],
                     };
                 }
                 default:

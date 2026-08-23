@@ -46,6 +46,7 @@ export async function askClaude(
     const now = new Date();
     promptParts.push(
         `=== Current time: ${now.toLocaleString("en-US", {
+            timeZone: "UTC",
             weekday: "long",
             year: "numeric",
             month: "long",

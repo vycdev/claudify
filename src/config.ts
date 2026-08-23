@@ -209,7 +209,7 @@ function parseOptionalSecret(
 
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
-export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
+export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID?.trim() || "";
 export const AUTH_ADMIN_USER_IDS = new Set(
     (process.env.AUTH_ADMIN_USER_IDS || "")
         .split(",")
@@ -227,6 +227,7 @@ export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 export const PROFILE_MAX_CHARS = 2000;
 export const SERVER_MEMORY_MAX_CHARS = 10000;
 export const DISCORD_MESSAGE_MAX_CHARS = 2000;
+export const ATTACHMENT_FILENAME_MAX_BYTES = 240;
 export const MCP_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
 export const MCP_FETCH_MESSAGES_MAX_LINKS = 100;
 
@@ -292,6 +293,16 @@ export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_MAX_REQUEST_BYTES = 1_048_576;
+export const MCP_READ_MESSAGES_MAX_CHARS = parsePositiveInteger(
+    process.env.MCP_READ_MESSAGES_MAX_CHARS,
+    120_000,
+    1_000_000,
+);
+export const MCP_HISTORY_MAX_CHARS = parsePositiveInteger(
+    process.env.MCP_HISTORY_MAX_CHARS,
+    120_000,
+    1_000_000,
+);
 export const MCP_CONFIG_PATH = path.join(process.cwd(), ".mcp-config.json");
 export const MORPHEUS_MCP_URL = parseOptionalHttpUrl(
     "MORPHEUS_MCP_URL",

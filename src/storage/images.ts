@@ -1,6 +1,45 @@
 import fs from "fs";
 import path from "path";
-import { IMAGES_DIR, MCP_ATTACHMENT_MAX_BYTES } from "../config.js";
+import { createHash } from "node:crypto";
+import {
+    ATTACHMENT_FILENAME_MAX_BYTES,
+    IMAGES_DIR,
+    MCP_ATTACHMENT_MAX_BYTES,
+} from "../config.js";
+
+function truncateUtf8(text: string, maxBytes: number): string {
+    let result = "";
+    let byteLength = 0;
+    for (const character of text) {
+        const characterBytes = Buffer.byteLength(character);
+        if (byteLength + characterBytes > maxBytes) break;
+        result += character;
+        byteLength += characterBytes;
+    }
+    return result;
+}
+
+function boundFilename(filename: string): string {
+    if (Buffer.byteLength(filename) <= ATTACHMENT_FILENAME_MAX_BYTES) {
+        return filename;
+    }
+
+    const disambiguator = `-${createHash("sha256").update(filename).digest("hex")}`;
+    const extension = path.extname(filename);
+    const preservedExtension =
+        Buffer.byteLength(extension) + Buffer.byteLength(disambiguator) <=
+        ATTACHMENT_FILENAME_MAX_BYTES
+            ? extension
+            : "";
+    const stem = preservedExtension
+        ? filename.slice(0, -preservedExtension.length)
+        : filename;
+    const stemBudget =
+        ATTACHMENT_FILENAME_MAX_BYTES -
+        Buffer.byteLength(disambiguator) -
+        Buffer.byteLength(preservedExtension);
+    return `${truncateUtf8(stem, stemBudget)}${disambiguator}${preservedExtension}`;
+}
 
 async function readResponseBody(response: Response): Promise<Buffer> {
     const contentLength = response.headers.get("content-length");
@@ -97,8 +136,8 @@ export async function downloadAttachment(
     url: string,
     filename: string,
 ): Promise<string> {
-    const filePath = path.resolve(IMAGES_DIR, filename);
-    const relativePath = path.relative(IMAGES_DIR, filePath);
+    const requestedPath = path.resolve(IMAGES_DIR, filename);
+    const relativePath = path.relative(IMAGES_DIR, requestedPath);
     if (
         relativePath === ".." ||
         relativePath.startsWith(`..${path.sep}`) ||
@@ -109,6 +148,7 @@ export async function downloadAttachment(
     if (path.basename(filename) !== filename) {
         throw new Error("Attachment filename must not include a directory path");
     }
+    const filePath = path.resolve(IMAGES_DIR, boundFilename(filename));
 
     const response = await fetch(url);
     if (!response.ok) {
