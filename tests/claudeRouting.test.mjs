@@ -87,3 +87,62 @@ test("queued workloads keep isolated model, effort, environment, and logs", asyn
     assert.ok(logs.every((line) => !line.includes("response-input")));
     assert.ok(logs.every((line) => !line.includes("summary-input")));
 });
+
+test("responses run before queued background work and retain a reserved slot", async (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-priority-"));
+    const capturePath = path.join(tempDir, "events.jsonl");
+    const fixturePath = path.join(currentDir, "fixtures", "fakeClaudeScheduler.mjs");
+    const runFakeClaude = createClaudeRunner({
+        command: process.execPath,
+        args: [fixturePath],
+    });
+    const originalCapture = process.env.CLAUDIFY_SCHEDULER_CAPTURE_PATH;
+    process.env.CLAUDIFY_SCHEDULER_CAPTURE_PATH = capturePath;
+
+    t.after(() => {
+        if (originalCapture === undefined) {
+            delete process.env.CLAUDIFY_SCHEDULER_CAPTURE_PATH;
+        } else {
+            process.env.CLAUDIFY_SCHEDULER_CAPTURE_PATH = originalCapture;
+        }
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const firstBackground = runFakeClaude(["-p"], "background-1", {
+        workload: "profile-update",
+    });
+    await new Promise((resolve, reject) => {
+        const deadline = Date.now() + 2_000;
+        const check = () => {
+            if (
+                fs.existsSync(capturePath)
+                && fs.readFileSync(capturePath, "utf8").includes("background-1")
+            ) {
+                resolve();
+                return;
+            }
+            if (Date.now() >= deadline) {
+                reject(new Error("first background workload did not start"));
+                return;
+            }
+            setTimeout(check, 10);
+        };
+        check();
+    });
+    const secondBackground = runFakeClaude(["-p"], "background-2", {
+        workload: "server-memory-update",
+    });
+    const response = runFakeClaude(["-p"], "response", {
+        workload: "response",
+    });
+
+    await Promise.all([firstBackground, secondBackground, response]);
+
+    const starts = fs.readFileSync(capturePath, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .filter((event) => event.event === "start")
+        .map((event) => event.input);
+    assert.deepEqual(starts, ["background-1", "response", "background-2"]);
+});

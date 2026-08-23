@@ -21,7 +21,7 @@ test.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
 test("responses route through response settings and report the response model", async () => {
     let captured;
     const answer = await askClaude(
-        "What changed?",
+        "try again",
         "User",
         "user-1",
         "general",
@@ -33,7 +33,13 @@ test("responses route through response settings and report the response model", 
         {
             triggerKind: "message",
             sourceMessageId: "message-1",
-            messageContent: "What changed?",
+            messageContent: "try again",
+            replyToMessageId: "message-0",
+            replyTarget: {
+                messageId: "message-0",
+                author: "Claudify (bot)",
+                content: "m!top pulls all-time levels",
+            },
         },
         async (args, input, options) => {
             captured = { args, input, options };
@@ -63,6 +69,15 @@ test("responses route through response settings and report the response model", 
     assert.match(captured.input, /"channelId": "channel-1"/);
     assert.match(captured.input, /"guildId": "guild-1"/);
     assert.match(captured.input, /"sourceMessageId": "message-1"/);
+    assert.match(
+        captured.input,
+        /Direct reply target \(highest-priority context for resolving this message\)/,
+    );
+    assert.match(captured.input, /m!top pulls all-time levels/);
+    assert.ok(
+        captured.input.indexOf("Direct reply target")
+            < captured.input.indexOf("=== Current message from User"),
+    );
     assert.match(
         captured.args[systemPromptIndex + 1],
         /Use run_command in validate mode first/,

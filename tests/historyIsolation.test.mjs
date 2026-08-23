@@ -12,6 +12,7 @@ process.env.MESSAGES_DIR = messagesDir;
 const {
     appendToLog,
     getDailyLogPath,
+    isDeepHistoryRequest,
     loadRecentHistory,
 } = await import("../build/storage/history.js");
 const {
@@ -25,6 +26,29 @@ const {
 } = await import("../build/storage/historyPaths.js");
 
 test.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
+
+test("expanded history requires explicit recap intent", () => {
+    for (const request of [
+        "give me a recap",
+        "summarize what happened",
+        "catch me up",
+        "what did I miss?",
+        "tl;dr please",
+    ]) {
+        assert.equal(isDeepHistoryRequest(request), true, request);
+    }
+
+    for (const request of [
+        "try again",
+        "what about all time?",
+        "do everything",
+        "earlier you said this",
+        "today works",
+        "full send",
+    ]) {
+        assert.equal(isDeepHistoryRequest(request), false, request);
+    }
+});
 
 test("channel history filenames preserve IDs with complex display names", () => {
     const fileName = getChannelHistoryFileName(

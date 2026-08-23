@@ -87,7 +87,7 @@ export function appendToLog(
 
 export function isDeepHistoryRequest(question: string): boolean {
     const normalized = question.toLowerCase();
-    return /\b(all|catch\s*up|digest|earlier|everything|full|recap|summari[sz]e|summary|today|tldr|tl;dr)\b/.test(normalized);
+    return /\b(catch\s+(?:me\s+)?up|digest|recap|summari[sz]e|summary|tldr|tl;dr|what\s+(?:all\s+)?happened|what\s+did\s+i\s+miss)\b/.test(normalized);
 }
 
 function readLogLines(filePath: string): string[] {
