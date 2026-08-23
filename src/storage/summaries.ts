@@ -84,7 +84,7 @@ export async function generateDailySummary(
     try {
         const log = fs.readFileSync(logPath, "utf-8").trim();
         const summaryInput = trimSummaryInput(log);
-        if (!summaryInput || summaryInput.split("\n").length < 3) {
+        if (!summaryInput || summaryInput.split("\n").length < 2) {
             fs.writeFileSync(summaryPath, summaryInput, "utf-8");
             return;
         }
