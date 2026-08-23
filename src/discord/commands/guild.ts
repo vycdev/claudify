@@ -1,5 +1,6 @@
 import { Message, TextChannel } from "discord.js";
 import { getServerMemory } from "../../storage/profiles.js";
+import { smartSplit } from "../split.js";
 
 export async function handleGuild(msg: Message): Promise<void> {
     if (!msg.guild) {
@@ -9,19 +10,10 @@ export async function handleGuild(msg: Message): Promise<void> {
     const memory = getServerMemory(msg.guild.id);
     if (memory) {
         const header = `**Server memory for ${msg.guild.name}:**\n`;
-        const full = header + memory;
-        if (full.length <= 2000) {
-            await msg.reply(full);
-        } else {
-            const firstMax = 2000 - header.length;
-            await msg.reply(header + memory.slice(0, firstMax));
-            let remaining = memory.slice(firstMax);
-            while (remaining.length > 0) {
-                await (msg.channel as TextChannel).send(
-                    remaining.slice(0, 2000),
-                );
-                remaining = remaining.slice(2000);
-            }
+        const [first, ...remaining] = smartSplit(header + memory);
+        await msg.reply(first);
+        for (const chunk of remaining) {
+            await (msg.channel as TextChannel).send(chunk);
         }
     } else {
         await msg.reply(
