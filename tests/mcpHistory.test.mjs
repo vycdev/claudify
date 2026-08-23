@@ -235,13 +235,13 @@ test("MCP history filters matching regular files and preserves pending indentati
     assert.doesNotMatch(channelText, /general_chat_2026-08-01\.txt/);
     assert.doesNotMatch(channelText, /similarly named channel entry/);
 
-    const { tools } = await client.listTools();
-    const historyTool = tools.find(
+    const { tools: updatedTools } = await client.listTools();
+    const updatedHistoryTool = updatedTools.find(
         ({ name }) => name === "read-message-history",
     );
-    assert.equal(historyTool.inputSchema.properties.channel.minLength, 1);
+    assert.equal(updatedHistoryTool.inputSchema.properties.channel.minLength, 1);
     assert.equal(
-        historyTool.inputSchema.properties.channel.pattern,
+        updatedHistoryTool.inputSchema.properties.channel.pattern,
         String.raw`\S`,
     );
 
