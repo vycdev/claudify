@@ -274,6 +274,7 @@ export function createMcpServer(): Server {
                             type: "string",
                             description:
                                 "Optional date in YYYY-MM-DD format",
+                            pattern: "^\\d{4}-\\d{2}-\\d{2}$",
                         },
                         search: {
                             type: "string",
