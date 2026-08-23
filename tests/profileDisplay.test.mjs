@@ -68,9 +68,12 @@ test("profile and server-memory displays preserve astral Unicode across chunks",
         [profileMessages, profileHeader + profile],
         [guildMessages, guildHeader + memory],
     ]) {
-        assert.ok(messages.length > 1);
-        assert.ok(messages.every((message) => message.length <= 2000));
-        messages.forEach(assertNoIsolatedSurrogates);
-        assert.equal(messages.join(""), expected);
+        const contents = messages.map((message) =>
+            typeof message === "string" ? message : message.content,
+        );
+        assert.ok(contents.length > 1);
+        assert.ok(contents.every((content) => content.length <= 2000));
+        contents.forEach(assertNoIsolatedSurrogates);
+        assert.equal(contents.join(""), expected);
     }
 });
