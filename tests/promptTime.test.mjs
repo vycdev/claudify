@@ -18,7 +18,7 @@ test("formats Claude response prompt times in UTC", () => {
             let prompt = "";
             await askClaude(
                 "Question", "User", "user-1", "general", "channel-1",
-                "Guild", "guild-1", [], "",
+                "Guild", "guild-1", [], "", undefined,
                 async (_args, input) => {
                     prompt = input;
                     return { stdout: "Answer", stderr: "" };
