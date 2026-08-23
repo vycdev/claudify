@@ -14,6 +14,7 @@
 - Bound downloaded attachment filenames to filesystem-safe byte lengths while preserving path validation.
 - Advertise the MCP saved-history date format in the tool schema so clients can validate it before calling the server.
 - Fall back to channel-name matching when a numeric channel name collides with a channel ID in another server.
+- Format the current time in Claude response prompts in UTC regardless of the host timezone.
 - Bound recent live Discord context passed to Claude so deep-context requests cannot contribute unbounded live-message input.
 - Support announcement and other guild text-based channels in MCP channel tools.
 - Reject symbolic-link attachment destinations instead of following them when saving downloads.
