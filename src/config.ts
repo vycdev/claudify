@@ -171,7 +171,7 @@ function parsePort(value: string | undefined, fallback: number): number {
 
 export const MESSAGES_DIR =
     process.env.MESSAGES_DIR || path.join(process.cwd(), "messages");
-export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || "";
+export const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID?.trim() || "";
 export const AUTH_ADMIN_USER_IDS = new Set(
     (process.env.AUTH_ADMIN_USER_IDS || "")
         .split(",")

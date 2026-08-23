@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Trim surrounding whitespace from configured Discord role IDs.
 - Preserve astral Unicode characters when `!profile` and `!guild` responses are split into Discord messages.
 - Preserve the original Discord API error when an MCP reaction fails and no matching custom emoji exists.
 - Preserve multibyte UTF-8 characters when Claude subprocess output is split across stream chunks.
