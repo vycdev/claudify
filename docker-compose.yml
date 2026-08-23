@@ -20,6 +20,7 @@ services:
       - CLAUDE_SUMMARY_EFFORT=
       - SUPPRESS_MENTIONS=false
       - MCP_PORT=3100
+      - MCP_READ_MESSAGES_MAX_CHARS=120000
     volumes:
       - messages:/app/messages
       - claude-home:/root

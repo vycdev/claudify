@@ -12,6 +12,7 @@ import {
     HISTORY_DIR,
     HISTORY_V2_DIR,
     MCP_FETCH_MESSAGES_MAX_LINKS,
+    MCP_READ_MESSAGES_MAX_CHARS,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -99,6 +100,41 @@ export const SendMessageSchema = z.object({
             `String must contain at most ${DISCORD_MESSAGE_MAX_CHARS} character(s)`,
         ),
 });
+
+const READ_MESSAGES_RESPONSE_HINT = "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above.";
+
+type ReadMessageEntry = { images?: string[] } & Record<string, unknown>;
+
+function renderReadMessagesResponse(entries: ReadMessageEntry[], truncated: boolean): string {
+    const hint = entries.some((entry) => entry.images?.length)
+        ? READ_MESSAGES_RESPONSE_HINT
+        : "";
+    const note = truncated
+        ? `\n\n[Read-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; older messages omitted.]`
+        : "";
+    return JSON.stringify(entries, null, 2) + hint + note;
+}
+
+function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
+    const full = renderReadMessagesResponse(entries, false);
+    if (full.length <= MCP_READ_MESSAGES_MAX_CHARS) return full;
+
+    const note = `\n\n[Read-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; older messages omitted.]`;
+    if (note.length >= MCP_READ_MESSAGES_MAX_CHARS) {
+        return note.slice(0, MCP_READ_MESSAGES_MAX_CHARS);
+    }
+
+    const selected: ReadMessageEntry[] = [];
+    for (let index = entries.length - 1; index >= 0; index--) {
+        const candidate = [entries[index], ...selected];
+        if (renderReadMessagesResponse(candidate, true).length > MCP_READ_MESSAGES_MAX_CHARS) {
+            break;
+        }
+        selected.unshift(entries[index]);
+    }
+
+    return renderReadMessagesResponse(selected, true);
+}
 
 const ReadMessagesSchema = z.object({
     server: z
@@ -624,9 +660,9 @@ export function createMcpServer(): Server {
                         ReadMessagesSchema.parse(args);
                     const channel = await findChannel(channelIdentifier, server);
                     const messages = await channel.messages.fetch({ limit });
-                    const formatted = [];
+                    const formatted: ReadMessageEntry[] = [];
                     for (const msg of messages.values()) {
-                        const entry: any = {
+                        const entry: ReadMessageEntry = {
                             id: msg.id,
                             channel: `#${channel.name}`,
                             server: channel.guild.name,
@@ -662,15 +698,11 @@ export function createMcpServer(): Server {
                         if (images.length > 0) entry.images = images;
                         formatted.push(entry);
                     }
-                    const resultText = JSON.stringify(formatted, null, 2);
-                    const hasImages = formatted.some(
-                        (m: any) => m.images?.length,
-                    );
-                    const hint = hasImages
-                        ? "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above."
-                        : "";
                     return {
-                        content: [{ type: "text", text: resultText + hint }],
+                        content: [{
+                            type: "text",
+                            text: boundReadMessagesResponse(formatted),
+                        }],
                     };
                 }
                 default:
