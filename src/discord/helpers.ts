@@ -1,10 +1,13 @@
-import type { GuildTextBasedChannel } from "discord.js";
+import { TextChannel, type GuildTextBasedChannel } from "discord.js";
 import { client } from "./client.js";
 
 function isGuildTextBasedChannel(
     channel: { isTextBased(): boolean; isDMBased(): boolean },
 ): channel is GuildTextBasedChannel {
-    return channel.isTextBased() && !channel.isDMBased();
+    return (
+        channel instanceof TextChannel ||
+        (channel.isTextBased() && !channel.isDMBased())
+    );
 }
 
 export function normalizeGuildIdentifier(
