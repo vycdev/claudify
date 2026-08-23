@@ -9,7 +9,7 @@ const messagesDir = fs.mkdtempSync(
 );
 process.env.MESSAGES_DIR = messagesDir;
 
-const { PROFILES_DIR } = await import("../build/config.js");
+const { PROFILE_MAX_CHARS, PROFILES_DIR } = await import("../build/config.js");
 const { handleProfile } = await import(
     "../build/discord/commands/profile.js"
 );
@@ -65,7 +65,7 @@ test("profile and server-memory displays preserve astral Unicode across chunks",
     });
 
     for (const [messages, expected] of [
-        [profileMessages, profileHeader + profile],
+        [profileMessages, profileHeader + profile.slice(0, PROFILE_MAX_CHARS)],
         [guildMessages, guildHeader + memory],
     ]) {
         const contents = messages.map((message) =>
