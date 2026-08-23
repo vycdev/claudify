@@ -43,6 +43,7 @@
 - Bound `!usage` ccusage subprocess lifetime so a hung usage query is terminated and reported instead of keeping the request pending.
 - Normalize whitespace and `#` display prefixes in MCP server and channel identifiers before lookup.
 - Generate daily summaries for days containing a complete single exchange.
+- Bound loaded daily summaries to the configured history recap character budget.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
 - Restrict Claude authentication slash commands to private DMs, matching text-command security behavior.
 - Reject empty MCP `react-to-message` emoji values before calling Discord.

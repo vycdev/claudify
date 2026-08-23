@@ -15,6 +15,19 @@ import {
 
 const summariesInProgress = new Set<string>();
 
+function truncateUtf16(text: string, maxChars: number): string {
+    let end = Math.min(text.length, maxChars);
+    if (
+        end > 0 &&
+        end < text.length &&
+        /[\uD800-\uDBFF]/.test(text[end - 1]) &&
+        /[\uDC00-\uDFFF]/.test(text[end])
+    ) {
+        end--;
+    }
+    return text.slice(0, end);
+}
+
 function trimSummaryInput(log: string): string {
     const lines = log.split("\n");
     const selected = HISTORY_RECAP_MAX_LINES === 0
@@ -50,10 +63,16 @@ export function loadRecentSummaries(
         const date = new Date(Date.now() - i * 86400000);
         const summaryPath = getSummaryPath(channelId, date, channelName);
         if (fs.existsSync(summaryPath)) {
-            const dateStr = date.toISOString().split("T")[0];
-            summaries.push(
-                `[${dateStr}] ${fs.readFileSync(summaryPath, "utf-8").trim()}`,
+            const summary = fs
+                .readFileSync(summaryPath, "utf-8")
+                .trim();
+            const boundedSummary = truncateUtf16(
+                summary,
+                HISTORY_RECAP_MAX_CHARS,
             );
+            if (!boundedSummary) continue;
+            const dateStr = date.toISOString().split("T")[0];
+            summaries.push(`[${dateStr}] ${boundedSummary}`);
         }
     }
     return summaries.reverse().join("\n\n");
