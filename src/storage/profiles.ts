@@ -2,14 +2,27 @@ import fs from "fs";
 import path from "path";
 import {
     CLAUDE_WORKLOAD_CONFIG,
+    MEMORY_FACT_MAX_CHARS,
     PROFILES_DIR,
     PROFILE_MAX_CHARS,
     SERVER_MEMORY_MAX_CHARS,
 } from "../config.js";
 import { runClaude } from "../claude.js";
 import { renderPrompt } from "../prompts.js";
+import {
+    extractHumanSourceMessageIds,
+    extractSourceMessageMetadata,
+    mergeMemoryFacts,
+    renderMemoryFacts,
+    type MemoryFactAttribution,
+    type MemoryFactCandidate,
+} from "./memoryFacts.js";
 
 type ClaudeRunner = typeof runClaude;
+
+interface ProfileFactCandidate extends MemoryFactCandidate {
+    userId: string;
+}
 
 const updateTails = new Map<string, Promise<void>>();
 
@@ -25,14 +38,13 @@ function truncateWithoutSplittingSurrogatePair(
     const precedingCodeUnit = truncated.charCodeAt(truncated.length - 1);
     const followingCodeUnit = text.charCodeAt(truncated.length);
     if (
-        precedingCodeUnit >= 0xd800 &&
-        precedingCodeUnit <= 0xdbff &&
-        followingCodeUnit >= 0xdc00 &&
-        followingCodeUnit <= 0xdfff
+        precedingCodeUnit >= 0xd800
+        && precedingCodeUnit <= 0xdbff
+        && followingCodeUnit >= 0xdc00
+        && followingCodeUnit <= 0xdfff
     ) {
         truncated = truncated.slice(0, -1);
     }
-
     return truncated;
 }
 
@@ -58,35 +70,141 @@ function serializeUpdate<T>(
 
 function readBounded(filePath: string, maxChars: number): string {
     if (!fs.existsSync(filePath)) return "";
-    const text = fs.readFileSync(filePath, "utf-8");
-    let end = Math.min(text.length, maxChars);
+    const text = fs.readFileSync(filePath, "utf8");
+    return truncateWithoutSplittingSurrogatePair(text, maxChars);
+}
 
-    if (end > 0 && end < text.length) {
-        const precedingCodeUnit = text.charCodeAt(end - 1);
-        const followingCodeUnit = text.charCodeAt(end);
-        if (
-            precedingCodeUnit >= 0xd800 &&
-            precedingCodeUnit <= 0xdbff &&
-            followingCodeUnit >= 0xdc00 &&
-            followingCodeUnit <= 0xdfff
-        ) {
-            end--;
-        }
+function renderCombinedMemory(
+    sourceBackedFacts: string,
+    legacyMemory: string,
+    maxChars: number,
+): string {
+    if (!sourceBackedFacts) return legacyMemory;
+    if (!legacyMemory) {
+        return truncateWithoutSplittingSurrogatePair(
+            sourceBackedFacts,
+            maxChars,
+        );
     }
 
-    return text.slice(0, end);
+    const legacyHeader = "Legacy memory (read-only):\n";
+    const combined = `${sourceBackedFacts}\n\n${legacyHeader}${legacyMemory}`;
+    if (combined.length <= maxChars) return combined;
+
+    const separator = `\n\n${legacyHeader}`;
+    const legacyBudget = Math.max(
+        1,
+        Math.floor((maxChars - separator.length) * 0.3),
+    );
+    const factBudget = Math.max(0, maxChars - separator.length - legacyBudget);
+    return [
+        truncateWithoutSplittingSurrogatePair(sourceBackedFacts, factBudget),
+        separator,
+        truncateWithoutSplittingSurrogatePair(legacyMemory, legacyBudget),
+    ].join("");
+}
+
+function parseJsonObject(output: string): Record<string, unknown> {
+    const trimmed = output.trim();
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+    const source = fenced?.[1] ?? trimmed;
+    const parsed: unknown = JSON.parse(source);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("memory update must be a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+}
+
+function parseAttribution(value: unknown): MemoryFactAttribution | undefined {
+    return value === "explicit" || value === "inferred" ? value : undefined;
+}
+
+function parseSupersedes(value: unknown): string[] | undefined {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+        return undefined;
+    }
+    return value;
+}
+
+function parseProfileCandidates(output: string): ProfileFactCandidate[] {
+    const parsed = parseJsonObject(output);
+    if (!Array.isArray(parsed.facts)) {
+        throw new Error("profile update JSON must contain a facts array");
+    }
+
+    const candidates: ProfileFactCandidate[] = [];
+    for (const value of parsed.facts) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const fact = value as Record<string, unknown>;
+        const attribution = parseAttribution(fact.attribution);
+        const supersedesFactIds = parseSupersedes(fact.supersedesFactIds);
+        if (
+            typeof fact.userId !== "string"
+            || typeof fact.text !== "string"
+            || typeof fact.sourceMessageId !== "string"
+            || !attribution
+            || (fact.supersedesFactIds !== undefined && !supersedesFactIds)
+        ) continue;
+        candidates.push({
+            userId: fact.userId,
+            text: fact.text,
+            sourceMessageId: fact.sourceMessageId,
+            attribution,
+            supersedesFactIds,
+        });
+    }
+    return candidates;
+}
+
+function parseServerCandidates(output: string): MemoryFactCandidate[] {
+    const parsed = parseJsonObject(output);
+    if (!Array.isArray(parsed.facts)) {
+        throw new Error("server-memory update JSON must contain a facts array");
+    }
+
+    const candidates: MemoryFactCandidate[] = [];
+    for (const value of parsed.facts) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const fact = value as Record<string, unknown>;
+        const attribution = parseAttribution(fact.attribution);
+        const supersedesFactIds = parseSupersedes(fact.supersedesFactIds);
+        if (
+            typeof fact.text !== "string"
+            || typeof fact.sourceMessageId !== "string"
+            || !attribution
+            || (fact.supersedesFactIds !== undefined && !supersedesFactIds)
+        ) continue;
+        candidates.push({
+            text: fact.text,
+            sourceMessageId: fact.sourceMessageId,
+            attribution,
+            supersedesFactIds,
+        });
+    }
+    return candidates;
 }
 
 export function getUserProfile(userId: string): string {
-    return readBounded(
+    const legacy = readBounded(
         path.join(PROFILES_DIR, `${userId}.txt`),
+        PROFILE_MAX_CHARS,
+    );
+    return renderCombinedMemory(
+        renderMemoryFacts("user", userId),
+        legacy,
         PROFILE_MAX_CHARS,
     );
 }
 
 export function getServerMemory(guildId: string): string {
-    return readBounded(
+    const legacy = readBounded(
         path.join(PROFILES_DIR, `server_${guildId}.txt`),
+        SERVER_MEMORY_MAX_CHARS,
+    );
+    return renderCombinedMemory(
+        renderMemoryFacts("server", guildId),
+        legacy,
         SERVER_MEMORY_MAX_CHARS,
     );
 }
@@ -99,68 +217,79 @@ export async function backgroundProfileUpdate(
     if (users.length === 0) return;
 
     const uniqueUsers = Array.from(
-        new Map(users.map((u) => [u.id, u])).values(),
+        new Map(users.map((user) => [user.id, user])).values(),
     );
 
     return serializeUpdate(
         uniqueUsers.map((user) => `profile:${user.id}`),
         async () => {
-            const profileSections = uniqueUsers.map((u) => {
-                const existing = getUserProfile(u.id);
-                return `===CURRENT ${u.tag} (ID: ${u.id})===\n${existing || "(no profile yet)"}`;
+            const profileSections = uniqueUsers.map((user) => {
+                const existing = getUserProfile(user.id);
+                return `===CURRENT ${user.tag} (ID: ${user.id})===\n${existing || "(no profile yet)"}`;
             }).join("\n\n");
 
             try {
                 const prompt = renderPrompt("profileUpdate", {
                     conversationContext,
+                    memoryFactMaxChars: MEMORY_FACT_MAX_CHARS,
                     profileMaxChars: PROFILE_MAX_CHARS,
                     profileSections,
                 });
-
                 const { stdout } = await claudeRunner(
                     ["-p"],
                     prompt,
                     CLAUDE_WORKLOAD_CONFIG["profile-update"],
                 );
-                const output = stdout.trim();
-
-                if (output === "NO_UPDATES") {
-                    console.error("[Profile] No profile updates needed");
-                    return;
-                }
-
-                const blockPattern = /===PROFILE\s+(\S+)===\s*([\s\S]*?)===END===/g;
-                let match;
+                const candidates = parseProfileCandidates(stdout);
+                const allowedUsers = new Set(uniqueUsers.map((user) => user.id));
+                const sourceMetadata = extractSourceMessageMetadata(
+                    conversationContext,
+                );
                 let updateCount = 0;
-                while ((match = blockPattern.exec(output)) !== null) {
-                    const userId = match[1];
-                    const profileText = match[2].trim();
-                    if (!profileText) continue;
 
-                    const user = uniqueUsers.find((u) => u.id === userId);
-                    if (!user) continue;
-
-                    const existing = getUserProfile(userId);
-                    if (profileText !== existing.trim()) {
-                        const capped = truncateWithoutSplittingSurrogatePair(
-                            profileText,
-                            PROFILE_MAX_CHARS,
-                        );
-                        const profilePath = path.join(PROFILES_DIR, `${userId}.txt`);
-                        fs.writeFileSync(profilePath, capped, "utf-8");
+                for (const user of uniqueUsers) {
+                    if (!allowedUsers.has(user.id)) continue;
+                    const userCandidates = candidates.filter((candidate) =>
+                        candidate.userId === user.id
+                        && sourceMetadata.get(candidate.sourceMessageId)?.authorId === user.id
+                        && !sourceMetadata.get(candidate.sourceMessageId)?.authorBot
+                    );
+                    const validSources = new Set(
+                        [...sourceMetadata.entries()]
+                            .filter(([, value]) =>
+                                value.authorId === user.id && !value.authorBot
+                            )
+                            .map(([messageId]) => messageId),
+                    );
+                    const sourceTimestamps = new Map(
+                        [...sourceMetadata.entries()]
+                            .filter(([messageId]) => validSources.has(messageId))
+                            .map(([messageId, value]) => [
+                                messageId,
+                                value.createdAt,
+                            ]),
+                    );
+                    const changed = mergeMemoryFacts(
+                        "user",
+                        user.id,
+                        userCandidates,
+                        validSources,
+                        sourceTimestamps,
+                    );
+                    if (changed > 0) {
                         console.error(
-                            `[Profile] Updated profile for ${user.tag} (${capped.length} chars)`,
+                            `[Profile] Stored ${changed} source-backed fact update(s) for ${user.tag}`,
                         );
-                        updateCount++;
+                        updateCount += changed;
                     }
                 }
 
-                if (updateCount === 0 && output !== "NO_UPDATES") {
-                    console.error("[Profile] Could not parse profile updates from output");
+                if (updateCount === 0) {
+                    console.error("[Profile] No source-backed profile updates needed");
                 }
-            } catch (err: any) {
+            } catch (error: any) {
                 console.error(
-                    `[Profile] Failed to update profiles: ${err.message}`,
+                    `[Profile] Failed to update profiles: ${error.message}`,
                 );
             }
         },
@@ -175,7 +304,6 @@ export async function backgroundServerMemoryUpdate(
     claudeRunner: ClaudeRunner = runClaude,
 ): Promise<void> {
     return serializeUpdate([`server:${guildId}`], async () => {
-        const memoryPath = path.join(PROFILES_DIR, `server_${guildId}.txt`);
         const existingMemory = getServerMemory(guildId);
 
         try {
@@ -184,29 +312,42 @@ export async function backgroundServerMemoryUpdate(
                 conversationContext,
                 existingMemory: existingMemory || "(no server memory yet)",
                 guildName,
+                memoryFactMaxChars: MEMORY_FACT_MAX_CHARS,
                 serverMemoryMaxChars: SERVER_MEMORY_MAX_CHARS,
             });
-
             const { stdout } = await claudeRunner(
                 ["-p"],
                 prompt,
                 CLAUDE_WORKLOAD_CONFIG["server-memory-update"],
             );
-
-            const newMemory = stdout.trim();
-            if (newMemory && newMemory !== existingMemory.trim()) {
-                const capped = truncateWithoutSplittingSurrogatePair(
-                    newMemory,
-                    SERVER_MEMORY_MAX_CHARS,
-                );
-                fs.writeFileSync(memoryPath, capped, "utf-8");
+            const sourceMetadata = extractSourceMessageMetadata(
+                conversationContext,
+            );
+            const validSources = extractHumanSourceMessageIds(
+                conversationContext,
+            );
+            const sourceTimestamps = new Map(
+                [...sourceMetadata.entries()]
+                    .filter(([messageId]) => validSources.has(messageId))
+                    .map(([messageId, value]) => [messageId, value.createdAt]),
+            );
+            const changed = mergeMemoryFacts(
+                "server",
+                guildId,
+                parseServerCandidates(stdout),
+                validSources,
+                sourceTimestamps,
+            );
+            if (changed > 0) {
                 console.error(
-                    `[ServerMemory] Updated memory for ${guildName} (${capped.length} chars)`,
+                    `[ServerMemory] Stored ${changed} source-backed fact update(s) for ${guildName}`,
                 );
+            } else {
+                console.error("[ServerMemory] No source-backed server updates needed");
             }
-        } catch (err: any) {
+        } catch (error: any) {
             console.error(
-                `[ServerMemory] Failed to update memory for ${guildName}: ${err.message}`,
+                `[ServerMemory] Failed to update memory for ${guildName}: ${error.message}`,
             );
         }
     });

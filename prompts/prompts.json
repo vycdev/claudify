@@ -69,7 +69,7 @@
     "- Keep responses under 2000 characters (Discord limit). Ideally under 500.",
     "- When you include a link, wrap the URL in Discord's no-embed syntax like <https://google.com> unless the user explicitly wants an embed.",
     "- Conversation logs are in {{historyDir}}/ if you need to look up older history.",
-    "- Profile files are in {{messagesDir}}/profiles/ as {userId}.txt files."
+    "- Source-backed profile and server facts are under {{messagesDir}}/profiles/facts/. Legacy {userId}.txt and server_{guildId}.txt memories are read-only context."
   ],
   "dailySummarySystem": [
     "You summarize Discord chat logs for future bot memory.",
@@ -80,41 +80,46 @@
     "Keep it under 350 words. Output ONLY the summary, no preamble."
   ],
   "profileUpdate": [
-    "Current user profiles:",
+    "Current user memory. Source-backed entries include auditable fact IDs; any Legacy memory section is read-only:",
     "{{profileSections}}",
     "",
     "Recent conversation:",
     "{{conversationContext}}",
     "",
-    "Task: Based on this conversation, output updated profiles for users who revealed NEW lasting information about themselves (name, preferences, expertise, interests, projects, durable opinions, ongoing work, communication style, etc).",
+    "Task: Extract NEW lasting facts that users revealed about themselves (name, preferences, expertise, interests, projects, durable opinions, ongoing work, communication style, etc).",
     "",
     "Rules:",
-    "- Only output profiles for users where you learned something new. Skip users with no new info.",
+    "- Every fact must cite the exact sourceMessageId shown beside the supporting recent human message (author_bot=false). Never invent or alter an ID.",
+    "- The source message's author_id must equal the fact's userId. Keep attribution straight.",
+    "- attribution is explicit when the user directly stated the fact, or inferred only when it is a conservative durable inference from that message.",
+    "- Only output new facts. Do not restate facts already present in current memory.",
     "- Store durable facts, not one-off moods, jokes, insults, or temporary reactions.",
-    "- Keep attribution straight. Never copy facts from one user into another user's profile.",
-    "- If new info contradicts old info, prefer the newest explicit statement and keep the profile internally consistent.",
+    "- If a new fact contradicts source-backed memory, list the contradicted fact_id values in supersedesFactIds. Do not invent IDs and never supersede Legacy memory.",
     "- Do NOT include information about the bot itself.",
-    "- Each profile must be under {{profileMaxChars}} characters.",
-    "- If a user already has a profile, output the full merged profile, not just the new sentence.",
+    "- Each fact text must be concise and under {{memoryFactMaxChars}} characters.",
+    "- Current rendered profiles are capped at {{profileMaxChars}} characters, so prefer the most useful durable facts.",
     "",
-    "Output format (strictly follow this, one block per user that needs updating):",
-    "===PROFILE USER_ID_HERE===",
-    "(profile text here)",
-    "===END===",
-    "",
-    "If no profiles need updating, output exactly: NO_UPDATES"
+    "Output ONLY strict JSON in this exact shape:",
+    "{\"facts\":[{\"userId\":\"USER_ID\",\"text\":\"durable fact\",\"sourceMessageId\":\"MESSAGE_ID\",\"attribution\":\"explicit\",\"supersedesFactIds\":[]}]}",
+    "If no profiles need updating, output exactly: {\"facts\":[]}"
   ],
   "serverMemoryUpdate": [
-    "Current server memory for \"{{guildName}}\" (may be empty):",
+    "Current server memory for \"{{guildName}}\". Source-backed entries include auditable fact IDs; any Legacy memory section is read-only:",
     "{{existingMemory}}",
     "",
     "Recent conversation in #{{channelName}}:",
     "{{conversationContext}}",
     "",
-    "Task: Based on this conversation, output an updated server memory.",
+    "Task: Extract NEW durable server-wide facts from this conversation.",
     "Include ONLY server-wide context: channel purposes, recurring topics, ongoing projects, inside jokes, server culture, important events, shared knowledge, and standing preferences for how the bot should respond in this server.",
     "Do NOT include user-specific descriptions, user preferences, behavior patterns, or who does what. Those belong in individual user profiles.",
-    "Store durable context, not one-off chatter. If you learned nothing durable about the server, output the existing memory unchanged.",
-    "Keep it under {{serverMemoryMaxChars}} characters. Output ONLY the memory text, no preamble or explanation."
+    "Every fact must cite the exact sourceMessageId shown beside the supporting recent human message (author_bot=false). Never invent or alter an ID.",
+    "attribution is explicit when the message directly states the fact, or inferred only when it is a conservative durable inference.",
+    "Store durable context, not one-off chatter, and do not restate facts already present in current memory.",
+    "If a new fact contradicts source-backed memory, list the contradicted fact_id values in supersedesFactIds. Do not invent IDs and never supersede Legacy memory.",
+    "Each fact text must be concise and under {{memoryFactMaxChars}} characters. Rendered server memory is capped at {{serverMemoryMaxChars}} characters.",
+    "Output ONLY strict JSON in this exact shape:",
+    "{\"facts\":[{\"text\":\"durable server fact\",\"sourceMessageId\":\"MESSAGE_ID\",\"attribution\":\"explicit\",\"supersedesFactIds\":[]}]}",
+    "If no server facts need updating, output exactly: {\"facts\":[]}"
   ]
 }
