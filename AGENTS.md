@@ -38,6 +38,7 @@ src/
 ├── claudeStream.ts       → Bounded stream-JSON result and tool-evidence parser
 ├── askClaude.ts          → System prompt + prompt assembly + Claude invocation
 ├── morpheusGrounding.ts  → Morpheus intent detection and evidence policy
+├── responseEffort.ts     → Deterministic fixed/adaptive response-effort routing
 │
 ├── discord/              → Discord client and event handling
 │   ├── client.ts         → Client singleton (intents config)
@@ -127,6 +128,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `BOT_EFFORT` | No | `""` | Global Claude Code `--effort` fallback (`low`, `medium`, `high`, `xhigh`, `max`) |
 | `CLAUDE_RESPONSE_MODEL` | No | inherit | Model for user-facing responses |
 | `CLAUDE_RESPONSE_EFFORT` | No | inherit | Effort for user-facing responses |
+| `CLAUDE_RESPONSE_EFFORT_MODE` | No | `fixed` | `fixed` keeps the configured response effort; `adaptive` lowers simple turns |
+| `CLAUDE_RESPONSE_SIMPLE_EFFORT` | No | `low` | Effort used for simple turns in adaptive mode; supports `inherit` and `default` |
 | `CLAUDE_PROFILE_MODEL` | No | inherit | Model for background profile updates |
 | `CLAUDE_PROFILE_EFFORT` | No | inherit | Effort for background profile updates |
 | `CLAUDE_SERVER_MEMORY_MODEL` | No | inherit | Model for background server-memory updates |
@@ -152,6 +155,10 @@ or `inherit` values inherit the corresponding global value; `default` omits the
 Claude CLI setting for that workload. Invalid workload overrides warn at
 startup and inherit the global fallback. Configuration changes require a
 restart because the typed routing table is immutable after startup.
+Adaptive response routing is deterministic and changes only effort, never the
+response model. Morpheus requests, attachments, long or multi-part prompts,
+code/errors, recaps, debugging, and explicit analysis retain the configured
+response effort; other user turns use `CLAUDE_RESPONSE_SIMPLE_EFFORT`.
 
 ## Storage layout
 

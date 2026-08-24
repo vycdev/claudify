@@ -12,6 +12,8 @@ process.env.BOT_MODEL = "global-model";
 process.env.BOT_EFFORT = "low";
 process.env.CLAUDE_RESPONSE_MODEL = "response-model";
 process.env.CLAUDE_RESPONSE_EFFORT = "high";
+process.env.CLAUDE_RESPONSE_EFFORT_MODE = "adaptive";
+process.env.CLAUDE_RESPONSE_SIMPLE_EFFORT = "low";
 
 const { askClaude } = await import("../build/askClaude.js");
 const { handleHelp } = await import("../build/discord/commands/help.js");
@@ -129,4 +131,44 @@ test("responses route through response settings and report the response model", 
     });
     assert.match(helpReply, /powered by `response-model`/);
     assert.doesNotMatch(helpReply, /global-model/);
+});
+
+test("adaptive routing keeps Sonnet while lowering a simple response effort", async () => {
+    let capturedOptions;
+    const answer = await askClaude(
+        "sup",
+        "User",
+        "user-1",
+        "general",
+        "channel-1",
+        "Guild",
+        "guild-1",
+        [],
+        "",
+        {
+            triggerKind: "message",
+            sourceMessageId: "message-2",
+            messageContent: "sup",
+        },
+        async (_args, _input, options) => {
+            capturedOptions = options;
+            return {
+                stdout: "not much",
+                stderr: "",
+                trace: {
+                    format: "stream-json",
+                    resultEventReceived: true,
+                    malformedEventCount: 0,
+                    toolCalls: [],
+                },
+            };
+        },
+    );
+
+    assert.equal(answer, "not much");
+    assert.deepEqual(capturedOptions, {
+        workload: "response",
+        model: "response-model",
+        effort: "low",
+    });
 });
