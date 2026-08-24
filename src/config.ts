@@ -218,6 +218,10 @@ export const AUTH_ADMIN_USER_IDS = new Set(
 );
 export const HISTORY_DIR = path.join(MESSAGES_DIR, "history");
 export const HISTORY_V2_DIR = path.join(HISTORY_DIR, "v2");
+export const HISTORY_SEARCH_DB_PATH = path.join(
+    MESSAGES_DIR,
+    "history-search.sqlite",
+);
 export const PENDING_DIR = path.join(MESSAGES_DIR, "pending");
 export const PROFILES_DIR = path.join(MESSAGES_DIR, "profiles");
 export const SUMMARIES_DIR = path.join(MESSAGES_DIR, "summaries");
@@ -315,6 +319,16 @@ export const HISTORY_RECAP_MAX_LINES = parseNonNegativeInteger(process.env.HISTO
 export const HISTORY_RECAP_MAX_CHARS = parseNonNegativeInteger(process.env.HISTORY_RECAP_MAX_CHARS, 140000);
 export const HISTORY_SEARCH_MAX_BLOCKS = parseNonNegativeInteger(process.env.HISTORY_SEARCH_MAX_BLOCKS, 10);
 export const HISTORY_SEARCH_CONTEXT_LINES = parseNonNegativeInteger(process.env.HISTORY_SEARCH_CONTEXT_LINES, 2);
+export const HISTORY_FTS_MAX_RESULTS = parseNonNegativeInteger(
+    process.env.HISTORY_FTS_MAX_RESULTS,
+    12,
+    100,
+);
+export const HISTORY_FTS_MAX_CHARS = parseNonNegativeInteger(
+    process.env.HISTORY_FTS_MAX_CHARS,
+    12_000,
+    140_000,
+);
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_MAX_REQUEST_BYTES = 1_048_576;
