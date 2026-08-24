@@ -34,6 +34,7 @@ test("memory updates debounce and replace overlapping channel snapshots", async 
         scopeId: "guild:guild-1",
         guildId: "guild-1",
         guildName: "Guild",
+        channelId: "channel-1",
         channelName: "general",
         users: [{ id: "user-1", tag: "First name" }],
         conversationContext: "old overlapping snapshot",
@@ -42,6 +43,7 @@ test("memory updates debounce and replace overlapping channel snapshots", async 
         scopeId: "guild:guild-1",
         guildId: "guild-1",
         guildName: "Guild",
+        channelId: "channel-1",
         channelName: "general",
         users: [
             { id: "user-1", tag: "Current name" },
@@ -69,6 +71,47 @@ test("memory updates debounce and replace overlapping channel snapshots", async 
     }]);
 });
 
+test("memory batches keep same-named channels isolated by channel ID", async () => {
+    const profileCalls = [];
+    const serverCalls = [];
+    const batcher = new MemoryUpdateBatcher(
+        60_000,
+        600_000,
+        20_000,
+        async (users, context) => {
+            profileCalls.push({ users, context });
+        },
+        async (...args) => {
+            serverCalls.push(args);
+        },
+    );
+
+    batcher.enqueue({
+        scopeId: "guild:guild-1",
+        guildId: "guild-1",
+        guildName: "Guild",
+        channelId: "channel-1",
+        channelName: "general",
+        users: [{ id: "user-1", tag: "First user" }],
+        conversationContext: "context from the first general channel",
+    });
+    batcher.enqueue({
+        scopeId: "guild:guild-1",
+        guildId: "guild-1",
+        guildName: "Guild",
+        channelId: "channel-2",
+        channelName: "general",
+        users: [{ id: "user-2", tag: "Second user" }],
+        conversationContext: "context from the second general channel",
+    });
+    await batcher.flush("guild:guild-1");
+
+    assert.equal(profileCalls.length, 1);
+    assert.match(profileCalls[0].context, /context from the first general channel/);
+    assert.match(profileCalls[0].context, /context from the second general channel/);
+    assert.equal(serverCalls.length, 1);
+});
+
 test("memory batches bound context and skip server memory for DMs", async () => {
     const profileCalls = [];
     const serverCalls = [];
@@ -86,6 +129,7 @@ test("memory batches bound context and skip server memory for DMs", async () => 
 
     batcher.enqueue({
         scopeId: "channel:dm-1",
+        channelId: "dm-1",
         channelName: "dm",
         users: [{ id: "user-1", tag: "User" }],
         conversationContext: `discard this prefix 😀 keep this suffix`,
