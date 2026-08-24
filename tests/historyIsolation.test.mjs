@@ -151,6 +151,51 @@ test("history search finds older messages using Unicode terms", () => {
     assert.match(history, /東京で決定した内容/);
 });
 
+test("ranked full-text search finds and incrementally indexes older channel history", () => {
+    const channelId = "555555555555555555";
+    const otherChannelId = "666666666666666666";
+    const channelName = "research";
+    const oldDate = new Date(Date.now() - 10 * 86_400_000);
+
+    appendToLog(
+        "researcher",
+        "the orbital marmalade launch uses the copper checklist",
+        channelId,
+        channelName,
+        oldDate,
+    );
+    appendToLog(
+        "other-user",
+        "orbital marmalade belongs to another isolated channel",
+        otherChannelId,
+        channelName,
+        oldDate,
+    );
+
+    const firstSearch = loadRecentHistory(
+        channelId,
+        "what was the orbital marmalade decision?",
+        channelName,
+    );
+    assert.match(firstSearch, /Ranked full-text matches/);
+    assert.match(firstSearch, /copper checklist/);
+    assert.doesNotMatch(firstSearch, /another isolated channel/);
+
+    appendToLog(
+        "researcher",
+        "the new heliotrope protocol supersedes that checklist",
+        channelId,
+        channelName,
+        oldDate,
+    );
+    const incrementalSearch = loadRecentHistory(
+        channelId,
+        "find the heliotrope protocol",
+        channelName,
+    );
+    assert.match(incrementalSearch, /new heliotrope protocol/);
+});
+
 test("automatic history loading does not fall back to legacy name-only files", () => {
     const date = new Date().toISOString().split("T")[0];
     const legacyPath = path.join(messagesDir, "history", `general_${date}.txt`);

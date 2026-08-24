@@ -9,6 +9,7 @@ import {
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
 import { getChannelHistoryPath } from "./historyPaths.js";
+import { searchChannelHistory } from "./historySearch.js";
 
 const HISTORY_STOP_WORDS = new Set([
     "about",
@@ -22,27 +23,37 @@ const HISTORY_STOP_WORDS = new Set([
     "can",
     "convo",
     "conversation",
+    "could",
     "day",
     "did",
+    "does",
     "dig",
     "everything",
     "for",
+    "find",
     "from",
     "full",
     "has",
     "have",
     "here",
+    "how",
     "history",
     "into",
     "just",
+    "know",
     "like",
     "messages",
     "more",
     "need",
     "not",
+    "okay",
+    "ordinary",
+    "please",
+    "question",
     "recap",
     "said",
     "show",
+    "should",
     "some",
     "summarize",
     "summary",
@@ -51,13 +62,20 @@ const HISTORY_STOP_WORDS = new Set([
     "their",
     "them",
     "there",
+    "think",
     "this",
     "tldr",
     "today",
     "was",
+    "want",
     "were",
     "what",
     "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "would",
     "with",
     "you",
 ]);
@@ -128,7 +146,7 @@ function trimLinesToBudget(
     return { lines: selected, omitted };
 }
 
-function extractSearchTerms(question: string): string[] {
+export function extractSearchTerms(question: string): string[] {
     const cleaned = question
         .normalize("NFC")
         .toLowerCase()
@@ -184,6 +202,28 @@ export function loadRecentHistory(
     const olderSummaries = loadRecentSummaries(channelId, 7, channelName);
     if (olderSummaries) {
         parts.push(`--- Past week summaries ---\n${olderSummaries}`);
+    }
+
+    if (searchTerms.length > 0) {
+        try {
+            const today = new Date().toISOString().split("T")[0];
+            const yesterdayDate = new Date(Date.now() - 86400000)
+                .toISOString()
+                .split("T")[0];
+            const matches = searchChannelHistory(
+                channelId,
+                searchTerms,
+                [today, yesterdayDate],
+            );
+            if (matches.length > 0) {
+                parts.push(
+                    `--- Ranked full-text matches from older saved history (${matches.length}) ---\n${matches.map((match) => `[${match.date}] ${match.content}`).join("\n")}`,
+                );
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[HistorySearch] Full-text search failed: ${message}`);
+        }
     }
 
     const yesterday = new Date(Date.now() - 86400000);

@@ -51,6 +51,7 @@ src/
 │
 ├── storage/              → Persistent data management (filesystem-based)
 │   ├── history.ts        → Daily conversation logs (append-only text files)
+│   ├── historySearch.ts  → Persistent SQLite FTS5 index over saved channel logs
 │   ├── pending.ts        → In-flight message tracking
 │   ├── profiles.ts       → User profiles + server memory (background Claude updates)
 │   ├── memoryBatcher.ts  → Debounced profile/server-memory update batching
@@ -134,6 +135,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `MEMORY_UPDATE_BATCH_MAX_CHARS` | No | `20000` | Maximum conversation context sent in one memory batch |
 | `REPLY_CHAIN_DEPTH` | No | `5` | Maximum number of Discord reply ancestors included |
 | `REPLY_LIVE_CONTEXT_LIMIT` | No | `15` | Flat live-message limit when a reply chain is available |
+| `HISTORY_FTS_MAX_RESULTS` | No | `12` | Maximum ranked older-history matches included |
+| `HISTORY_FTS_MAX_CHARS` | No | `12000` | Character budget for ranked older-history matches |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
 | `MCP_READ_MESSAGES_MAX_CHARS` | No | `120000` | Maximum characters returned by the `read-messages` MCP tool (capped at 1000000) |
@@ -155,6 +158,7 @@ for current channel history:
 
 ```
 messages/
+├── history-search.sqlite → Persistent ranked full-text index (rebuildable)
 ├── history/
 │   ├── v2/     → Daily logs: v2_{channelId}__{channel}_{YYYY-MM-DD}.txt
 │   └── *.txt   → Legacy name-keyed logs (explicit browsing only)

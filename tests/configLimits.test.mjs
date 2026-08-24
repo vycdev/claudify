@@ -187,6 +187,18 @@ test("reply context limits are bounded and configurable", () => {
     );
 });
 
+test("full-text history limits are bounded and configurable", () => {
+    const names = ["HISTORY_FTS_MAX_RESULTS", "HISTORY_FTS_MAX_CHARS"];
+    assert.deepEqual(
+        readConfigValues(names, ["101", "140001"]),
+        [12, 12000],
+    );
+    assert.deepEqual(
+        readConfigValues(names, ["8", "4000"]),
+        [8, 4000],
+    );
+});
+
 test("cooldown stays within Node's supported timer range", () => {
     assert.deepEqual(
         readConfigValues(["COOLDOWN_MS"], ["2147483647"]),
