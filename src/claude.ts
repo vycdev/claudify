@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
-import type { ClaudeRunOptions } from "./claudeTypes.js";
+import { ClaudeStreamCollector } from "./claudeStream.js";
+import type { ClaudeRunOptions, ClaudeRunResult } from "./claudeTypes.js";
 
 export interface ClaudeExecutable {
     command: string;
@@ -91,7 +92,7 @@ function spawnClaude(
     input: string,
     options: ClaudeRunOptions,
     executable: ClaudeExecutable,
-): Promise<{ stdout: string; stderr: string }> {
+): Promise<ClaudeRunResult> {
     return new Promise((resolve, reject) => {
         const { workload, model, effort } = options;
         const env: Record<string, string> = {};
@@ -121,6 +122,12 @@ function spawnClaude(
 
         let stdout = "";
         let stderr = "";
+        const streamCollector = claudeArgs.some((arg, index) =>
+            (
+                arg === "--output-format"
+                && claudeArgs[index + 1] === "stream-json"
+            ) || arg === "--output-format=stream-json"
+        ) ? new ClaudeStreamCollector() : undefined;
         let stdinError: Error | undefined;
         let timeoutError: Error | undefined;
         let forceKillTimeout: NodeJS.Timeout | undefined;
@@ -158,7 +165,8 @@ function spawnClaude(
         proc.stdout.setEncoding("utf8");
         proc.stderr.setEncoding("utf8");
         proc.stdout.on("data", (data) => {
-            stdout = appendBounded(stdout, data);
+            if (streamCollector) streamCollector.consume(data);
+            else stdout = appendBounded(stdout, data);
         });
         proc.stderr.on("data", (data) => {
             stderr = appendBounded(stderr, data);
@@ -178,12 +186,23 @@ function spawnClaude(
             } else if (timeoutError) {
                 reject(timeoutError);
             } else if (code === 0) {
-                resolve({ stdout, stderr });
+                if (streamCollector) {
+                    const streamResult = streamCollector.finish();
+                    resolve({
+                        stdout: streamResult.result,
+                        stderr,
+                        trace: streamResult.trace,
+                    });
+                } else {
+                    resolve({ stdout, stderr });
+                }
             } else {
+                const streamResult = streamCollector?.finish();
                 const err: any = new Error(
                     `Claude CLI [${workload}] exited with code ${code}`,
                 );
-                err.stdout = stdout;
+                err.stdout = streamResult?.result ?? stdout;
+                if (streamResult) err.trace = streamResult.trace;
                 err.stderr = stderr;
                 reject(err);
             }
@@ -216,7 +235,7 @@ export function createClaudeRunner(
     args: string[],
     input: string,
     options: ClaudeRunOptions,
-) => Promise<{ stdout: string; stderr: string }> {
+) => Promise<ClaudeRunResult> {
     return (args, input, options) => enqueue(
         options.workload,
         () => spawnClaude(args, input, options, executable),
