@@ -26,6 +26,8 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
    - `BOT_MODEL` — global Claude model fallback for every workload (default: `claude-haiku-4-5`)
    - `BOT_EFFORT` — optional Claude Code `--effort` level: `low`, `medium`, `high`, `xhigh`, or `max`
+   - `CLAUDE_RESPONSE_EFFORT_MODE` — `fixed` by default; use `adaptive` to lower effort for simple user turns
+   - `CLAUDE_RESPONSE_SIMPLE_EFFORT` — simple-turn effort in adaptive mode (default: `low`)
    - `LIVE_CONTEXT_MAX_CHARS` — optional maximum size of recent live Discord context passed to Claude (default: `140000`)
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
    - `MCP_READ_MESSAGES_MAX_CHARS` — optional; maximum characters returned by `read-messages` (default: `120000`, maximum: `1000000`)
@@ -59,12 +61,22 @@ Invalid values produce a startup warning and inherit their deterministic global
 fallback; model IDs are operator-controlled but cannot contain whitespace or
 control characters.
 
+Response effort is fixed by default for backward compatibility. Set
+`CLAUDE_RESPONSE_EFFORT_MODE=adaptive` to keep the response model unchanged
+while routing simple turns to `CLAUDE_RESPONSE_SIMPLE_EFFORT` (default `low`).
+Morpheus requests, attachments, long or multi-part prompts, code/errors,
+recaps, debugging, and explicit reasoning requests retain
+`CLAUDE_RESPONSE_EFFORT`. The simple-effort setting also accepts `inherit` to
+use the configured response effort or `default` to omit the CLI effort flag.
+
 For example:
 
 ```env
 # Stronger user-facing responses
 BOT_MODEL=claude-sonnet-5
 BOT_EFFORT=high
+CLAUDE_RESPONSE_EFFORT_MODE=adaptive
+CLAUDE_RESPONSE_SIMPLE_EFFORT=low
 
 # Lower-cost background maintenance
 CLAUDE_PROFILE_MODEL=claude-haiku-4-5

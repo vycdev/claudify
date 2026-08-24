@@ -10,6 +10,8 @@ const workloadEnvNames = [
     "BOT_EFFORT",
     "CLAUDE_RESPONSE_MODEL",
     "CLAUDE_RESPONSE_EFFORT",
+    "CLAUDE_RESPONSE_EFFORT_MODE",
+    "CLAUDE_RESPONSE_SIMPLE_EFFORT",
     "CLAUDE_PROFILE_MODEL",
     "CLAUDE_PROFILE_EFFORT",
     "CLAUDE_SERVER_MEMORY_MODEL",
@@ -25,7 +27,7 @@ function readWorkloadConfig(overrides = {}) {
     const configUrl = new URL("../build/config.js", import.meta.url).href;
     const script = [
         `const config = await import(${JSON.stringify(configUrl)});`,
-        "process.stdout.write(JSON.stringify({ globalModel: config.BOT_MODEL, globalEffort: config.BOT_EFFORT, workloads: config.CLAUDE_WORKLOAD_CONFIG, responseDisplay: config.getResponseModelDisplay() }));",
+        "process.stdout.write(JSON.stringify({ globalModel: config.BOT_MODEL, globalEffort: config.BOT_EFFORT, workloads: config.CLAUDE_WORKLOAD_CONFIG, responseDisplay: config.getResponseModelDisplay(), responseEffortMode: config.CLAUDE_RESPONSE_EFFORT_MODE, responseSimpleEffort: config.CLAUDE_RESPONSE_SIMPLE_EFFORT }));",
     ].join("\n");
     const env = { ...process.env };
     for (const name of workloadEnvNames) delete env[name];
@@ -54,6 +56,8 @@ test("all workloads inherit the legacy global model and effort", () => {
     assert.equal(config.globalModel, "legacy-model");
     assert.equal(config.globalEffort, "high");
     assert.equal(config.responseDisplay, "legacy-model");
+    assert.equal(config.responseEffortMode, "fixed");
+    assert.equal(config.responseSimpleEffort, "low");
     assert.deepEqual(
         Object.values(config.workloads).map(({ model, effort }) => ({
             model,
@@ -110,6 +114,45 @@ test("explicit default bypasses global values for one workload", () => {
 
     assert.deepEqual(config.workloads.response, { workload: "response" });
     assert.equal(config.responseDisplay, "Claude CLI default");
+});
+
+test("adaptive response effort settings resolve independently", () => {
+    const { config, stderr } = readWorkloadConfig({
+        BOT_EFFORT: "high",
+        CLAUDE_RESPONSE_EFFORT_MODE: " ADAPTIVE ",
+        CLAUDE_RESPONSE_SIMPLE_EFFORT: "MEDIUM",
+    });
+
+    assert.equal(stderr, "");
+    assert.equal(config.responseEffortMode, "adaptive");
+    assert.equal(config.responseSimpleEffort, "medium");
+    assert.equal(config.workloads.response.effort, "high");
+});
+
+test("adaptive simple effort supports inherit and CLI default", () => {
+    const inherited = readWorkloadConfig({
+        CLAUDE_RESPONSE_EFFORT: "max",
+        CLAUDE_RESPONSE_SIMPLE_EFFORT: "inherit",
+    }).config;
+    const cliDefault = readWorkloadConfig({
+        CLAUDE_RESPONSE_EFFORT: "high",
+        CLAUDE_RESPONSE_SIMPLE_EFFORT: "default",
+    }).config;
+
+    assert.equal(inherited.responseSimpleEffort, "max");
+    assert.equal(cliDefault.responseSimpleEffort, undefined);
+});
+
+test("invalid adaptive settings warn and use backward-compatible defaults", () => {
+    const { config, stderr } = readWorkloadConfig({
+        CLAUDE_RESPONSE_EFFORT_MODE: "automatic",
+        CLAUDE_RESPONSE_SIMPLE_EFFORT: "turbo",
+    });
+
+    assert.equal(config.responseEffortMode, "fixed");
+    assert.equal(config.responseSimpleEffort, "low");
+    assert.match(stderr, /Invalid CLAUDE_RESPONSE_EFFORT_MODE/);
+    assert.match(stderr, /Invalid CLAUDE_RESPONSE_SIMPLE_EFFORT/);
 });
 
 test("invalid workload values warn and inherit deterministic fallbacks", () => {

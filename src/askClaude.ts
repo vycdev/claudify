@@ -1,4 +1,6 @@
 import {
+    CLAUDE_RESPONSE_EFFORT_MODE,
+    CLAUDE_RESPONSE_SIMPLE_EFFORT,
     CLAUDE_WORKLOAD_CONFIG,
     HISTORY_DIR,
     MESSAGES_DIR,
@@ -16,6 +18,7 @@ import {
     MORPHEUS_GROUNDING_RETRY_INSTRUCTION,
     requiresMorpheusGrounding,
 } from "./morpheusGrounding.js";
+import { selectResponseRunOptions } from "./responseEffort.js";
 
 type ClaudeRunner = typeof runClaude;
 
@@ -207,10 +210,23 @@ export async function askClaude(
         replyContext,
         liveMessages,
     );
+    const responseSelection = selectResponseRunOptions(
+        CLAUDE_WORKLOAD_CONFIG.response,
+        CLAUDE_RESPONSE_EFFORT_MODE,
+        CLAUDE_RESPONSE_SIMPLE_EFFORT,
+        {
+            question,
+            imageCount: imagePaths.length,
+            requiresMorpheus: mustGroundMorpheus,
+        },
+    );
 
     try {
         console.error(
             `[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`,
+        );
+        console.error(
+            `[Claude Routing] response effort=${responseSelection.options.effort ?? "default"} (${responseSelection.reason})`,
         );
 
         const args = [
@@ -230,7 +246,7 @@ export async function askClaude(
         let runResult = await claudeRunner(
             args,
             prompt,
-            CLAUDE_WORKLOAD_CONFIG.response,
+            responseSelection.options,
         );
 
         if (mustGroundMorpheus) {
@@ -245,7 +261,7 @@ export async function askClaude(
                 runResult = await claudeRunner(
                     args,
                     `${prompt}\n\n${MORPHEUS_GROUNDING_RETRY_INSTRUCTION}`,
-                    CLAUDE_WORKLOAD_CONFIG.response,
+                    responseSelection.options,
                 );
                 assessment = assessMorpheusGrounding(runResult.trace);
             }

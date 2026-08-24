@@ -18,6 +18,7 @@ const VALID_BOT_EFFORTS: ReadonlySet<string> = new Set([
     "xhigh",
     "max",
 ]);
+export type ResponseEffortMode = "fixed" | "adaptive";
 const WORKLOAD_ENV: Readonly<
     Record<ClaudeWorkload, { model: string; effort: string }>
 > = {
@@ -69,6 +70,34 @@ function parseGlobalEffort(value: string | undefined): ClaudeEffort | undefined 
         );
     }
     return effort;
+}
+
+function parseResponseEffortMode(
+    value: string | undefined,
+): ResponseEffortMode {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized || normalized === "fixed") return "fixed";
+    if (normalized === "adaptive") return "adaptive";
+    console.error(
+        `[Claude Config] Invalid CLAUDE_RESPONSE_EFFORT_MODE=${JSON.stringify(value?.trim())}; using fixed`,
+    );
+    return "fixed";
+}
+
+function parseSimpleResponseEffort(
+    value: string | undefined,
+    inherited: ClaudeEffort | undefined,
+): ClaudeEffort | undefined {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized) return "low";
+    if (normalized === "inherit") return inherited;
+    if (normalized === "default") return undefined;
+    const effort = parseBotEffort(normalized);
+    if (effort) return effort;
+    console.error(
+        `[Claude Config] Invalid CLAUDE_RESPONSE_SIMPLE_EFFORT=${JSON.stringify(value?.trim())}; using low`,
+    );
+    return "low";
 }
 
 function resolveModelOverride(
@@ -283,6 +312,13 @@ export const CLAUDE_WORKLOAD_CONFIG: Readonly<
         GLOBAL_BOT_EFFORT,
     ),
 });
+export const CLAUDE_RESPONSE_EFFORT_MODE = parseResponseEffortMode(
+    process.env.CLAUDE_RESPONSE_EFFORT_MODE,
+);
+export const CLAUDE_RESPONSE_SIMPLE_EFFORT = parseSimpleResponseEffort(
+    process.env.CLAUDE_RESPONSE_SIMPLE_EFFORT,
+    CLAUDE_WORKLOAD_CONFIG.response.effort,
+);
 
 export function getResponseModelDisplay(): string {
     return CLAUDE_WORKLOAD_CONFIG.response.model ?? "Claude CLI default";
@@ -294,6 +330,9 @@ export function logClaudeWorkloadConfig(): void {
             `[Claude Config] ${config.workload}: model=${config.model ?? "default"}, effort=${config.effort ?? "default"}`,
         );
     }
+    console.error(
+        `[Claude Config] response-effort-routing: mode=${CLAUDE_RESPONSE_EFFORT_MODE}, simple=${CLAUDE_RESPONSE_SIMPLE_EFFORT ?? "default"}, complex=${CLAUDE_WORKLOAD_CONFIG.response.effort ?? "default"}`,
+    );
 }
 export const CLAUDE_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(
     process.env.CLAUDE_AUTH_LOGIN_TIMEOUT_MS,
