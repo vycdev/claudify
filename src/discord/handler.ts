@@ -3,6 +3,8 @@ import {
     REQUIRED_ROLE_ID,
     COOLDOWN_MS,
     LIVE_CONTEXT_LIMIT,
+    REPLY_CHAIN_DEPTH,
+    REPLY_LIVE_CONTEXT_LIMIT,
     DEEP_LIVE_CONTEXT_LIMIT,
     LIVE_CONTEXT_MAX_CHARS,
 } from "../config.js";
@@ -16,7 +18,11 @@ import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
 import { parseAskCommand } from "./commands/ask.js";
-import { askClaude, type DiscordInvocationContext } from "../askClaude.js";
+import {
+    askClaude,
+    type DiscordInvocationContext,
+    type DiscordReplyContext,
+} from "../askClaude.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
@@ -104,6 +110,29 @@ async function fetchChannelMessages(channel: BotMessageChannel, limit: number): 
     return collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 }
 
+export async function fetchReplyChain(
+    channel: BotMessageChannel,
+    directReplyMessageId: string,
+    maxDepth: number = REPLY_CHAIN_DEPTH,
+): Promise<Message[]> {
+    const directFirst: Message[] = [];
+    const visited = new Set<string>();
+    let messageId: string | undefined = directReplyMessageId;
+
+    while (messageId && directFirst.length < maxDepth && !visited.has(messageId)) {
+        visited.add(messageId);
+        const message: Message | null = await channel.messages
+            .fetch(messageId)
+            .catch(() => null);
+        if (!message) break;
+
+        directFirst.push(message);
+        messageId = message.reference?.messageId;
+    }
+
+    return directFirst.reverse();
+}
+
 export function formatLiveMessagesContext(
     messages: Message[],
     requestedLimit: number,
@@ -144,13 +173,20 @@ export function formatLiveMessagesContext(
     return text.slice(0, maxChars);
 }
 
+export function selectLiveContextLimit(
+    question: string,
+    hasReplyChain: boolean,
+): number {
+    if (isDeepHistoryRequest(question)) return DEEP_LIVE_CONTEXT_LIMIT;
+    return hasReplyChain ? REPLY_LIVE_CONTEXT_LIMIT : LIVE_CONTEXT_LIMIT;
+}
+
 async function buildLiveMessagesContext(
     channel: BotMessageChannel,
     question: string,
+    hasReplyChain: boolean = false,
 ): Promise<{ text: string; messages: Message[] }> {
-    const limit = isDeepHistoryRequest(question)
-        ? DEEP_LIVE_CONTEXT_LIMIT
-        : LIVE_CONTEXT_LIMIT;
+    const limit = selectLiveContextLimit(question, hasReplyChain);
     const messages = await fetchChannelMessages(channel, limit);
 
     if (messages.length === 0) return { text: "", messages };
@@ -538,11 +574,14 @@ async function processMessage(msg: Message): Promise<void> {
 
         // Fetch referenced message if this is a reply
         let replyTarget: DiscordInvocationContext["replyTarget"];
+        let replyChain: DiscordReplyContext[] | undefined;
         const allAttachments: { url: string; name: string }[] = [];
         if (msg.reference?.messageId) {
-            const refMsg = await msg.channel.messages
-                .fetch(msg.reference.messageId)
-                .catch(() => null);
+            const replyMessages = await fetchReplyChain(
+                msg.channel,
+                msg.reference.messageId,
+            );
+            const refMsg = replyMessages.at(-1);
             if (refMsg) {
                 let refText = refMsg.content;
                 if (refMsg.embeds.length > 0) {
@@ -568,6 +607,13 @@ async function processMessage(msg: Message): Promise<void> {
                             embedTexts.join("\n---\n");
                     }
                 }
+                replyChain = replyMessages.map((replyMessage) => ({
+                    messageId: replyMessage.id,
+                    author: authorLabel(replyMessage.author),
+                    content: replyMessage.id === refMsg.id
+                        ? refText
+                        : messageContentForMemory(replyMessage),
+                }));
                 replyTarget = {
                     messageId: refMsg.id,
                     author: authorLabel(refMsg.author),
@@ -648,7 +694,11 @@ async function processMessage(msg: Message): Promise<void> {
         let liveMessages = "";
         let recentMessages: Message[] = [];
         try {
-            const liveContext = await buildLiveMessagesContext(msg.channel as BotMessageChannel, question);
+            const liveContext = await buildLiveMessagesContext(
+                msg.channel as BotMessageChannel,
+                question,
+                Boolean(replyChain?.length),
+            );
             recentMessages = liveContext.messages;
             liveMessages = liveContext.text;
             console.error(`[Bot] Added ${recentMessages.length} live messages to context`);
@@ -674,6 +724,7 @@ async function processMessage(msg: Message): Promise<void> {
                     messageContent: msg.content,
                     replyToMessageId: msg.reference?.messageId,
                     replyTarget,
+                    replyChain,
                     attachments: Array.from(msg.attachments.values()).map((attachment) => ({
                         filename: attachment.name || "attachment",
                         url: attachment.url,
