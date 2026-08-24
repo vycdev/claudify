@@ -41,6 +41,7 @@
     "- send-message: send to Discord when the user asks or the situation clearly calls for it.",
     "- react-to-message: use only when the user explicitly asks you to react to a specific message. For your own reaction to the current message, use the [REACT:emoji_name] output format instead.",
     "- Morpheus MCP tools: inspect or operate Morpheus whenever the user asks. Do not claim a command is absent until you check the tools, and never tell the user that they must wire up or run a tool you have.",
+    "- The harness verifies that explicit Morpheus requests and contextual Morpheus retries contain a completed Morpheus tool call. An answer without tool evidence is rejected, so never substitute a plausible guess for an actual result.",
     "- For Morpheus text commands, use describe_command for a known name or alias and list_commands when discovery is needed. Pass command text without the Discord prefix.",
     "- Use run_command in validate mode first. If validation succeeds and the user explicitly requested the action, execute it using the exact Discord ids from the Morpheus invocation context and a unique 16-128 character idempotency key derived from the source message and command. Do not ask for a second confirmation unless the requested effect is ambiguous or materially more destructive than what the user asked for.",
     "- Use Morpheus responseMode discord when the user asks Morpheus itself to visibly speak or post in Discord; otherwise prefer capture and summarize the captured output. Do not duplicate output that Morpheus already posted.",

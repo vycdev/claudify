@@ -20,6 +20,7 @@ test.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
 
 test("responses route through response settings and report the response model", async () => {
     let captured;
+    let invocationCount = 0;
     const answer = await askClaude(
         "try again",
         "User",
@@ -54,12 +55,27 @@ test("responses route through response settings and report the response model", 
             ],
         },
         async (args, input, options) => {
+            invocationCount++;
             captured = { args, input, options };
-            return { stdout: "The answer", stderr: "" };
+            return {
+                stdout: "The answer",
+                stderr: "",
+                trace: {
+                    format: "stream-json",
+                    resultEventReceived: true,
+                    malformedEventCount: 0,
+                    toolCalls: [{
+                        id: "tool-1",
+                        name: "mcp__morpheus__run_command",
+                        resultStatus: "success",
+                    }],
+                },
+            };
         },
     );
 
     assert.equal(answer, "The answer");
+    assert.equal(invocationCount, 1);
     assert.deepEqual(captured.options, {
         workload: "response",
         model: "response-model",
@@ -76,6 +92,11 @@ test("responses route through response settings and report the response model", 
             .split(",")
             .includes("mcp__morpheus__*"),
     );
+    assert.deepEqual(
+        captured.args.slice(captured.args.indexOf("--output-format"), -1),
+        ["--output-format", "stream-json"],
+    );
+    assert.equal(captured.args.at(-1), "--verbose");
     assert.match(captured.input, /Morpheus MCP invocation context/);
     assert.match(captured.input, /"userId": "user-1"/);
     assert.match(captured.input, /"channelId": "channel-1"/);

@@ -1,3 +1,5 @@
+import type { ClaudeExecutionTrace } from "./claudeStream.js";
+
 export type ClaudeWorkload =
     | "response"
     | "profile-update"
@@ -10,4 +12,10 @@ export interface ClaudeRunOptions {
     workload: ClaudeWorkload;
     model?: string;
     effort?: ClaudeEffort;
+}
+
+export interface ClaudeRunResult {
+    stdout: string;
+    stderr: string;
+    trace?: ClaudeExecutionTrace;
 }

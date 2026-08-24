@@ -35,7 +35,9 @@ src/
 ├── index.ts              → Entry point (bootstrap only — no logic)
 ├── config.ts             → All env vars, paths, constants, directory setup
 ├── claude.ts             → Claude CLI process spawner (no project deps)
+├── claudeStream.ts       → Bounded stream-JSON result and tool-evidence parser
 ├── askClaude.ts          → System prompt + prompt assembly + Claude invocation
+├── morpheusGrounding.ts  → Morpheus intent detection and evidence policy
 │
 ├── discord/              → Discord client and event handling
 │   ├── client.ts         → Client singleton (intents config)

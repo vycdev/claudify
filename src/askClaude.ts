@@ -10,6 +10,12 @@ import { client } from "./discord/client.js";
 import { loadRecentHistory } from "./storage/history.js";
 import { getUserProfile, getServerMemory } from "./storage/profiles.js";
 import { renderPrompt } from "./prompts.js";
+import {
+    assessMorpheusGrounding,
+    canRetryMissingMorpheusCall,
+    MORPHEUS_GROUNDING_RETRY_INSTRUCTION,
+    requiresMorpheusGrounding,
+} from "./morpheusGrounding.js";
 
 type ClaudeRunner = typeof runClaude;
 
@@ -191,27 +197,72 @@ export async function askClaude(
     }
 
     const prompt = promptParts.join("\n");
+    const replyContext = discordInvocation?.replyChain
+        ?.map((reply) => reply.content)
+        .join("\n")
+        ?? discordInvocation?.replyTarget?.content
+        ?? "";
+    const mustGroundMorpheus = requiresMorpheusGrounding(
+        question,
+        replyContext,
+        liveMessages,
+    );
 
     try {
         console.error(
             `[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`,
         );
 
-        const { stdout, stderr } = await claudeRunner(
-            [
-                "-p",
-                "--system-prompt",
-                getSystemPrompt(),
-                "--allowedTools",
-                "WebSearch,WebFetch,Read,Grep,Glob,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages,mcp__discord__react-to-message,mcp__morpheus__*",
-                "--add-dir",
-                MESSAGES_DIR,
-                "--mcp-config",
-                MCP_CONFIG_PATH,
-            ],
+        const args = [
+            "-p",
+            "--system-prompt",
+            getSystemPrompt(),
+            "--allowedTools",
+            "WebSearch,WebFetch,Read,Grep,Glob,mcp__discord__send-message,mcp__discord__read-messages,mcp__discord__read-message-history,mcp__discord__fetch-messages,mcp__discord__react-to-message,mcp__morpheus__*",
+            "--add-dir",
+            MESSAGES_DIR,
+            "--mcp-config",
+            MCP_CONFIG_PATH,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+        ];
+        let runResult = await claudeRunner(
+            args,
             prompt,
             CLAUDE_WORKLOAD_CONFIG.response,
         );
+
+        if (mustGroundMorpheus) {
+            let assessment = assessMorpheusGrounding(runResult.trace);
+            if (
+                assessment.reason === "missing-call"
+                && canRetryMissingMorpheusCall(runResult.trace)
+            ) {
+                console.error(
+                    "[Morpheus Grounding] Missing tool call; retrying once",
+                );
+                runResult = await claudeRunner(
+                    args,
+                    `${prompt}\n\n${MORPHEUS_GROUNDING_RETRY_INSTRUCTION}`,
+                    CLAUDE_WORKLOAD_CONFIG.response,
+                );
+                assessment = assessMorpheusGrounding(runResult.trace);
+            }
+            if (!assessment.grounded) {
+                console.error(
+                    `[Morpheus Grounding] Rejected ungrounded response: ${assessment.reason}`,
+                );
+                return assessment.reason === "missing-result"
+                    ? "Morpheus did not return a verifiable result, so I won't claim the action worked."
+                    : "I couldn't verify that through Morpheus, so I won't pretend I ran it.";
+            }
+            console.error(
+                `[Morpheus Grounding] Verified ${assessment.morpheusCallCount} tool call(s)`,
+            );
+        }
+
+        const { stdout, stderr } = runResult;
 
         if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
         console.error(
