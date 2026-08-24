@@ -295,6 +295,16 @@ export const SUPPRESS_MENTIONS =
     process.env.SUPPRESS_MENTIONS?.trim().toLowerCase() === "true";
 
 export const LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.LIVE_CONTEXT_LIMIT, 35);
+export const REPLY_LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(
+    process.env.REPLY_LIVE_CONTEXT_LIMIT,
+    15,
+    100,
+);
+export const REPLY_CHAIN_DEPTH = parseNonNegativeInteger(
+    process.env.REPLY_CHAIN_DEPTH,
+    5,
+    20,
+);
 export const DEEP_LIVE_CONTEXT_LIMIT = parseNonNegativeInteger(process.env.DEEP_LIVE_CONTEXT_LIMIT, 500);
 export const LIVE_CONTEXT_MAX_CHARS = parseNonNegativeInteger(
     process.env.LIVE_CONTEXT_MAX_CHARS,

@@ -13,16 +13,19 @@ import { renderPrompt } from "./prompts.js";
 
 type ClaudeRunner = typeof runClaude;
 
+export interface DiscordReplyContext {
+    messageId: string;
+    author: string;
+    content: string;
+}
+
 export interface DiscordInvocationContext {
     triggerKind: "message" | "reaction";
     sourceMessageId?: string;
     messageContent: string;
     replyToMessageId?: string;
-    replyTarget?: {
-        messageId: string;
-        author: string;
-        content: string;
-    };
+    replyTarget?: DiscordReplyContext;
+    replyChain?: DiscordReplyContext[];
     attachments?: Array<{
         filename: string;
         url: string;
@@ -151,7 +154,18 @@ export async function askClaude(
         promptParts.push("");
     }
 
-    if (discordInvocation?.replyTarget) {
+    if (discordInvocation?.replyChain?.length) {
+        promptParts.push(
+            "=== Reply chain (oldest ancestor to direct parent; highest-priority context for resolving this message) ===",
+        );
+        for (const reply of discordInvocation.replyChain) {
+            promptParts.push(
+                "--- Message " + reply.messageId + " from " + reply.author + " ---",
+            );
+            promptParts.push(reply.content || "[no text]");
+        }
+        promptParts.push("");
+    } else if (discordInvocation?.replyTarget) {
         const { replyTarget } = discordInvocation;
         promptParts.push(
             "=== Direct reply target (highest-priority context for resolving this message) ===",

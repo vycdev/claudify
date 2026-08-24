@@ -132,6 +132,8 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `MEMORY_UPDATE_DEBOUNCE_MS` | No | `120000` | Idle time before batched profile/server-memory updates |
 | `MEMORY_UPDATE_MAX_DELAY_MS` | No | `600000` | Maximum time a busy server may defer a memory batch |
 | `MEMORY_UPDATE_BATCH_MAX_CHARS` | No | `20000` | Maximum conversation context sent in one memory batch |
+| `REPLY_CHAIN_DEPTH` | No | `5` | Maximum number of Discord reply ancestors included |
+| `REPLY_LIVE_CONTEXT_LIMIT` | No | `15` | Flat live-message limit when a reply chain is available |
 | `SUPPRESS_MENTIONS` | No | `false` | Prevent bot messages from notifying users, roles, `@everyone`, or `@here` |
 | `MCP_PORT` | No | `3100` | HTTP MCP server port |
 | `MCP_READ_MESSAGES_MAX_CHARS` | No | `120000` | Maximum characters returned by the `read-messages` MCP tool (capped at 1000000) |

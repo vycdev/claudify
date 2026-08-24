@@ -40,6 +40,18 @@ test("responses route through response settings and report the response model", 
                 author: "Claudify (bot)",
                 content: "m!top pulls all-time levels",
             },
+            replyChain: [
+                {
+                    messageId: "message-old",
+                    author: "User",
+                    content: "run the top command",
+                },
+                {
+                    messageId: "message-0",
+                    author: "Claudify (bot)",
+                    content: "m!top pulls all-time levels",
+                },
+            ],
         },
         async (args, input, options) => {
             captured = { args, input, options };
@@ -71,11 +83,11 @@ test("responses route through response settings and report the response model", 
     assert.match(captured.input, /"sourceMessageId": "message-1"/);
     assert.match(
         captured.input,
-        /Direct reply target \(highest-priority context for resolving this message\)/,
+        /Reply chain \(oldest ancestor to direct parent; highest-priority context for resolving this message\)/,
     );
     assert.match(captured.input, /m!top pulls all-time levels/);
     assert.ok(
-        captured.input.indexOf("Direct reply target")
+        captured.input.indexOf("Reply chain")
             < captured.input.indexOf("=== Current message from User"),
     );
     assert.match(

@@ -170,6 +170,23 @@ test("live context character budget falls back for malformed values", () => {
     );
 });
 
+test("reply context limits are bounded and configurable", () => {
+    assert.deepEqual(
+        readConfigValues(
+            ["REPLY_LIVE_CONTEXT_LIMIT", "REPLY_CHAIN_DEPTH"],
+            ["101", "21"],
+        ),
+        [15, 5],
+    );
+    assert.deepEqual(
+        readConfigValues(
+            ["REPLY_LIVE_CONTEXT_LIMIT", "REPLY_CHAIN_DEPTH"],
+            ["12", "4"],
+        ),
+        [12, 4],
+    );
+});
+
 test("cooldown stays within Node's supported timer range", () => {
     assert.deepEqual(
         readConfigValues(["COOLDOWN_MS"], ["2147483647"]),
