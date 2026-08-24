@@ -82,7 +82,7 @@ export function buildReactionQuestion(
 function formatMessageForContext(msg: Message): string {
     const time = formatContextTime(msg.createdAt);
     const label = authorLabel(msg.author);
-    return `[${time}] ${label}: ${messageContentForMemory(msg) || "[no text]"}`;
+    return `[${time}] ${label} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=${msg.author.bot}; created_at=${msg.createdAt.toISOString()}]: ${messageContentForMemory(msg) || "[no text]"}`;
 }
 
 async function fetchChannelMessages(channel: BotMessageChannel, limit: number): Promise<Message[]> {
@@ -791,7 +791,8 @@ async function processMessage(msg: Message): Promise<void> {
 
         // Background jobs
         const conversationContext = [
-            liveMessages || `${authorLabel(msg.author)}: ${rawQuestion}`,
+            liveMessages
+                || `${authorLabel(msg.author)} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=false; created_at=${msg.createdAt.toISOString()}]: ${rawQuestion}`,
             `[Latest response] ${botName} (bot): ${parsedResponse.historyContent}`,
         ].join("\n");
 

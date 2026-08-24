@@ -53,7 +53,8 @@ src/
 │   ├── history.ts        → Daily conversation logs (append-only text files)
 │   ├── historySearch.ts  → Persistent SQLite FTS5 index over saved channel logs
 │   ├── pending.ts        → In-flight message tracking
-│   ├── profiles.ts       → User profiles + server memory (background Claude updates)
+│   ├── profiles.ts       → Source-backed user/server memory extraction and legacy reads
+│   ├── memoryFacts.ts    → Validated fact documents, provenance, merging, and rendering
 │   ├── memoryBatcher.ts  → Debounced profile/server-memory update batching
 │   ├── summaries.ts      → Daily conversation summaries (background Claude generation)
 │   └── images.ts         → Attachment downloads
@@ -165,7 +166,10 @@ messages/
 ├── summaries/
 │   ├── v2/     → Daily summaries: v2_{channelId}__{channel}_{YYYY-MM-DD}.txt
 │   └── *.txt   → Legacy name-keyed summaries
-├── profiles/   → User profiles: {userId}.txt, server memory: server_{guildId}.txt
+├── profiles/
+│   ├── facts/users/   → Source-backed user facts: {encodedUserId}.json
+│   ├── facts/servers/ → Source-backed server facts: {encodedGuildId}.json
+│   └── *.txt          → Read-only legacy user profiles and server memory
 ├── pending/    → In-flight messages (temp files)
 └── images/     → Downloaded attachments
 ```

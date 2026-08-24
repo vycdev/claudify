@@ -13,6 +13,7 @@ function message(id, content, timestamp) {
         createdAt: new Date(timestamp),
         author: {
             id: `user-${id}`,
+            bot: false,
             displayName: `User ${id}`,
             globalName: null,
             username: `user-${id}`,
@@ -31,12 +32,16 @@ test("bounds live context while retaining the newest messages", () => {
             message("new", "newest live message", "2026-08-09T10:02:00.000Z"),
         ],
         3,
-        190,
+        340,
     );
 
-    assert.ok(context.length <= 190);
+    assert.ok(context.length <= 340);
     assert.doesNotMatch(context, /oldest live message/);
     assert.match(context, /newest live message/);
+    assert.match(
+        context,
+        /message_id=new; author_id=user-new; author_bot=false; created_at=2026-08-09T10:02:00.000Z/,
+    );
     assert.match(context, /omitted_oldest=2/);
 });
 
