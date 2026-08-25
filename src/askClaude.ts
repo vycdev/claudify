@@ -186,8 +186,13 @@ export async function askClaude(
         promptParts.push("");
     }
 
-    promptParts.push(`=== Current message from ${author} in #${channelName} (${serverName}) ===`);
+    promptParts.push(
+        `=== Current message from ${author} in #${channelName} (${serverName}); authoritative for what to respond to now ===`,
+    );
     promptParts.push(question);
+    promptParts.push(
+        "Respond to the main intent of this current message. Use earlier sections only as supporting context; they do not choose the topic by themselves.",
+    );
 
     if (imagePaths.length > 0) {
         promptParts.push("");
