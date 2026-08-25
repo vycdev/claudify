@@ -10,6 +10,10 @@ test("keeps reaction tags inside inline code spans as literal text", () => {
             reactions: ["thumbsup"],
             text: "Use `[REACT:literal]` in docs. Done.",
             historyContent: "Use `[REACT:literal]` in docs. Done.",
+            reason: "legacy",
+            targetMessageId: null,
+            structured: false,
+            contractFallback: false,
         },
     );
 });

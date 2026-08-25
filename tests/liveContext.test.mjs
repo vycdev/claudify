@@ -68,6 +68,24 @@ test("formats each live message only once while applying the budget", () => {
     assert.equal(contentReads, messages.length);
 });
 
+test("excludes messages already represented by the active turn", () => {
+    const context = formatLiveMessagesContext(
+        [
+            message("reply", "explicit reply target", "2026-08-09T10:00:00.000Z"),
+            message("background", "useful background", "2026-08-09T10:01:00.000Z"),
+            message("current", "current turn", "2026-08-09T10:02:00.000Z"),
+        ],
+        3,
+        1000,
+        new Set(["reply", "current"]),
+    );
+
+    assert.match(context, /useful background/);
+    assert.doesNotMatch(context, /explicit reply target/);
+    assert.doesNotMatch(context, /current turn/);
+    assert.match(context, /excluded_explicit_turn=2/);
+});
+
 test("reply chains are ordered oldest-to-direct and stop at the configured depth", async () => {
     const oldest = { ...message("oldest", "original topic", "2026-08-09T10:00:00.000Z"), reference: null };
     const middle = { ...message("middle", "first follow-up", "2026-08-09T10:01:00.000Z"), reference: { messageId: "oldest" } };

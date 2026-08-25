@@ -41,17 +41,20 @@ test("responses route through response settings and report the response model", 
             replyTarget: {
                 messageId: "message-0",
                 author: "Claudify (bot)",
+                authorBot: true,
                 content: "m!top pulls all-time levels",
             },
             replyChain: [
                 {
                     messageId: "message-old",
                     author: "User",
+                    authorBot: false,
                     content: "run the top command",
                 },
                 {
                     messageId: "message-0",
                     author: "Claudify (bot)",
+                    authorBot: true,
                     content: "m!top pulls all-time levels",
                 },
             ],
@@ -106,11 +109,15 @@ test("responses route through response settings and report the response model", 
     assert.match(captured.input, /"sourceMessageId": "message-1"/);
     assert.match(
         captured.input,
-        /Reply chain \(oldest ancestor to direct parent; highest-priority context for resolving this message\)/,
+        /Reply ancestors \(oldest first; direct reply already appears once in Active conversation turn\)/,
     );
     assert.match(captured.input, /m!top pulls all-time levels/);
+    assert.equal(
+        captured.input.match(/m!top pulls all-time levels/g)?.length,
+        1,
+    );
     assert.ok(
-        captured.input.indexOf("Reply chain")
+        captured.input.indexOf("Reply ancestors")
             < captured.input.indexOf("=== Current message from User"),
     );
     assert.match(

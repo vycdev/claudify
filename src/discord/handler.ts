@@ -10,7 +10,11 @@ import {
 } from "../config.js";
 import { client } from "./client.js";
 import { normalizeBotMentions } from "./mentions.js";
-import { parseClaudeResponse } from "./response.js";
+import {
+    enforceResponseContract,
+    parseClaudeResponse,
+    type ParsedClaudeResponse,
+} from "./response.js";
 import { handleStorage } from "./commands/storage.js";
 import { handleUsage } from "./commands/usage.js";
 import { handleGuild } from "./commands/guild.js";
@@ -18,15 +22,18 @@ import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
 import { parseAskCommand } from "./commands/ask.js";
+import { askClaude } from "../askClaude.js";
 import {
-    askClaude,
+    buildConversationTurnState,
+    type ConversationTurnState,
     type DiscordInvocationContext,
     type DiscordReplyContext,
-} from "../askClaude.js";
+} from "./turn.js";
 import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
 import { queueBackgroundMemoryUpdate } from "../storage/memoryBatcher.js";
+import { appendResponseEvent } from "../storage/responseEvents.js";
 import { ensureYesterdaySummaries } from "../storage/summaries.js";
 import { smartSplit } from "./split.js";
 import { formatContextTime } from "./context.js";
@@ -39,6 +46,33 @@ function authorLabel(user: { displayName?: string; globalName?: string | null; u
         return `${botName} (bot)`;
     }
     return user.globalName || user.displayName || user.username;
+}
+
+function recordResponseEvent(
+    parsed: ParsedClaudeResponse,
+    state: ConversationTurnState,
+    invocation: DiscordInvocationContext,
+    channelId: string,
+    guildId: string | null,
+    authorId: string,
+): void {
+    appendResponseEvent({
+        version: 1,
+        createdAt: new Date().toISOString(),
+        channelId,
+        guildId,
+        authorId,
+        sourceMessageId: invocation.sourceMessageId ?? null,
+        replyToMessageId: invocation.replyToMessageId ?? null,
+        responseTargetMessageId: parsed.targetMessageId,
+        reason: parsed.reason,
+        reaction: parsed.reactions[0] ?? null,
+        textRequired: state.requiresTextResponse,
+        textRequirement: state.textRequirement,
+        textPresent: Boolean(parsed.text),
+        structured: parsed.structured,
+        contractFallback: parsed.contractFallback,
+    });
 }
 
 function summarizeEmbeds(msg: Message): string {
@@ -137,23 +171,30 @@ export function formatLiveMessagesContext(
     messages: Message[],
     requestedLimit: number,
     maxChars: number,
+    excludedMessageIds: ReadonlySet<string> = new Set(),
 ): string {
     if (messages.length === 0 || maxChars <= 0) return "";
 
-    const formattedMessages = messages.map(formatMessageForContext);
+    const contextMessages = messages.filter(
+        (message) => !excludedMessageIds.has(message.id),
+    );
+    if (contextMessages.length === 0) return "";
+
+    const excludedCount = messages.length - contextMessages.length;
+    const formattedMessages = contextMessages.map(formatMessageForContext);
     const buildHeader = (firstSelectedIndex: number): string => {
-        const selectedCount = messages.length - firstSelectedIndex;
-        const oldest = messages[firstSelectedIndex]?.createdAt.toISOString()
+        const selectedCount = contextMessages.length - firstSelectedIndex;
+        const oldest = contextMessages[firstSelectedIndex]?.createdAt.toISOString()
             ?? "unknown";
         const newest = selectedCount > 0
-            ? messages.at(-1)!.createdAt.toISOString()
+            ? contextMessages.at(-1)!.createdAt.toISOString()
             : "unknown";
-        return `Fetched ${selectedCount} live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${requestedLimit}, omitted_oldest=${firstSelectedIndex}.`;
+        return `Included ${selectedCount} background live message(s) from Discord, oldest=${oldest}, newest=${newest}, requested_limit=${requestedLimit}, fetched_total=${messages.length}, excluded_explicit_turn=${excludedCount}, omitted_oldest=${firstSelectedIndex}.`;
     };
 
-    let firstSelectedIndex = messages.length;
+    let firstSelectedIndex = contextMessages.length;
     let selectedMessageChars = 0;
-    for (let index = messages.length - 1; index >= 0; index--) {
+    for (let index = contextMessages.length - 1; index >= 0; index--) {
         const candidateMessageChars =
             selectedMessageChars
             + formattedMessages[index].length
@@ -185,6 +226,7 @@ async function buildLiveMessagesContext(
     channel: BotMessageChannel,
     question: string,
     hasReplyChain: boolean = false,
+    excludedMessageIds: ReadonlySet<string> = new Set(),
 ): Promise<{ text: string; messages: Message[] }> {
     const limit = selectLiveContextLimit(question, hasReplyChain);
     const messages = await fetchChannelMessages(channel, limit);
@@ -195,6 +237,7 @@ async function buildLiveMessagesContext(
         messages,
         limit,
         LIVE_CONTEXT_MAX_CHARS,
+        excludedMessageIds,
     );
 
     return { text, messages };
@@ -209,6 +252,11 @@ function logIncomingMessage(msg: Message): void {
         msg.channel.id,
         isBotMessageChannel(msg.channel) ? msg.channel.name : "unknown",
         msg.createdAt,
+        {
+            messageId: msg.id,
+            authorId: msg.author.id,
+            authorBot: msg.author.bot,
+        },
     );
 }
 
@@ -444,11 +492,30 @@ export function registerHandler() {
             const msgAuthorLabel = msg.author ? authorLabel(msg.author) : "someone";
             const userLabel = authorLabel(user as any);
             const question = buildReactionQuestion(msgAuthorLabel, userLabel, msg);
+            const reactionInvocation: DiscordInvocationContext = {
+                triggerKind: "reaction",
+                messageContent: question,
+                replyToMessageId: msg.id,
+                replyTarget: {
+                    messageId: msg.id,
+                    author: msgAuthorLabel,
+                    authorBot: Boolean(msg.author?.bot),
+                    content: messageContentForMemory(msg),
+                },
+            };
+            const reactionTurnState = buildConversationTurnState(
+                reactionInvocation,
+            );
 
             // Fetch live messages for context
             let liveMessages = "";
             try {
-                const liveContext = await buildLiveMessagesContext(msg.channel, question);
+                const liveContext = await buildLiveMessagesContext(
+                    msg.channel,
+                    question,
+                    false,
+                    new Set([msg.id]),
+                );
                 liveMessages = liveContext.text;
             } catch { /* ignore */ }
 
@@ -480,19 +547,17 @@ export function registerHandler() {
                     msg.guild.id,
                     imagePaths,
                     liveMessages,
-                    {
-                        triggerKind: "reaction",
-                        messageContent: question,
-                        replyToMessageId: msg.id,
-                    },
+                    reactionInvocation,
                 );
             } finally {
                 clearInterval(typingInterval);
             }
             setCooldown(user.id);
 
-            // Extract any [REACT:emoji] tags and apply them as reactions
-            const parsedResponse = parseClaudeResponse(response);
+            const parsedResponse = enforceResponseContract(
+                parseClaudeResponse(response),
+                reactionTurnState,
+            );
 
             for (const emoji of parsedResponse.reactions) {
                 await reactWithEmoji(msg, emoji);
@@ -504,6 +569,15 @@ export function registerHandler() {
                     await msg.channel.send(chunk);
                 }
             }
+
+            recordResponseEvent(
+                parsedResponse,
+                reactionTurnState,
+                reactionInvocation,
+                msg.channel.id,
+                msg.guild.id,
+                user.id,
+            );
 
             appendToLog(
                 userLabel,
@@ -610,6 +684,7 @@ async function processMessage(msg: Message): Promise<void> {
                 replyChain = replyMessages.map((replyMessage) => ({
                     messageId: replyMessage.id,
                     author: authorLabel(replyMessage.author),
+                    authorBot: replyMessage.author.bot,
                     content: replyMessage.id === refMsg.id
                         ? refText
                         : messageContentForMemory(replyMessage),
@@ -617,6 +692,7 @@ async function processMessage(msg: Message): Promise<void> {
                 replyTarget = {
                     messageId: refMsg.id,
                     author: authorLabel(refMsg.author),
+                    authorBot: refMsg.author.bot,
                     content: refText,
                 };
                 console.error(
@@ -670,6 +746,29 @@ async function processMessage(msg: Message): Promise<void> {
 
         savePending(msg);
 
+        const messageInvocation: DiscordInvocationContext = {
+            triggerKind: "message",
+            sourceMessageId: msg.id,
+            messageContent: msg.content,
+            replyToMessageId: msg.reference?.messageId,
+            replyTarget,
+            replyChain,
+            attachments: Array.from(msg.attachments.values()).map((attachment) => ({
+                filename: attachment.name || "attachment",
+                url: attachment.url,
+                size: attachment.size,
+                contentType: attachment.contentType ?? undefined,
+                description: attachment.description ?? undefined,
+            })),
+        };
+        const conversationTurnState = buildConversationTurnState(
+            messageInvocation,
+        );
+        const explicitTurnMessageIds = new Set([
+            msg.id,
+            ...(replyChain?.map((reply) => reply.messageId) ?? []),
+        ]);
+
         // Download attachments
         const imagePaths: string[] = [];
         for (const att of allAttachments) {
@@ -698,6 +797,7 @@ async function processMessage(msg: Message): Promise<void> {
                 msg.channel as BotMessageChannel,
                 question,
                 Boolean(replyChain?.length),
+                explicitTurnMessageIds,
             );
             recentMessages = liveContext.messages;
             liveMessages = liveContext.text;
@@ -718,29 +818,22 @@ async function processMessage(msg: Message): Promise<void> {
                 msg.guild?.id || "unknown",
                 imagePaths,
                 liveMessages,
-                {
-                    triggerKind: "message",
-                    sourceMessageId: msg.id,
-                    messageContent: msg.content,
-                    replyToMessageId: msg.reference?.messageId,
-                    replyTarget,
-                    replyChain,
-                    attachments: Array.from(msg.attachments.values()).map((attachment) => ({
-                        filename: attachment.name || "attachment",
-                        url: attachment.url,
-                        size: attachment.size,
-                        contentType: attachment.contentType ?? undefined,
-                        description: attachment.description ?? undefined,
-                    })),
-                },
+                messageInvocation,
             );
         } finally {
             clearInterval(typingInterval);
         }
         setCooldown(userId);
 
-        // Extract any [REACT:emoji] tags and apply them as reactions
-        const parsedResponse = parseClaudeResponse(response);
+        const parsedResponse = enforceResponseContract(
+            parseClaudeResponse(response),
+            conversationTurnState,
+        );
+        if (parsedResponse.contractFallback) {
+            console.error(
+                `[Bot] Response contract fallback: reason=${conversationTurnState.textRequirement ?? "target-mismatch"}`,
+            );
+        }
 
         for (const emoji of parsedResponse.reactions) {
             console.error(`[Bot] Reacting with: ${emoji}`);
@@ -756,6 +849,14 @@ async function processMessage(msg: Message): Promise<void> {
                     msg.channel.name,
                 );
             }
+            recordResponseEvent(
+                parsedResponse,
+                conversationTurnState,
+                messageInvocation,
+                msg.channel.id,
+                msg.guild?.id ?? null,
+                msg.author.id,
+            );
             return;
         }
 
@@ -787,6 +888,14 @@ async function processMessage(msg: Message): Promise<void> {
             parsedResponse.historyContent,
             msg.channel.id,
             msg.channel.name,
+        );
+        recordResponseEvent(
+            parsedResponse,
+            conversationTurnState,
+            messageInvocation,
+            msg.channel.id,
+            msg.guild?.id ?? null,
+            msg.author.id,
         );
 
         // Background jobs

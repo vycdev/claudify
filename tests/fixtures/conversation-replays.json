@@ -1,0 +1,44 @@
+[
+  {
+    "id": "wrapper-update-is-not-earlier-topic",
+    "invocation": {
+      "triggerKind": "message",
+      "sourceMessageId": "user-update-1",
+      "messageContent": "i updated you again, like literally the wrapper you live in got updated, do you get it? i wasnt talking about bnr",
+      "replyToMessageId": "bot-hostile-1",
+      "replyTarget": {
+        "messageId": "bot-hostile-1",
+        "author": "Claudify (bot)",
+        "authorBot": true,
+        "content": "The BNR answer was fine, that's just not what you wanted to hear."
+      }
+    },
+    "expect": {
+      "requiresTextResponse": true,
+      "textRequirement": "current-question",
+      "requiredAnyResponsePatterns": ["wrapper", "updated", "got it", "understand"],
+      "forbiddenResponsePatterns": ["answer was fine", "bnr handles"]
+    }
+  },
+  {
+    "id": "answer-to-bot-question-needs-text",
+    "invocation": {
+      "triggerKind": "message",
+      "sourceMessageId": "user-answer-1",
+      "messageContent": "nothing i just wanted to assess what kind of response you would give and see if you are dumb or not",
+      "replyToMessageId": "bot-question-1",
+      "replyTarget": {
+        "messageId": "bot-question-1",
+        "author": "Claudify (bot)",
+        "authorBot": true,
+        "content": "What did you actually want me to look at then?"
+      }
+    },
+    "expect": {
+      "requiresTextResponse": true,
+      "textRequirement": "answer-to-bot-question",
+      "requiredAnyResponsePatterns": ["test", "got it", "fair", "okay", "nothing"],
+      "forbiddenResponsePatterns": ["deflection", "getting caught", "caught tweaking"]
+    }
+  }
+]

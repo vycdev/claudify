@@ -158,6 +158,46 @@ test("history search finds older messages using Unicode terms", () => {
     assert.match(history, /東京で決定した内容/);
 });
 
+test("active turn message IDs are excluded from saved background context", () => {
+    const channelId = "777777777777777777";
+    const channelName = "conversation";
+    appendToLog(
+        "User",
+        "background detail to retain",
+        channelId,
+        channelName,
+        new Date(),
+        {
+            messageId: "background-message",
+            authorId: "user-1",
+            authorBot: false,
+        },
+    );
+    appendToLog(
+        "User",
+        "current turn must appear only once",
+        channelId,
+        channelName,
+        new Date(),
+        {
+            messageId: "current-message",
+            authorId: "user-1",
+            authorBot: false,
+        },
+    );
+
+    const history = loadRecentHistory(
+        channelId,
+        "ordinary message",
+        channelName,
+        new Set(["current-message"]),
+    );
+
+    assert.match(history, /background detail to retain/);
+    assert.doesNotMatch(history, /current turn must appear only once/);
+    assert.match(history, /created_at=/);
+});
+
 test("ranked full-text search finds and incrementally indexes older channel history", () => {
     const channelId = "555555555555555555";
     const otherChannelId = "666666666666666666";

@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node build/index.js",
     "dev": "tsc -w",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "eval:conversation": "npm run build && node scripts/conversation-eval.mjs"
   },
   "keywords": [
     "discord",

@@ -258,6 +258,7 @@ export const PROFILE_FACTS_DIR = path.join(MEMORY_FACTS_DIR, "users");
 export const SERVER_FACTS_DIR = path.join(MEMORY_FACTS_DIR, "servers");
 export const SUMMARIES_DIR = path.join(MESSAGES_DIR, "summaries");
 export const SUMMARIES_V2_DIR = path.join(SUMMARIES_DIR, "v2");
+export const RESPONSE_EVENTS_DIR = path.join(MESSAGES_DIR, "response-events");
 export const IMAGES_DIR = path.join(MESSAGES_DIR, "images");
 
 export const PROFILE_MAX_CHARS = 2000;
@@ -412,4 +413,5 @@ fs.mkdirSync(PROFILE_FACTS_DIR, { recursive: true });
 fs.mkdirSync(SERVER_FACTS_DIR, { recursive: true });
 fs.mkdirSync(SUMMARIES_DIR, { recursive: true });
 fs.mkdirSync(SUMMARIES_V2_DIR, { recursive: true });
+fs.mkdirSync(RESPONSE_EVENTS_DIR, { recursive: true });
 fs.mkdirSync(IMAGES_DIR, { recursive: true });

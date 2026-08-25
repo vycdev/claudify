@@ -8,6 +8,10 @@ test("records reaction-only Claude responses as history content", () => {
         reactions: ["pepeclap"],
         text: "",
         historyContent: "[reacted: pepeclap]",
+        reason: "legacy",
+        targetMessageId: null,
+        structured: false,
+        contractFallback: false,
     });
 });
 
@@ -18,6 +22,10 @@ test("separates reaction tags from a text response", () => {
             reactions: ["👍", "party_parrot"],
             text: "Thanks!",
             historyContent: "Thanks!",
+            reason: "legacy",
+            targetMessageId: null,
+            structured: false,
+            contractFallback: false,
         },
     );
 });
@@ -27,5 +35,29 @@ test("ignores reaction tags without an emoji", () => {
         reactions: [],
         text: "",
         historyContent: "",
+        reason: "legacy",
+        targetMessageId: null,
+        structured: false,
+        contractFallback: false,
     });
+});
+
+test("parses the structured response envelope", () => {
+    assert.deepEqual(
+        parseClaudeResponse(JSON.stringify({
+            text: "Got it, the wrapper changed.",
+            reaction: "thumbsup",
+            reason: "acknowledgement",
+            targetMessageId: "message-1",
+        })),
+        {
+            reactions: ["thumbsup"],
+            text: "Got it, the wrapper changed.",
+            historyContent: "Got it, the wrapper changed.",
+            reason: "acknowledgement",
+            targetMessageId: "message-1",
+            structured: true,
+            contractFallback: false,
+        },
+    );
 });
