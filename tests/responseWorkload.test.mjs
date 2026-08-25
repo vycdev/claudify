@@ -114,6 +114,14 @@ test("responses route through response settings and report the response model", 
             < captured.input.indexOf("=== Current message from User"),
     );
     assert.match(
+        captured.input,
+        /authoritative for what to respond to now/,
+    );
+    assert.match(
+        captured.input,
+        /earlier sections only as supporting context; they do not choose the topic/,
+    );
+    assert.match(
         captured.args[systemPromptIndex + 1],
         /Use run_command in validate mode first/,
     );
@@ -123,7 +131,15 @@ test("responses route through response settings and report the response model", 
     );
     assert.match(
         captured.args[systemPromptIndex + 1],
-        /explicit Reply chain is authoritative/,
+        /current message controls what the user is doing now/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /its topic is not automatically the current topic/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /Statements that you were updated, reconfigured, reprompted, or given new context/,
     );
     assert.match(
         captured.args[systemPromptIndex + 1],
