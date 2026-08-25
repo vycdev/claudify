@@ -34,6 +34,11 @@ test("expanded history requires explicit recap intent", () => {
         "catch me up",
         "what did I miss?",
         "tl;dr please",
+        "can you answer what Alexa said earlier?",
+        "look up 50 messages or more",
+        "read the last 100 Discord messages",
+        "scroll back and check",
+        "search the channel",
     ]) {
         assert.equal(isDeepHistoryRequest(request), true, request);
     }
@@ -43,6 +48,8 @@ test("expanded history requires explicit recap intent", () => {
         "what about all time?",
         "do everything",
         "earlier you said this",
+        "look up the exchange rate",
+        "check 50 users",
         "today works",
         "full send",
     ]) {

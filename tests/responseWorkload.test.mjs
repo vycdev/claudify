@@ -121,6 +121,22 @@ test("responses route through response settings and report the response model", 
         captured.args[systemPromptIndex + 1],
         /never tell the user that they must wire up or run a tool you have/,
     );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /explicit Reply chain is authoritative/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /Never invent a Discord delivery or threading problem/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /Do not defend the old answer, blame the user/,
+    );
+    assert.match(
+        captured.args[systemPromptIndex + 1],
+        /Never become hostile, defensive, contemptuous, or insulting/,
+    );
 
     let helpReply = "";
     await handleHelp({
