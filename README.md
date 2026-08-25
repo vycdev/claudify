@@ -5,9 +5,9 @@ An AI-powered Discord bot that uses Claude Code CLI to answer questions directly
 ## How it works
 
 1. A user sends `!ask <question>` or mentions the bot in a channel
-2. The bot spawns the Claude Code CLI to generate a response
-3. The response is sent back to the channel as a reply
-4. All exchanges are saved as text files, giving Claude memory across conversations
+2. The harness builds an explicit active-turn record and removes duplicate turn messages from background context
+3. Claude returns a structured response envelope; the harness validates text and reaction requirements before Discord sees it
+4. Conversation text and response audit metadata are stored separately for later context and replay evaluation
 
 Claude is sandboxed — it can only search the web and read/write its own message history files. No shell access, no code execution.
 
@@ -175,6 +175,7 @@ npm install
 npm run dev      # watch mode
 npm run build    # compile
 npm test         # build and run the complete test suite
+npm run eval:conversation # replay conversational failures against the configured Claude model
 npm start        # run
 ```
 

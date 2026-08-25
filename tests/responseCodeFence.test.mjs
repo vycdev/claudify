@@ -8,5 +8,9 @@ test("does not interpret reaction directives inside fenced code", () => {
     reactions: [],
     text: response,
     historyContent: response,
+    reason: "legacy",
+    targetMessageId: null,
+    structured: false,
+    contractFallback: false,
   });
 });

@@ -6,6 +6,7 @@ Project guidance for Claude Code when working in this repository.
 
 - **Build:** `npm run build` (runs `tsc`, outputs to `build/`)
 - **Test:** `npm test` (builds, then runs `node --test tests/*.test.mjs`)
+- **Conversation eval:** `npm run eval:conversation` (live-model replay; not part of the offline test suite)
 - **Dev:** `npm run dev` (runs `tsc -w` for watch mode)
 - **Start:** `npm start` (runs `node build/index.js`)
 - **MCP Inspector:** `npx @modelcontextprotocol/inspector node build/index.js`
@@ -44,6 +45,8 @@ src/
 │   ├── client.ts         → Client singleton (intents config)
 │   ├── helpers.ts        → Guild/channel resolution utilities
 │   ├── split.ts          → Discord message splitting + code fence balancing
+│   ├── turn.ts           → Explicit active-turn state and deterministic text requirements
+│   ├── response.ts       → Structured response parsing and contract enforcement
 │   ├── handler.ts        → Event listeners (messageCreate, messageReactionAdd)
 │   └── commands/         → Command handlers (one file per command)
 │       ├── help.ts       → !help — command list and bot info
@@ -59,6 +62,7 @@ src/
 │   ├── profiles.ts       → Source-backed user/server memory extraction and legacy reads
 │   ├── memoryFacts.ts    → Validated fact documents, provenance, merging, and rendering
 │   ├── memoryBatcher.ts  → Debounced profile/server-memory update batching
+│   ├── responseEvents.ts → Separate response/reaction audit metadata
 │   ├── summaries.ts      → Daily conversation summaries (background Claude generation)
 │   └── images.ts         → Attachment downloads
 │
@@ -97,13 +101,15 @@ User message (trigger: !ask / @mention / reply / 🤖 reaction)
   → Role permission check (REQUIRED_ROLE_ID)
   → Save to pending/
   → Download image attachments
-  → Fetch live channel context (last 25 Discord messages)
+  → Build active-turn state (current message, direct reply, adjacency signals)
+  → Fetch live channel context and exclude messages already in the active turn
   → Load saved history + summaries + user profile + server memory
   → askClaude() → runClaude() → Claude CLI subprocess
-  → Parse response:
-      - [REACT:emoji] → React to message, skip text reply
-      - Text → smartSplit() → Send as reply (chunked if needed)
+  → Parse structured response envelope
+  → Enforce required text and reaction target invariants
+  → React and/or smartSplit() → Send text reply (chunked if needed)
   → Log to history
+  → Append response audit event under response-events/
   → Remove from pending/
   → Queue debounced profile/server-memory batch; check yesterday summaries
 ```
@@ -180,6 +186,7 @@ messages/
 │   ├── facts/servers/ → Source-backed server facts: {encodedGuildId}.json
 │   └── *.txt          → Read-only legacy user profiles and server memory
 ├── pending/    → In-flight messages (temp files)
+├── response-events/ → Daily JSONL response/reaction audit metadata
 └── images/     → Downloaded attachments
 ```
 

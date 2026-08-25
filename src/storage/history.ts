@@ -95,11 +95,19 @@ export function appendToLog(
     channelId: string,
     channelName: string,
     timestamp: Date = new Date(),
+    source?: {
+        messageId: string;
+        authorId: string;
+        authorBot: boolean;
+    },
 ) {
     const filePath = getDailyLogPath(channelId, timestamp, channelName);
     const time = `${timestamp.toISOString().slice(11, 19)} UTC`;
     const normalized = content.replace(/\s+/g, " ").trim() || "[no text]";
-    const line = `[${time}] ${author}: ${normalized}\n`;
+    const sourceMetadata = source
+        ? ` [message_id=${source.messageId}; author_id=${source.authorId}; author_bot=${source.authorBot}; created_at=${timestamp.toISOString()}]`
+        : "";
+    const line = `[${time}] ${author}${sourceMetadata}: ${normalized}\n`;
     fs.appendFileSync(filePath, line, "utf-8");
 }
 
@@ -123,6 +131,16 @@ function readLogLines(filePath: string): string[] {
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
+}
+
+function lineHasExcludedMessage(
+    line: string,
+    excludedMessageIds: ReadonlySet<string>,
+): boolean {
+    for (const messageId of excludedMessageIds) {
+        if (line.includes(`[message_id=${messageId};`)) return true;
+    }
+    return false;
 }
 
 function trimLinesToBudget(
@@ -202,6 +220,7 @@ export function loadRecentHistory(
     channelId: string,
     question: string = "",
     channelName: string = "channel",
+    excludedMessageIds: ReadonlySet<string> = new Set(),
 ): string {
     const parts: string[] = [];
     const deepHistory = isDeepHistoryRequest(question);
@@ -222,7 +241,10 @@ export function loadRecentHistory(
                 channelId,
                 searchTerms,
                 [today, yesterdayDate],
-            );
+            ).filter((match) => !lineHasExcludedMessage(
+                match.content,
+                excludedMessageIds,
+            ));
             if (matches.length > 0) {
                 parts.push(
                     `--- Ranked full-text matches from older saved history (${matches.length}) ---\n${matches.map((match) => `[${match.date}] ${match.content}`).join("\n")}`,
@@ -238,7 +260,9 @@ export function loadRecentHistory(
     const yesterdaySummary = getSummaryPath(channelId, yesterday, channelName);
     const yesterdayLog = getDailyLogPath(channelId, yesterday, channelName);
     if (!fs.existsSync(yesterdaySummary) && fs.existsSync(yesterdayLog)) {
-        const lines = readLogLines(yesterdayLog);
+        const lines = readLogLines(yesterdayLog).filter(
+            (line) => !lineHasExcludedMessage(line, excludedMessageIds),
+        );
         if (lines.length > 0) {
             const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
             const charLimit = deepHistory
@@ -265,7 +289,9 @@ export function loadRecentHistory(
 
     const todayPath = getDailyLogPath(channelId, new Date(), channelName);
     if (fs.existsSync(todayPath)) {
-        const lines = readLogLines(todayPath);
+        const lines = readLogLines(todayPath).filter(
+            (line) => !lineHasExcludedMessage(line, excludedMessageIds),
+        );
         const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
         const lineLimit = deepHistory ? HISTORY_RECAP_MAX_LINES : HISTORY_RECENT_LINES;
         const charLimit = deepHistory ? HISTORY_RECAP_MAX_CHARS : Math.floor(HISTORY_RECAP_MAX_CHARS / 4);
