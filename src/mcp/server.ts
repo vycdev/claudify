@@ -17,7 +17,10 @@ import {
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
-import { findChannel } from "../discord/helpers.js";
+import {
+    findChannel,
+    normalizeChannelIdentifier,
+} from "../discord/helpers.js";
 import { downloadAttachment } from "../storage/images.js";
 import {
     compareHistoryFilenames,
@@ -203,8 +206,9 @@ const ReadMessageHistorySchema = z.object({
     type: z.enum(["history", "pending"]).default("history"),
     channel: z
         .string()
+        .trim()
         .refine(
-            (channel) => /\S/u.test(channel),
+            (channel) => normalizeChannelIdentifier(channel).length > 0,
             "Channel must contain at least one non-whitespace character",
         )
         .optional(),
@@ -486,7 +490,12 @@ export function createMcpServer(): Server {
                     const { limit, type, channel, date, search, maxLines } =
                         ReadMessageHistorySchema.parse(args ?? {});
                     const dir = type === "pending" ? PENDING_DIR : HISTORY_DIR;
-                    const safeChannel = channel?.replace(/[^a-zA-Z0-9-_]/g, "_");
+                    const safeChannel = channel
+                        ? normalizeChannelIdentifier(channel).replace(
+                            /[^a-zA-Z0-9-_]/g,
+                            "_",
+                        )
+                        : undefined;
                     let files = fs
                         .readdirSync(dir, { withFileTypes: true })
                         .filter(

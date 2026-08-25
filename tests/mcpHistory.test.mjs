@@ -218,7 +218,7 @@ test("MCP history filters matching regular files and preserves pending indentati
 
     const channelResult = await client.callTool({
         name: "read-message-history",
-        arguments: { channel: "general", date: "2026-08-01" },
+        arguments: { channel: "  #general  ", date: "2026-08-01" },
     });
     const channelText = channelResult.content.find(
         (item) => item.type === "text",
@@ -245,7 +245,7 @@ test("MCP history filters matching regular files and preserves pending indentati
         String.raw`\S`,
     );
 
-    for (const channel of ["", " \t\n "]) {
+    for (const channel of ["", " \t\n ", "  ##  "]) {
         await assert.rejects(
             client.callTool({
                 name: "read-message-history",
