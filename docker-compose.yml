@@ -10,10 +10,9 @@ services:
       - MESSAGES_DIR=/app/messages
       - BOT_MODEL=claude-haiku-4-5
       - BOT_EFFORT=
-      - CLAUDE_RESPONSE_MODEL=
-      - CLAUDE_RESPONSE_EFFORT=
+      - CLAUDE_RESPONSE_MODEL=claude-sonnet-5
+      - CLAUDE_RESPONSE_EFFORT=high
       - CLAUDE_RESPONSE_EFFORT_MODE=fixed
-      - CLAUDE_RESPONSE_SIMPLE_EFFORT=low
       - CLAUDE_PROFILE_MODEL=
       - CLAUDE_PROFILE_EFFORT=
       - CLAUDE_SERVER_MEMORY_MODEL=

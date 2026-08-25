@@ -105,7 +105,15 @@ export function appendToLog(
 
 export function isDeepHistoryRequest(question: string): boolean {
     const normalized = question.toLowerCase();
-    return /\b(catch\s+(?:me\s+)?up|digest|recap|summari[sz]e|summary|tldr|tl;dr|what\s+(?:all\s+)?happened|what\s+did\s+i\s+miss)\b/.test(normalized);
+    const recapIntent = /\b(catch\s+(?:me\s+)?up|digest|recap|summari[sz]e|summary|tldr|tl;dr|what\s+(?:all\s+)?happened|what\s+did\s+i\s+miss)\b/;
+    const messageCountLookup = /\b(?:look|read|check|search|fetch|pull)\s+(?:up\s+|back\s+|through\s+)?(?:the\s+)?(?:last\s+|previous\s+|earlier\s+|older\s+)?\d+\s+(?:discord\s+)?messages?\b/;
+    const earlierMessageReference = /\b(?:what\s+.{1,80}\s+)?(?:said|asked|wrote|mentioned)\s+(?:earlier|before)\b/;
+    const scrollbackIntent = /\b(?:look|go|scroll)\s+back\b|\bsearch\s+(?:the\s+)?(?:chat|channel|history)\b/;
+
+    return recapIntent.test(normalized)
+        || messageCountLookup.test(normalized)
+        || earlierMessageReference.test(normalized)
+        || scrollbackIntent.test(normalized);
 }
 
 function readLogLines(filePath: string): string[] {

@@ -73,10 +73,9 @@ For example:
 
 ```env
 # Stronger user-facing responses
-BOT_MODEL=claude-sonnet-5
-BOT_EFFORT=high
-CLAUDE_RESPONSE_EFFORT_MODE=adaptive
-CLAUDE_RESPONSE_SIMPLE_EFFORT=low
+CLAUDE_RESPONSE_MODEL=claude-sonnet-5
+CLAUDE_RESPONSE_EFFORT=high
+CLAUDE_RESPONSE_EFFORT_MODE=fixed
 
 # Lower-cost background maintenance
 CLAUDE_PROFILE_MODEL=claude-haiku-4-5
