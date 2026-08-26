@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Require a text response for `!ask` commands even when their prompt is phrased without a question mark.
 - Keep batched memory context isolated for same-named Discord channels.
 - Bound persisted profile and server-memory files when loading them into Claude context without splitting surrogate pairs.
 - Trim surrounding whitespace from configured Discord role IDs.

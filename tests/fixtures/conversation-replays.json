@@ -40,5 +40,19 @@
       "requiredAnyResponsePatterns": ["test", "got it", "fair", "okay", "nothing"],
       "forbiddenResponsePatterns": ["deflection", "getting caught", "caught tweaking"]
     }
+  },
+  {
+    "id": "ask-command-needs-text",
+    "invocation": {
+      "triggerKind": "message",
+      "sourceMessageId": "ask-command-1",
+      "messageContent": "!ask explain the deployment"
+    },
+    "expect": {
+      "requiresTextResponse": true,
+      "textRequirement": "explicit-request",
+      "requiredAnyResponsePatterns": ["deployment", "explain"],
+      "forbiddenResponsePatterns": []
+    }
   }
 ]
