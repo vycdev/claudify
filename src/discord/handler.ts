@@ -925,6 +925,7 @@ async function processMessage(msg: Message): Promise<void> {
                 : `channel:${msg.channel.id}`,
             guildId: msg.guild?.id,
             guildName: msg.guild?.name,
+            channelId: msg.channel.id,
             channelName: msg.channel.name,
             users: participantUsers,
             conversationContext,

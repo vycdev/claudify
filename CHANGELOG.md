@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Keep batched memory context isolated for same-named Discord channels.
 - Bound persisted profile and server-memory files when loading them into Claude context without splitting surrogate pairs.
 - Trim surrounding whitespace from configured Discord role IDs.
 - Preserve astral Unicode characters when `!profile` and `!guild` responses are split into Discord messages.

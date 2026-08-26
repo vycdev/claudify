@@ -12,6 +12,7 @@ export interface MemoryUpdateBatchRequest {
     scopeId: string;
     guildId?: string;
     guildName?: string;
+    channelId: string;
     channelName: string;
     users: Array<{ tag: string; id: string }>;
     conversationContext: string;
@@ -21,7 +22,7 @@ interface PendingMemoryBatch {
     firstQueuedAt: number;
     guildId?: string;
     guildName?: string;
-    channelContexts: Map<string, string>;
+    channelContexts: Map<string, { name: string; context: string }>;
     users: Map<string, { tag: string; id: string }>;
     timer?: NodeJS.Timeout;
 }
@@ -76,15 +77,19 @@ export class MemoryUpdateBatcher {
         batch.guildName = request.guildName;
         for (const user of request.users) batch.users.set(user.id, user);
 
-        // A newer live slice from the same channel subsumes the older one. Move
-        // it to the end so global trimming retains the freshest channel data.
-        batch.channelContexts.delete(request.channelName);
+        // A newer live slice from the same channel subsumes the older one. Use
+        // the channel ID because display names are not unique within a guild.
+        // Move it to the end so global trimming retains the freshest data.
+        batch.channelContexts.delete(request.channelId);
         batch.channelContexts.set(
-            request.channelName,
-            trimStartWithoutSplittingSurrogatePair(
-                request.conversationContext.trim(),
-                this.maxContextChars,
-            ),
+            request.channelId,
+            {
+                name: request.channelName,
+                context: trimStartWithoutSplittingSurrogatePair(
+                    request.conversationContext.trim(),
+                    this.maxContextChars,
+                ),
+            },
         );
 
         if (batch.timer) clearTimeout(batch.timer);
@@ -114,8 +119,8 @@ export class MemoryUpdateBatcher {
         if (batch.timer) clearTimeout(batch.timer);
 
         const combinedContext = trimStartWithoutSplittingSurrogatePair(
-            Array.from(batch.channelContexts, ([channelName, context]) =>
-                `=== #${channelName} ===\n${context}`,
+            Array.from(batch.channelContexts.values(), ({ name, context }) =>
+                `=== #${name} ===\n${context}`,
             ).join("\n\n"),
             this.maxContextChars,
         );
@@ -126,7 +131,10 @@ export class MemoryUpdateBatcher {
             updates.push(this.profileUpdater(users, combinedContext));
         }
         if (batch.guildId && batch.guildName && combinedContext) {
-            const channelNames = Array.from(batch.channelContexts.keys());
+            const channelNames = Array.from(
+                batch.channelContexts.values(),
+                ({ name }) => name,
+            );
             const channelLabel = channelNames.length === 1
                 ? channelNames[0]
                 : `multiple channels: ${channelNames.join(", ")}`;
