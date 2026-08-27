@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Ignore symbolic links when loading legacy user profiles and server memory.
 - Keep batched memory context isolated for same-named Discord channels.
 - Bound persisted profile and server-memory files when loading them into Claude context without splitting surrogate pairs.
 - Trim surrounding whitespace from configured Discord role IDs.

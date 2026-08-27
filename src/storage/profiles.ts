@@ -69,7 +69,15 @@ function serializeUpdate<T>(
 }
 
 function readBounded(filePath: string, maxChars: number): string {
-    if (!fs.existsSync(filePath)) return "";
+    let stat: fs.Stats;
+    try {
+        stat = fs.lstatSync(filePath);
+    } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+        throw error;
+    }
+    if (!stat.isFile() || stat.isSymbolicLink()) return "";
+
     const text = fs.readFileSync(filePath, "utf8");
     return truncateWithoutSplittingSurrogatePair(text, maxChars);
 }

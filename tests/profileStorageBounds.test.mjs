@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-test("caps oversized persisted profiles and server memory when loaded", () => {
+test("bounds regular legacy memory and ignores symbolic links", () => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-profile-bounds-"),
     );
@@ -33,11 +33,21 @@ test("caps oversized persisted profiles and server memory when loaded", () => {
         `${unicodeMemoryPrefix}😀tail`,
         "utf8",
     );
+    const outsideFile = path.join(messagesDir, "outside-secret.txt");
+    fs.writeFileSync(outsideFile, "must not be loaded", "utf8");
+    fs.symlinkSync(
+        outsideFile,
+        path.join(profilesDir, "symlink-user.txt"),
+    );
+    fs.symlinkSync(
+        outsideFile,
+        path.join(profilesDir, "server_symlink-guild.txt"),
+    );
 
     const profilesUrl = new URL("../build/storage/profiles.js", import.meta.url).href;
     const script = [
         `const profiles = await import(${JSON.stringify(profilesUrl)});`,
-        "process.stdout.write(JSON.stringify({ user: profiles.getUserProfile('user-1'), server: profiles.getServerMemory('guild-1'), unicodeUser: profiles.getUserProfile('unicode-user'), unicodeServer: profiles.getServerMemory('unicode-guild') }));",
+        "process.stdout.write(JSON.stringify({ user: profiles.getUserProfile('user-1'), server: profiles.getServerMemory('guild-1'), unicodeUser: profiles.getUserProfile('unicode-user'), unicodeServer: profiles.getServerMemory('unicode-guild'), symlinkUser: profiles.getUserProfile('symlink-user'), symlinkServer: profiles.getServerMemory('symlink-guild') }));",
     ].join("\n");
 
     try {
@@ -57,6 +67,8 @@ test("caps oversized persisted profiles and server memory when loaded", () => {
         assert.equal(loaded.server, "M".repeat(10000));
         assert.equal(loaded.unicodeUser, unicodeProfilePrefix);
         assert.equal(loaded.unicodeServer, unicodeMemoryPrefix);
+        assert.equal(loaded.symlinkUser, "");
+        assert.equal(loaded.symlinkServer, "");
     } finally {
         fs.rmSync(messagesDir, { recursive: true, force: true });
     }
