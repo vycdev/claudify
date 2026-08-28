@@ -11,8 +11,10 @@ process.env.MESSAGES_DIR = messagesDir;
 
 const {
     appendToLog,
+    extractSearchTerms,
     getDailyLogPath,
     isDeepHistoryRequest,
+    isHistoricalLookupRequest,
     loadRecentHistory,
 } = await import("../build/storage/history.js");
 const {
@@ -23,6 +25,7 @@ const {
 const {
     getChannelHistoryFileName,
     parseChannelHistoryFileName,
+    uniquelyIdentifiesHistoryChannel,
 } = await import("../build/storage/historyPaths.js");
 
 test.after(() => fs.rmSync(messagesDir, { recursive: true, force: true }));
@@ -57,6 +60,38 @@ test("expanded history requires explicit recap intent", () => {
     }
 });
 
+test("recognizes historical artifact lookups without treating them as recaps", () => {
+    const question = "it was a pretty technical article that got pasted once when we were arguing with phage about AI hitting a ceiling and becoming unsustainable or unprofitable";
+
+    assert.equal(isDeepHistoryRequest(question), false);
+    assert.equal(isHistoricalLookupRequest(question), true);
+    assert.equal(
+        isHistoricalLookupRequest("find a new technical article about AI"),
+        false,
+    );
+});
+
+test("search-term ranking retains distinctive words late in a long request", () => {
+    const terms = extractSearchTerms(
+        "well thi sisnt the one i was looking for, it was a pretty technical article, i think it got pasted once when we were arguing with phage about ai hitting a ceiling/becoming unsustainable/unprofitable",
+    );
+
+    for (const expected of [
+        "technical",
+        "article",
+        "pasted",
+        "arguing",
+        "phage",
+        "ceiling",
+        "unsustainable",
+        "unprofitable",
+    ]) {
+        assert.ok(terms.includes(expected), `${expected}: ${terms.join(", ")}`);
+    }
+    assert.equal(terms.length <= 16, true);
+    assert.equal(terms.includes("well"), false);
+});
+
 test("channel history filenames preserve IDs with complex display names", () => {
     const fileName = getChannelHistoryFileName(
         "111111111111111111",
@@ -68,6 +103,36 @@ test("channel history filenames preserve IDs with complex display names", () => 
         channelName: "release__2026-08-01",
         date: "2026-08-02",
     });
+});
+
+test("legacy history requires an unambiguous live channel-name mapping", () => {
+    assert.equal(
+        uniquelyIdentifiesHistoryChannel(
+            "channel-1",
+            "coding-table",
+            [{ id: "channel-1", name: "coding-table" }],
+        ),
+        true,
+    );
+    assert.equal(
+        uniquelyIdentifiesHistoryChannel(
+            "channel-1",
+            "coding-table",
+            [
+                { id: "channel-1", name: "coding-table" },
+                { id: "channel-2", name: "coding-table" },
+            ],
+        ),
+        false,
+    );
+    assert.equal(
+        uniquelyIdentifiesHistoryChannel(
+            "channel-1",
+            "coding-table",
+            [{ id: "channel-2", name: "coding-table" }],
+        ),
+        false,
+    );
 });
 
 test("same-named channels use isolated history and summaries", async () => {
@@ -260,6 +325,44 @@ test("automatic history loading does not fall back to legacy name-only files", (
         ),
         /unattributed legacy secret/,
     );
+});
+
+test("explicitly authorized historical lookups search bounded legacy channel files", () => {
+    const legacyPath = path.join(
+        messagesDir,
+        "history",
+        "research_2026-02-03.txt",
+    );
+    fs.writeFileSync(
+        legacyPath,
+        [
+            "[10:00:00] user: unrelated setup",
+            "[10:01:00] user: https://example.com/technical-scaling-paper",
+            "[10:02:00] user: this is the article I showed phage",
+            "[10:03:00] user: it argues that AI scaling becomes unsustainable",
+        ].join("\n") + "\n",
+        "utf8",
+    );
+
+    const question =
+        "find the technical article I showed phage when arguing about unsustainable AI scaling";
+    const isolated = loadRecentHistory(
+        "unique-channel-id",
+        question,
+        "research",
+    );
+    const authorized = loadRecentHistory(
+        "unique-channel-id",
+        question,
+        "research",
+        new Set(),
+        { includeLegacyNameHistory: true },
+    );
+
+    assert.doesNotMatch(isolated, /technical-scaling-paper/);
+    assert.match(authorized, /uniquely resolved legacy #research history/);
+    assert.match(authorized, /technical-scaling-paper/);
+    assert.match(authorized, /showed phage/);
 });
 
 test("legacy flat filenames cannot collide with namespaced channel data", () => {

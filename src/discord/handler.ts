@@ -24,12 +24,17 @@ import { handleAuthTextMessage } from "./commands/auth.js";
 import { parseAskCommand } from "./commands/ask.js";
 import { askClaude } from "../askClaude.js";
 import {
+    buildHistoricalSearchText,
     buildConversationTurnState,
     type ConversationTurnState,
     type DiscordInvocationContext,
     type DiscordReplyContext,
 } from "./turn.js";
-import { appendToLog, isDeepHistoryRequest } from "../storage/history.js";
+import {
+    appendToLog,
+    isDeepHistoryRequest,
+    isHistoricalLookupRequest,
+} from "../storage/history.js";
 import { savePending, removePending } from "../storage/pending.js";
 import { downloadAttachment } from "../storage/images.js";
 import { queueBackgroundMemoryUpdate } from "../storage/memoryBatcher.js";
@@ -801,6 +806,19 @@ async function processMessage(msg: Message): Promise<void> {
             );
             recentMessages = liveContext.messages;
             liveMessages = liveContext.text;
+            if (isHistoricalLookupRequest(msg.content)) {
+                messageInvocation.historySearchText =
+                    buildHistoricalSearchText(
+                        msg.content,
+                        msg.author.id,
+                        msg.createdAt,
+                        recentMessages.map((message) => ({
+                            authorId: message.author.id,
+                            content: messageContentForMemory(message),
+                            createdAt: message.createdAt,
+                        })),
+                    );
+            }
             console.error(`[Bot] Added ${recentMessages.length} live messages to context`);
         } catch (err: any) {
             console.error(`[Bot] Failed to fetch live messages: ${err.message}`);

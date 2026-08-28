@@ -10,9 +10,31 @@ export interface ChannelHistoryFile {
     date: string;
 }
 
-function sanitizeSegment(value: string, fallback: string): string {
+export function sanitizeHistorySegment(
+    value: string,
+    fallback: string,
+): string {
     const sanitized = value.replace(/[^a-zA-Z0-9-_]/g, "_");
     return sanitized || fallback;
+}
+
+export function uniquelyIdentifiesHistoryChannel(
+    channelId: string,
+    channelName: string,
+    channels: Iterable<{ id: string; name?: string }>,
+): boolean {
+    const safeChannelName = sanitizeHistorySegment(channelName, "channel");
+    const matchingChannelIds = new Set<string>();
+    for (const channel of channels) {
+        if (
+            typeof channel.name === "string"
+            && sanitizeHistorySegment(channel.name, "channel") ===
+                safeChannelName
+        ) {
+            matchingChannelIds.add(channel.id);
+        }
+    }
+    return matchingChannelIds.size === 1 && matchingChannelIds.has(channelId);
 }
 
 export function getChannelHistoryFileName(
@@ -21,8 +43,8 @@ export function getChannelHistoryFileName(
     date: Date,
 ): string {
     const dateStr = date.toISOString().split("T")[0];
-    const safeChannelId = sanitizeSegment(channelId, "unknown");
-    const safeChannelName = sanitizeSegment(channelName, "channel");
+    const safeChannelId = sanitizeHistorySegment(channelId, "unknown");
+    const safeChannelName = sanitizeHistorySegment(channelName, "channel");
     return `${CHANNEL_HISTORY_PREFIX}${safeChannelId}__${safeChannelName}_${dateStr}.txt`;
 }
 
@@ -38,7 +60,7 @@ export function getChannelHistoryPath(
     );
     if (fs.existsSync(expectedPath)) return expectedPath;
 
-    const safeChannelId = sanitizeSegment(channelId, "unknown");
+    const safeChannelId = sanitizeHistorySegment(channelId, "unknown");
     const dateStr = date.toISOString().split("T")[0];
     try {
         const existingFile = fs.readdirSync(directory).find((fileName) => {

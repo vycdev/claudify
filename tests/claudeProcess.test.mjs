@@ -21,7 +21,9 @@ test("terminates a timed-out Claude process", async (t) => {
     });
 
     const originalPidPath = process.env.CLAUDIFY_PROCESS_TEST_PID_PATH;
+    const originalEmitTrace = process.env.CLAUDIFY_PROCESS_TEST_EMIT_TRACE;
     process.env.CLAUDIFY_PROCESS_TEST_PID_PATH = pidPath;
+    process.env.CLAUDIFY_PROCESS_TEST_EMIT_TRACE = "1";
 
     let childPid;
     t.after(() => {
@@ -29,6 +31,11 @@ test("terminates a timed-out Claude process", async (t) => {
             delete process.env.CLAUDIFY_PROCESS_TEST_PID_PATH;
         } else {
             process.env.CLAUDIFY_PROCESS_TEST_PID_PATH = originalPidPath;
+        }
+        if (originalEmitTrace === undefined) {
+            delete process.env.CLAUDIFY_PROCESS_TEST_EMIT_TRACE;
+        } else {
+            process.env.CLAUDIFY_PROCESS_TEST_EMIT_TRACE = originalEmitTrace;
         }
         if (childPid) {
             try {
@@ -40,9 +47,13 @@ test("terminates a timed-out Claude process", async (t) => {
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    const result = runFakeClaude(["-p"], "test input", {
-        workload: "response",
-    });
+    const result = runFakeClaude(
+        ["-p", "--output-format", "stream-json"],
+        "test input",
+        {
+            workload: "response",
+        },
+    );
     let resultSettled = false;
     void result.then(
         () => {
@@ -78,7 +89,17 @@ test("terminates a timed-out Claude process", async (t) => {
             await new Promise((resolve) => setImmediate(resolve));
         }
         assert.equal(resultSettled, true, "Timed-out child did not exit within 2 seconds");
-        await assert.rejects(result, /timed out after 120 seconds/);
+        await assert.rejects(result, (error) => {
+            assert.match(error.message, /timed out after 120 seconds/);
+            assert.equal(error.code, "CLAUDE_TIMEOUT");
+            assert.equal(error.stderr, "partial diagnostic\n");
+            assert.deepEqual(error.trace?.toolCalls, [{
+                id: "history-tool-1",
+                name: "mcp__discord__read-message-history",
+                resultStatus: "pending",
+            }]);
+            return true;
+        });
         assert.throws(
             () => process.kill(childPid, 0),
             (error) => error?.code === "ESRCH",
@@ -95,7 +116,17 @@ test("terminates a timed-out Claude process", async (t) => {
     assert.doesNotThrow(() => process.kill(childPid, 0));
 
     t.mock.timers.tick(1);
-    await assert.rejects(result, /timed out after 120 seconds/);
+    await assert.rejects(result, (error) => {
+        assert.match(error.message, /timed out after 120 seconds/);
+        assert.equal(error.code, "CLAUDE_TIMEOUT");
+        assert.equal(error.stderr, "partial diagnostic\n");
+        assert.deepEqual(error.trace?.toolCalls, [{
+            id: "history-tool-1",
+            name: "mcp__discord__read-message-history",
+            resultStatus: "pending",
+        }]);
+        return true;
+    });
     assert.throws(
         () => process.kill(childPid, 0),
         (error) => error?.code === "ESRCH",

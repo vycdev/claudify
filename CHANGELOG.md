@@ -12,6 +12,9 @@
 
 ### Fixed
 
+- Retrieve remembered articles and links using distinctive terms from the full request and bounded legacy-channel matches when the live channel name is unambiguous.
+- Preserve Claude tool traces when response processes time out and return an actionable timeout message instead of a generic processing error.
+- Accept valid background memory JSON wrapped in Markdown fences or surrounding model prose.
 - Keep batched memory context isolated for same-named Discord channels.
 - Bound persisted profile and server-memory files when loading them into Claude context without splitting surrogate pairs.
 - Trim surrounding whitespace from configured Discord role IDs.
