@@ -194,7 +194,7 @@ export function parseClaudeResponse(response: string): ParsedClaudeResponse {
 
     const maskedResponse = maskInlineCode(maskFencedCode(response));
     const matches = [
-        ...maskedResponse.matchAll(/\[REACT:(.+?)\]\s*/g),
+        ...maskedResponse.matchAll(/\[REACT:(.*?)\]\s*/g),
     ];
     const reactions = matches
         .map((match) => match[1].trim())

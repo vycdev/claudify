@@ -31,7 +31,7 @@ test("separates reaction tags from a text response", () => {
 });
 
 test("ignores reaction tags without an emoji", () => {
-    assert.deepEqual(parseClaudeResponse("[REACT: ]"), {
+    const expected = {
         reactions: [],
         text: "",
         historyContent: "",
@@ -39,7 +39,10 @@ test("ignores reaction tags without an emoji", () => {
         targetMessageId: null,
         structured: false,
         contractFallback: false,
-    });
+    };
+
+    assert.deepEqual(parseClaudeResponse("[REACT: ]"), expected);
+    assert.deepEqual(parseClaudeResponse("[REACT:]"), expected);
 });
 
 test("parses the structured response envelope", () => {
