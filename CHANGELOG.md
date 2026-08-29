@@ -13,6 +13,7 @@
 ### Fixed
 
 - Protect legacy and source-backed user/server memory reads and writes from symbolic links, junctions, and path swaps.
+- Require a text response for `!ask` commands even when their prompt is phrased without a question mark.
 - Remove malformed `[REACT:]` directives from legacy Claude responses instead of sending them as Discord text.
 - Retrieve remembered articles and links using distinctive terms from the full request and bounded legacy-channel matches when the live channel name is unambiguous.
 - Preserve Claude tool traces when response processes time out and return an actionable timeout message instead of a generic processing error.
