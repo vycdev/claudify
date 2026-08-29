@@ -1,3 +1,5 @@
+import { parseAskCommand } from "./commands/ask.js";
+
 export interface DiscordReplyContext {
     messageId: string;
     author: string;
@@ -103,7 +105,8 @@ export function messageHasQuestion(content: string): boolean {
 }
 
 export function messageHasExplicitRequest(content: string): boolean {
-    return EXPLICIT_REQUEST.test(normalizeOpening(content));
+    return parseAskCommand(content) !== null
+        || EXPLICIT_REQUEST.test(normalizeOpening(content));
 }
 
 export function buildConversationTurnState(
