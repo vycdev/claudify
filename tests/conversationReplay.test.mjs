@@ -5,12 +5,44 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+    buildHistoricalSearchText,
     buildConversationTurnState,
 } from "../build/discord/turn.js";
 import {
     enforceResponseContract,
     parseClaudeResponse,
 } from "../build/discord/response.js";
+
+test("historical search joins only contiguous recent messages from the author", () => {
+    const current = new Date("2026-08-28T09:31:22.000Z");
+    const searchText = buildHistoricalSearchText(
+        "@Claudify do you know what article im talking about?",
+        "user-1",
+        current,
+        [
+            {
+                authorId: "other-user",
+                content: "unrelated older topic",
+                createdAt: new Date("2026-08-28T09:20:00.000Z"),
+            },
+            {
+                authorId: "user-1",
+                content: "i cant find that article",
+                createdAt: new Date("2026-08-28T09:25:31.000Z"),
+            },
+            {
+                authorId: "user-1",
+                content: "i feel like you sent it here and showed it to phage",
+                createdAt: new Date("2026-08-28T09:25:41.000Z"),
+            },
+        ],
+    );
+
+    assert.match(searchText, /cant find that article/);
+    assert.match(searchText, /showed it to phage/);
+    assert.match(searchText, /do you know what article/);
+    assert.doesNotMatch(searchText, /unrelated older topic/);
+});
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = JSON.parse(fs.readFileSync(

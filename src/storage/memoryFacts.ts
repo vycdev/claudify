@@ -1,12 +1,16 @@
-import { createHash, randomUUID } from "crypto";
-import fs from "fs";
+import { createHash } from "crypto";
 import path from "path";
 import {
     MEMORY_FACT_MAX_CHARS,
     MEMORY_FACTS_MAX_PER_SCOPE,
+    MESSAGES_DIR,
     PROFILE_FACTS_DIR,
     SERVER_FACTS_DIR,
 } from "../config.js";
+import {
+    readVerifiedUtf8File,
+    writeVerifiedUtf8File,
+} from "./safeRead.js";
 
 export type MemoryFactAttribution = "explicit" | "inferred";
 export type MemoryFactScope = "user" | "server";
@@ -99,24 +103,23 @@ function factPath(scope: MemoryFactScope, scopeId: string): string {
 
 function readDocument(scope: MemoryFactScope, scopeId: string): ReadResult {
     const filePath = factPath(scope, scopeId);
-    let stat: fs.Stats;
-    try {
-        stat = fs.lstatSync(filePath);
-    } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return { state: "missing", facts: [] };
-        }
-        console.error(`[MemoryFacts] Failed to inspect ${filePath}: ${String(error)}`);
-        return { state: "invalid", facts: [] };
+    const directory = scope === "user" ? PROFILE_FACTS_DIR : SERVER_FACTS_DIR;
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        directory,
+        MAX_FACT_DOCUMENT_BYTES,
+    );
+    if (result.state === "missing") {
+        return { state: "missing", facts: [] };
     }
-
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FACT_DOCUMENT_BYTES) {
+    if (result.state === "unsafe") {
         console.error(`[MemoryFacts] Refusing invalid fact document ${filePath}`);
         return { state: "invalid", facts: [] };
     }
 
     try {
-        const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const parsed: unknown = JSON.parse(result.text);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             throw new Error("document must be an object");
         }
@@ -144,18 +147,16 @@ function writeDocument(
     facts: MemoryFact[],
 ): void {
     const filePath = factPath(scope, scopeId);
-    const temporaryPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
     const document: MemoryFactDocument = { version: 1, facts };
-    try {
-        fs.writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, {
-            encoding: "utf8",
-            flag: "wx",
-            mode: 0o600,
-        });
-        fs.renameSync(temporaryPath, filePath);
-    } finally {
-        fs.rmSync(temporaryPath, { force: true });
-    }
+    const directory = scope === "user" ? PROFILE_FACTS_DIR : SERVER_FACTS_DIR;
+    const written = writeVerifiedUtf8File(
+        filePath,
+        `${JSON.stringify(document, null, 2)}\n`,
+        MESSAGES_DIR,
+        directory,
+        MAX_FACT_DOCUMENT_BYTES,
+    );
+    if (!written) throw new Error(`Refusing unsafe ${scope} fact write`);
 }
 
 function createFactId(

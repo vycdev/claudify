@@ -7,9 +7,13 @@ import {
     MCP_CONFIG_PATH,
     getResponseModelDisplay,
 } from "./config.js";
-import { runClaude } from "./claude.js";
+import { isClaudeTimeoutError, runClaude } from "./claude.js";
 import { client } from "./discord/client.js";
-import { loadRecentHistory } from "./storage/history.js";
+import {
+    isHistoricalLookupRequest,
+    loadRecentHistory,
+} from "./storage/history.js";
+import { uniquelyIdentifiesHistoryChannel } from "./storage/historyPaths.js";
 import { getUserProfile, getServerMemory } from "./storage/profiles.js";
 import { loadRecentResponseEvents } from "./storage/responseEvents.js";
 import { renderPrompt } from "./prompts.js";
@@ -45,6 +49,24 @@ function getSystemPrompt(): string {
     });
 }
 
+function canSafelyReadLegacyChannelHistory(
+    channelId: string,
+    channelName: string,
+): boolean {
+    return uniquelyIdentifiesHistoryChannel(
+        channelId,
+        channelName,
+        client.channels.cache
+            .filter((channel) => "name" in channel)
+            .map((channel) => ({
+                id: channel.id,
+                name: typeof channel.name === "string"
+                    ? channel.name
+                    : undefined,
+            })),
+    );
+}
+
 export async function askClaude(
     question: string,
     author: string,
@@ -60,7 +82,10 @@ export async function askClaude(
 ): Promise<string> {
     // Only the newly authored message may opt into expanded history. Quoted
     // reply content is separate context and must not change retrieval behavior.
-    const historyQuery = discordInvocation?.messageContent ?? question;
+    const historyQuery = discordInvocation?.historySearchText
+        ?? discordInvocation?.messageContent
+        ?? question;
+    const historicalLookup = isHistoricalLookupRequest(historyQuery);
     const explicitTurnMessageIds = new Set<string>();
     if (discordInvocation?.sourceMessageId) {
         explicitTurnMessageIds.add(discordInvocation.sourceMessageId);
@@ -76,6 +101,11 @@ export async function askClaude(
         historyQuery,
         channelName,
         explicitTurnMessageIds,
+        {
+            includeLegacyNameHistory:
+                historicalLookup
+                && canSafelyReadLegacyChannelHistory(channelId, channelName),
+        },
     );
     const userProfile = getUserProfile(authorId);
     const serverMemory = getServerMemory(guildId);
@@ -331,6 +361,20 @@ export async function askClaude(
         console.error(`[Claude CLI] Error: ${error.message}`);
         if (error.stderr) console.error(`[Claude CLI] stderr: ${error.stderr}`);
         if (error.stdout) console.error(`[Claude CLI] stdout: ${error.stdout}`);
+        if (error.trace) {
+            console.error(
+                `[Claude CLI] trace: ${JSON.stringify({
+                    malformedEventCount: error.trace.malformedEventCount,
+                    resultEventReceived: error.trace.resultEventReceived,
+                    toolCalls: error.trace.toolCalls,
+                })}`,
+            );
+        }
+        if (isClaudeTimeoutError(error)) {
+            return historicalLookup
+                ? "I couldn't finish searching the saved Discord history within two minutes. Try narrowing it by channel, approximate date, person, or a distinctive phrase and I'll retry."
+                : "I couldn't finish that request within two minutes. Nothing completed, so I won't pretend it did; try narrowing the request and I'll retry.";
+        }
         return "Sorry, I encountered an error processing your request.";
     }
 }
