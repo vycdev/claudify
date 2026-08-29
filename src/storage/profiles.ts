@@ -1,8 +1,8 @@
-import fs from "fs";
 import path from "path";
 import {
     CLAUDE_WORKLOAD_CONFIG,
     MEMORY_FACT_MAX_CHARS,
+    MESSAGES_DIR,
     PROFILES_DIR,
     PROFILE_MAX_CHARS,
     SERVER_MEMORY_MAX_CHARS,
@@ -17,6 +17,7 @@ import {
     type MemoryFactAttribution,
     type MemoryFactCandidate,
 } from "./memoryFacts.js";
+import { readVerifiedUtf8File } from "./safeRead.js";
 
 type ClaudeRunner = typeof runClaude;
 
@@ -68,10 +69,15 @@ function serializeUpdate<T>(
     });
 }
 
-function readBounded(filePath: string, maxChars: number): string {
-    if (!fs.existsSync(filePath)) return "";
-    const text = fs.readFileSync(filePath, "utf8");
-    return truncateWithoutSplittingSurrogatePair(text, maxChars);
+function readBoundedFile(filePath: string, maxChars: number): string {
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        PROFILES_DIR,
+    );
+    return result.state === "valid"
+        ? truncateWithoutSplittingSurrogatePair(result.text, maxChars)
+        : "";
 }
 
 function renderCombinedMemory(
@@ -102,6 +108,20 @@ function renderCombinedMemory(
         separator,
         truncateWithoutSplittingSurrogatePair(legacyMemory, legacyBudget),
     ].join("");
+}
+
+function loadCombinedMemory(
+    scope: "user" | "server",
+    scopeId: string,
+    legacyPath: string,
+    maxChars: number,
+): string {
+    const legacy = readBoundedFile(legacyPath, maxChars);
+    return renderCombinedMemory(
+        renderMemoryFacts(scope, scopeId),
+        legacy,
+        maxChars,
+    );
 }
 
 function parseJsonObject(output: string): Record<string, unknown> {
@@ -230,25 +250,19 @@ function parseServerCandidates(output: string): MemoryFactCandidate[] {
 }
 
 export function getUserProfile(userId: string): string {
-    const legacy = readBounded(
+    return loadCombinedMemory(
+        "user",
+        userId,
         path.join(PROFILES_DIR, `${userId}.txt`),
-        PROFILE_MAX_CHARS,
-    );
-    return renderCombinedMemory(
-        renderMemoryFacts("user", userId),
-        legacy,
         PROFILE_MAX_CHARS,
     );
 }
 
 export function getServerMemory(guildId: string): string {
-    const legacy = readBounded(
+    return loadCombinedMemory(
+        "server",
+        guildId,
         path.join(PROFILES_DIR, `server_${guildId}.txt`),
-        SERVER_MEMORY_MAX_CHARS,
-    );
-    return renderCombinedMemory(
-        renderMemoryFacts("server", guildId),
-        legacy,
         SERVER_MEMORY_MAX_CHARS,
     );
 }
