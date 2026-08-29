@@ -1,5 +1,8 @@
 import fs from "fs";
+import path from "path";
 import {
+    HISTORY_DIR,
+    HISTORY_FTS_MAX_CHARS,
     HISTORY_V2_DIR,
     HISTORY_RECENT_LINES,
     HISTORY_RECAP_MAX_CHARS,
@@ -8,7 +11,10 @@ import {
     HISTORY_SEARCH_MAX_BLOCKS,
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
-import { getChannelHistoryPath } from "./historyPaths.js";
+import {
+    getChannelHistoryPath,
+    sanitizeHistorySegment,
+} from "./historyPaths.js";
 import { searchChannelHistory } from "./historySearch.js";
 
 const HISTORY_STOP_WORDS = new Set([
@@ -77,9 +83,20 @@ const HISTORY_STOP_WORDS = new Set([
     "why",
     "would",
     "with",
+    "well",
+    "one",
+    "looking",
+    "pretty",
     "you",
 ]);
 const SNIPPET_SEPARATOR = "\n\n...\n\n";
+const HISTORY_SEARCH_TERM_LIMIT = 16;
+const LEGACY_SEARCH_CONTEXT_LINES = 6;
+const LEGACY_HISTORY_DATE_SUFFIX = /_(\d{4}-\d{2}-\d{2})\.txt$/;
+
+export interface RecentHistoryOptions {
+    includeLegacyNameHistory?: boolean;
+}
 
 export function getDailyLogPath(
     channelId: string,
@@ -122,6 +139,15 @@ export function isDeepHistoryRequest(question: string): boolean {
         || messageCountLookup.test(normalized)
         || earlierMessageReference.test(normalized)
         || scrollbackIntent.test(normalized);
+}
+
+export function isHistoricalLookupRequest(question: string): boolean {
+    if (isDeepHistoryRequest(question)) return true;
+
+    const normalized = question.toLowerCase();
+    const artifact = /\b(?:article|link|post|paper|thread|video|message|source)\b/;
+    const priorReference = /\b(?:sent|shared|posted|pasted|showed|mentioned|remember(?:ed)?|talk(?:ed|ing)?\s+about|argu(?:ed|ing)|discuss(?:ed|ing)|look(?:ed|ing)?\s+for|can(?:not|'t|t)\s+find|once|earlier|before|at\s+some\s+point)\b/;
+    return artifact.test(normalized) && priorReference.test(normalized);
 }
 
 function readLogLines(filePath: string): string[] {
@@ -189,7 +215,99 @@ export function extractSearchTerms(question: string): string[] {
                 && !HISTORY_STOP_WORDS.has(term);
         });
 
-    return Array.from(new Set(terms)).slice(0, 8);
+    const uniqueTerms = Array.from(new Set(terms));
+    const ranked = uniqueTerms
+        .map((term, index) => ({
+            term,
+            index,
+            length: Array.from(term).length,
+        }))
+        .sort((left, right) =>
+            right.length - left.length || right.index - left.index
+        )
+        .slice(0, HISTORY_SEARCH_TERM_LIMIT)
+        .sort((left, right) => left.index - right.index);
+    return ranked.map(({ term }) => term);
+}
+
+interface LegacyHistorySnippet {
+    content: string;
+    date: string;
+    score: number;
+}
+
+function loadLegacyHistoryMatches(
+    channelName: string,
+    terms: string[],
+): string {
+    if (terms.length === 0) return "";
+
+    const safeChannelName = sanitizeHistorySegment(channelName, "channel");
+    const snippets: LegacyHistorySnippet[] = [];
+    const seen = new Set<string>();
+
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(HISTORY_DIR, { withFileTypes: true });
+    } catch {
+        return "";
+    }
+
+    for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const suffix = entry.name.match(LEGACY_HISTORY_DATE_SUFFIX);
+        if (suffix?.index === undefined || suffix.index === 0) continue;
+        if (entry.name.slice(0, suffix.index) !== safeChannelName) continue;
+
+        const filePath = path.join(HISTORY_DIR, entry.name);
+        const lines = readLogLines(filePath);
+        for (let index = 0; index < lines.length; index++) {
+            const normalized = lines[index].normalize("NFC").toLowerCase();
+            if (!terms.some((term) => normalized.includes(term))) continue;
+
+            const start = Math.max(0, index - LEGACY_SEARCH_CONTEXT_LINES);
+            const end = Math.min(
+                lines.length,
+                index + LEGACY_SEARCH_CONTEXT_LINES + 1,
+            );
+            const content = lines.slice(start, end).join("\n");
+            if (seen.has(content)) continue;
+            seen.add(content);
+
+            const normalizedContent = content.normalize("NFC").toLowerCase();
+            const matchedTerms = terms.filter((term) =>
+                normalizedContent.includes(term)
+            );
+            snippets.push({
+                content,
+                date: suffix[1],
+                score: matchedTerms.reduce(
+                    (total, term) => total + Array.from(term).length,
+                    /https?:\/\//iu.test(content) ? 8 : 0,
+                ),
+            });
+        }
+    }
+
+    snippets.sort((left, right) =>
+        right.score - left.score || right.date.localeCompare(left.date)
+    );
+
+    const selected: string[] = [];
+    let usedChars = 0;
+    for (const snippet of snippets) {
+        if (selected.length >= HISTORY_SEARCH_MAX_BLOCKS) break;
+        const rendered = `[${snippet.date}] ${snippet.content}`;
+        if (usedChars + rendered.length > HISTORY_FTS_MAX_CHARS) break;
+        selected.push(rendered);
+        usedChars += rendered.length;
+    }
+    if (selected.length === 0) return "";
+
+    return [
+        `--- Matches from uniquely resolved legacy #${channelName} history (${selected.length}) ---`,
+        ...selected,
+    ].join("\n");
 }
 
 function buildRelevantSnippets(lines: string[], terms: string[]): string[] {
@@ -221,6 +339,7 @@ export function loadRecentHistory(
     question: string = "",
     channelName: string = "channel",
     excludedMessageIds: ReadonlySet<string> = new Set(),
+    options: RecentHistoryOptions = {},
 ): string {
     const parts: string[] = [];
     const deepHistory = isDeepHistoryRequest(question);
@@ -254,6 +373,14 @@ export function loadRecentHistory(
             const message = error instanceof Error ? error.message : String(error);
             console.error(`[HistorySearch] Full-text search failed: ${message}`);
         }
+    }
+
+    if (options.includeLegacyNameHistory) {
+        const legacyMatches = loadLegacyHistoryMatches(
+            channelName,
+            searchTerms,
+        );
+        if (legacyMatches) parts.push(legacyMatches);
     }
 
     const yesterday = new Date(Date.now() - 86400000);

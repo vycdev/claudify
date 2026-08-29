@@ -211,3 +211,48 @@ test("adaptive routing keeps Sonnet while lowering a simple response effort", as
         effort: "low",
     });
 });
+
+test("history-search timeouts return a specific actionable fallback", async () => {
+    const timeout = Object.assign(
+        new Error("Claude CLI [response] timed out after 120 seconds"),
+        {
+            code: "CLAUDE_TIMEOUT",
+            stderr: "",
+            stdout: "",
+            trace: {
+                format: "stream-json",
+                resultEventReceived: false,
+                malformedEventCount: 0,
+                toolCalls: [{
+                    id: "history-call",
+                    name: "mcp__discord__read-message-history",
+                    resultStatus: "pending",
+                }],
+            },
+        },
+    );
+    const answer = await askClaude(
+        "find the technical article that got pasted when we argued about AI",
+        "User",
+        "user-1",
+        "general",
+        "channel-1",
+        "Guild",
+        "guild-1",
+        [],
+        "",
+        {
+            triggerKind: "message",
+            sourceMessageId: "message-timeout",
+            messageContent:
+                "find the technical article that got pasted when we argued about AI",
+        },
+        async () => {
+            throw timeout;
+        },
+    );
+
+    assert.match(answer, /couldn't finish searching the saved Discord history/);
+    assert.match(answer, /channel, approximate date, person/);
+    assert.doesNotMatch(answer, /encountered an error/);
+});

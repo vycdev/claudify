@@ -44,6 +44,50 @@ function factOutput(facts) {
     return JSON.stringify({ facts });
 }
 
+test("accepts fenced memory JSON with surrounding model prose", async () => {
+    await backgroundProfileUpdate(
+        [{ tag: "FencedUser", id: "fenced-user" }],
+        "FencedUser [message_id=fenced-msg; author_id=fenced-user; author_bot=false; created_at=2026-08-24T00:00:00.000Z]: I maintain the parser",
+        async () => ({
+            stdout: [
+                "Here is the JSON:",
+                "```json",
+                factOutput([{
+                    userId: "fenced-user",
+                    text: "maintains the parser",
+                    sourceMessageId: "fenced-msg",
+                    attribution: "explicit",
+                    supersedesFactIds: [],
+                }]),
+                "```",
+                "Done.",
+            ].join("\n"),
+            stderr: "",
+        }),
+    );
+    await backgroundServerMemoryUpdate(
+        "fenced-guild",
+        "Fenced Guild",
+        "general",
+        "FencedUser [message_id=fenced-server-msg; author_id=fenced-user; author_bot=false; created_at=2026-08-24T00:01:00.000Z]: Parser reviews happen weekly",
+        async () => ({
+            stdout: "```json\n" + factOutput([{
+                text: "parser reviews happen weekly",
+                sourceMessageId: "fenced-server-msg",
+                attribution: "explicit",
+                supersedesFactIds: [],
+            }]),
+            stderr: "",
+        }),
+    );
+
+    assert.match(getUserProfile("fenced-user"), /maintains the parser/);
+    assert.match(
+        getServerMemory("fenced-guild"),
+        /parser reviews happen weekly/,
+    );
+});
+
 test("serializes overlapping source-backed profile updates", async () => {
     const firstResult = deferred();
     const prompts = [];

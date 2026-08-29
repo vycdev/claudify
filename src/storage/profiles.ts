@@ -106,13 +106,57 @@ function renderCombinedMemory(
 
 function parseJsonObject(output: string): Record<string, unknown> {
     const trimmed = output.trim();
-    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-    const source = fenced?.[1] ?? trimmed;
-    const parsed: unknown = JSON.parse(source);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("memory update must be a JSON object");
+    let lastError: unknown;
+
+    for (let start = trimmed.indexOf("{"); start >= 0;) {
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+
+        for (let index = start; index < trimmed.length; index++) {
+            const character = trimmed[index];
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (character === "\\") escaped = true;
+                else if (character === '"') inString = false;
+                continue;
+            }
+
+            if (character === '"') {
+                inString = true;
+                continue;
+            }
+            if (character === "{") depth++;
+            if (character !== "}") continue;
+
+            depth--;
+            if (depth !== 0) continue;
+
+            try {
+                const parsed: unknown = JSON.parse(
+                    trimmed.slice(start, index + 1),
+                );
+                if (
+                    parsed
+                    && typeof parsed === "object"
+                    && !Array.isArray(parsed)
+                ) {
+                    return parsed as Record<string, unknown>;
+                }
+                lastError = new Error(
+                    "memory update must be a JSON object",
+                );
+            } catch (error) {
+                lastError = error;
+            }
+            break;
+        }
+
+        start = trimmed.indexOf("{", start + 1);
     }
-    return parsed as Record<string, unknown>;
+
+    if (lastError instanceof Error) throw lastError;
+    throw new Error("memory update did not contain a valid JSON object");
 }
 
 function parseAttribution(value: unknown): MemoryFactAttribution | undefined {

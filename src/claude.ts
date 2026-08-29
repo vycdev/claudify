@@ -1,5 +1,8 @@
 import { spawn } from "child_process";
-import { ClaudeStreamCollector } from "./claudeStream.js";
+import {
+    ClaudeStreamCollector,
+    type ClaudeExecutionTrace,
+} from "./claudeStream.js";
 import type { ClaudeRunOptions, ClaudeRunResult } from "./claudeTypes.js";
 
 export interface ClaudeExecutable {
@@ -12,6 +15,22 @@ const MAX_CONCURRENT = 2;
 const MIN_DELAY_MS = 1000; // minimum 1s between spawns
 const FORCE_KILL_GRACE_MS = 5_000;
 const MAX_CAPTURED_OUTPUT = 64 * 1024;
+export const CLAUDE_TIMEOUT_CODE = "CLAUDE_TIMEOUT";
+
+interface ClaudeExecutionError extends Error {
+    code?: string;
+    stdout?: string;
+    stderr?: string;
+    trace?: ClaudeExecutionTrace;
+    timeoutMs?: number;
+}
+
+export function isClaudeTimeoutError(
+    error: unknown,
+): error is ClaudeExecutionError {
+    return error instanceof Error
+        && (error as ClaudeExecutionError).code === CLAUDE_TIMEOUT_CODE;
+}
 
 function appendBounded(current: string, chunk: string): string {
     const combined = current + chunk;
@@ -129,7 +148,7 @@ function spawnClaude(
             ) || arg === "--output-format=stream-json"
         ) ? new ClaudeStreamCollector() : undefined;
         let stdinError: Error | undefined;
-        let timeoutError: Error | undefined;
+        let timeoutError: ClaudeExecutionError | undefined;
         let forceKillTimeout: NodeJS.Timeout | undefined;
 
         const terminateProcess = (): void => {
@@ -176,6 +195,8 @@ function spawnClaude(
             timeoutError = new Error(
                 `Claude CLI [${workload}] timed out after 120 seconds`,
             );
+            timeoutError.code = CLAUDE_TIMEOUT_CODE;
+            timeoutError.timeoutMs = 120_000;
             terminateProcess();
         }, 120000);
 
@@ -184,6 +205,10 @@ function spawnClaude(
             if (stdinError) {
                 reject(stdinError);
             } else if (timeoutError) {
+                const streamResult = streamCollector?.finish();
+                timeoutError.stdout = streamResult?.result ?? stdout;
+                timeoutError.stderr = stderr;
+                if (streamResult) timeoutError.trace = streamResult.trace;
                 reject(timeoutError);
             } else if (code === 0) {
                 if (streamCollector) {
