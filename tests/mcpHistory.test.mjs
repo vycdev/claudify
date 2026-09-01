@@ -61,6 +61,11 @@ test("MCP history filters matching regular files and preserves pending indentati
         path.join(historyDir, "linked_2026-08-01.txt"),
     );
     fs.mkdirSync(path.join(historyDir, "directory_2026-08-01.txt"));
+    const swappedHistoryFile = path.join(
+        historyDir,
+        "swapped_2026-08-01.txt",
+    );
+    fs.writeFileSync(swappedHistoryFile, "ordinary history entry\n", "utf8");
     fs.symlinkSync(
         outsideFile,
         path.join(
@@ -123,6 +128,31 @@ test("MCP history filters matching regular files and preserves pending indentati
     assert.doesNotMatch(text, /linked_2026-08-01\.txt/);
     assert.doesNotMatch(text, /directory_2026-08-01\.txt/);
     assert.doesNotMatch(text, /symlinked secret/);
+
+    const originalReaddirSync = fs.readdirSync;
+    fs.readdirSync = function patchedReaddirSync(directory, options) {
+        const entries = originalReaddirSync.call(fs, directory, options);
+        if (path.resolve(directory.toString()) === path.resolve(historyDir)) {
+            fs.rmSync(swappedHistoryFile, { force: true });
+            fs.symlinkSync(outsideFile, swappedHistoryFile);
+        }
+        return entries;
+    };
+    let swappedResult;
+    try {
+        swappedResult = await client.callTool({
+            name: "read-message-history",
+            arguments: { date: "2026-08-01" },
+        });
+    } finally {
+        fs.readdirSync = originalReaddirSync;
+    }
+    const swappedText = swappedResult.content.find(
+        (item) => item.type === "text",
+    )?.text;
+    assert.equal(typeof swappedText, "string");
+    assert.doesNotMatch(swappedText, /swapped_2026-08-01\.txt/);
+    assert.doesNotMatch(swappedText, /symlinked secret/);
 
     const pendingResult = await client.callTool({
         name: "read-message-history",

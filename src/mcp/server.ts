@@ -14,6 +14,7 @@ import {
     MCP_FETCH_MESSAGES_MAX_LINKS,
     MCP_READ_MESSAGES_MAX_CHARS,
     MCP_HISTORY_MAX_CHARS,
+    MESSAGES_DIR,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -28,6 +29,7 @@ import {
     isCalendarDate,
 } from "./historyFiles.js";
 import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
+import { readVerifiedUtf8File } from "../storage/safeRead.js";
 
 const ReactToMessageSchema = z.object({
     server: z
@@ -55,12 +57,12 @@ function isWithinDiscordMessageLimit(message: string): boolean {
     return true;
 }
 
-function readPendingMetadata(filePath: string): {
+function readPendingMetadata(text: string): {
     channelId: string | undefined;
     channelName: string | undefined;
     date: string | undefined;
 } {
-    const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+    const lines = text.split("\n");
     const separatorIndex = lines.indexOf("---");
     const headerLines = lines.slice(0, separatorIndex === -1 ? 4 : separatorIndex);
     const channelLine = headerLines.find((line) => line.startsWith("Channel: #"));
@@ -84,6 +86,26 @@ function readPendingMetadata(filePath: string): {
                 ? timestamp.toISOString().slice(0, 10)
                 : undefined,
     };
+}
+
+interface ReadableHistoryFile {
+    displayName: string;
+    channelId: string | undefined;
+    channelName: string | undefined;
+    date: string | undefined;
+    text: string;
+}
+
+function readStoredHistoryFile(
+    filePath: string,
+    expectedDirectory: string,
+): string | undefined {
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        expectedDirectory,
+    );
+    return result.state === "valid" ? result.text : undefined;
 }
 
 const HISTORY_RESPONSE_SEPARATOR = "\n\n===\n\n";
@@ -496,54 +518,59 @@ export function createMcpServer(): Server {
                             "_",
                         )
                         : undefined;
-                    let files = fs
-                        .readdirSync(dir, { withFileTypes: true })
-                        .filter(
-                            (entry) =>
-                                entry.isFile() && entry.name.endsWith(".txt"),
-                        )
-                        .map((entry) => {
-                            const filePath = path.join(dir, entry.name);
-                            const pendingMetadata =
-                                type === "pending"
-                                    ? readPendingMetadata(filePath)
-                                    : undefined;
-                            return {
-                                displayName: entry.name,
-                                filePath,
-                                channelId: pendingMetadata?.channelId,
-                                channelName:
-                                    type === "history"
-                                        ? getLegacyHistoryChannel(entry.name)
-                                        : pendingMetadata?.channelName,
-                                date: pendingMetadata?.date,
-                            };
+                    let files: ReadableHistoryFile[] = [];
+                    for (const entry of fs.readdirSync(dir, {
+                        withFileTypes: true,
+                    })) {
+                        if (!entry.isFile() || !entry.name.endsWith(".txt")) {
+                            continue;
+                        }
+                        const filePath = path.join(dir, entry.name);
+                        const text = readStoredHistoryFile(filePath, dir);
+                        if (text === undefined) continue;
+                        const pendingMetadata = type === "pending"
+                            ? readPendingMetadata(text)
+                            : undefined;
+                        files.push({
+                            displayName: entry.name,
+                            channelId: pendingMetadata?.channelId,
+                            channelName:
+                                type === "history"
+                                    ? getLegacyHistoryChannel(entry.name)
+                                    : pendingMetadata?.channelName,
+                            date: pendingMetadata?.date,
+                            text,
                         });
+                    }
 
                     if (type === "history") {
-                        const channelFiles = fs
-                            .readdirSync(HISTORY_V2_DIR, { withFileTypes: true })
-                            .filter(
-                                (entry) =>
-                                    entry.isFile() &&
-                                    entry.name.endsWith(".txt"),
-                            )
-                            .map((entry) => {
-                                const parsed = parseChannelHistoryFileName(
-                                    entry.name,
-                                );
-                                return {
-                                    displayName: `v2/${entry.name}`,
-                                    filePath: path.join(
-                                        HISTORY_V2_DIR,
-                                        entry.name,
-                                    ),
-                                    channelId: parsed?.channelId,
-                                    channelName: parsed?.channelName,
-                                    date: undefined,
-                                };
+                        for (const entry of fs.readdirSync(HISTORY_V2_DIR, {
+                            withFileTypes: true,
+                        })) {
+                            if (
+                                !entry.isFile()
+                                || !entry.name.endsWith(".txt")
+                            ) continue;
+                            const filePath = path.join(
+                                HISTORY_V2_DIR,
+                                entry.name,
+                            );
+                            const text = readStoredHistoryFile(
+                                filePath,
+                                HISTORY_V2_DIR,
+                            );
+                            if (text === undefined) continue;
+                            const parsed = parseChannelHistoryFileName(
+                                entry.name,
+                            );
+                            files.push({
+                                displayName: `v2/${entry.name}`,
+                                channelId: parsed?.channelId,
+                                channelName: parsed?.channelName,
+                                date: undefined,
+                                text,
                             });
-                        files.push(...channelFiles);
+                        }
                         files.sort((left, right) =>
                             compareHistoryFilenames(
                                 left.displayName,
@@ -577,8 +604,7 @@ export function createMcpServer(): Server {
                         : files.slice(-limit);
                     let matchingFiles = candidateFiles
                         .map((file) => {
-                            let lines = fs
-                                .readFileSync(file.filePath, "utf-8")
+                            let lines = file.text
                                 .split("\n")
                                 .filter((line) => line.trim().length > 0);
 
