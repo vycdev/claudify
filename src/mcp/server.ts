@@ -723,7 +723,9 @@ export function createMcpServer(): Server {
                     const channel = await findChannel(channelIdentifier, server);
                     const messages = await channel.messages.fetch({ limit });
                     const formatted: ReadMessageEntry[] = [];
-                    for (const msg of messages.values()) {
+                    // Discord returns fetched messages newest-first. Render them in
+                    // chronological order so response truncation drops the oldest.
+                    for (const msg of Array.from(messages.values()).reverse()) {
                         const entry: ReadMessageEntry = {
                             id: msg.id,
                             channel: `#${channel.name}`,
