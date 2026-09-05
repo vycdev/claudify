@@ -52,7 +52,7 @@
 - Bound `!usage` ccusage subprocess lifetime so a hung usage query is terminated and reported instead of keeping the request pending.
 - Normalize whitespace and `#` display prefixes in MCP server and channel identifiers before lookup.
 - Generate daily summaries for days containing a complete single exchange.
-- Bound loaded daily summaries to the configured history recap character budget.
+- Bound the combined loaded daily summaries to the configured history recap character budget.
 - Prevent profile responses from triggering Discord mentions from stored profile text.
 - Route bot message and reaction triggers from Discord threads through the same request handling as regular text channels.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.
