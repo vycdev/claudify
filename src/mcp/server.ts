@@ -192,6 +192,42 @@ function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
     return renderReadMessagesResponse(selected, true);
 }
 
+function renderFetchMessagesResponse(
+    entries: ReadMessageEntry[],
+    omitted: number,
+): string {
+    const hint = entries.some((entry) => entry.images?.length)
+        ? READ_MESSAGES_RESPONSE_HINT
+        : "";
+    const note = omitted > 0
+        ? `\n\n[Fetch-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; ${omitted} later result(s) omitted.]`
+        : "";
+    return JSON.stringify(entries, null, 2) + hint + note;
+}
+
+function boundFetchMessagesResponse(entries: ReadMessageEntry[]): string {
+    const full = renderFetchMessagesResponse(entries, 0);
+    if (full.length <= MCP_READ_MESSAGES_MAX_CHARS) return full;
+
+    const selected: ReadMessageEntry[] = [];
+    for (const entry of entries) {
+        const candidate = [...selected, entry];
+        const omitted = entries.length - candidate.length;
+        if (
+            renderFetchMessagesResponse(candidate, omitted).length
+            > MCP_READ_MESSAGES_MAX_CHARS
+        ) {
+            break;
+        }
+        selected.push(entry);
+    }
+
+    return renderFetchMessagesResponse(
+        selected,
+        entries.length - selected.length,
+    );
+}
+
 const ReadMessagesSchema = z.object({
     server: z
         .string()
@@ -632,7 +668,7 @@ export function createMcpServer(): Server {
                 }
                 case "fetch-messages": {
                     const { links } = FetchMessagesSchema.parse(args);
-                    const results = [];
+                    const results: ReadMessageEntry[] = [];
                     for (const link of links) {
                         const parsedLink = parseDiscordMessageLink(link);
                         if (!parsedLink) {
@@ -661,7 +697,7 @@ export function createMcpServer(): Server {
                                 continue;
                             }
                             const msg = await channel.messages.fetch(messageId);
-                            const entry: any = {
+                            const entry: ReadMessageEntry = {
                                 link,
                                 id: msg.id,
                                 channel: `#${channel.name}`,
@@ -706,15 +742,11 @@ export function createMcpServer(): Server {
                             });
                         }
                     }
-                    const resultText = JSON.stringify(results, null, 2);
-                    const hasImages = results.some(
-                        (r: any) => r.images?.length,
-                    );
-                    const hint = hasImages
-                        ? "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above."
-                        : "";
                     return {
-                        content: [{ type: "text", text: resultText + hint }],
+                        content: [{
+                            type: "text",
+                            text: boundFetchMessagesResponse(results),
+                        }],
                     };
                 }
                 case "read-messages": {
