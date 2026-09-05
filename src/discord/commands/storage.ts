@@ -38,10 +38,13 @@ function walkStorageTree(
     }
 }
 
-export function countStorageFiles(dir: string): number {
+export function countStorageFiles(
+    dir: string,
+    extensions: readonly string[] = [".txt"],
+): number {
     return walkStorageTree(
         dir,
-        (name) => name.endsWith(".txt") ? 1 : 0,
+        (name) => extensions.some((extension) => name.endsWith(extension)) ? 1 : 0,
     );
 }
 
@@ -63,7 +66,7 @@ export async function handleStorage(msg: Message): Promise<void> {
     const historyCount = countStorageFiles(HISTORY_DIR);
     const pendingCount = countStorageFiles(PENDING_DIR);
     const summaryCount = countStorageFiles(SUMMARIES_DIR);
-    const profileCount = countStorageFiles(PROFILES_DIR);
+    const profileCount = countStorageFiles(PROFILES_DIR, [".txt", ".json"]);
     const historySize = getStorageDirectorySize(HISTORY_DIR);
     const pendingSize = getStorageDirectorySize(PENDING_DIR);
     const summariesSize = getStorageDirectorySize(SUMMARIES_DIR);
