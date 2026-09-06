@@ -109,7 +109,17 @@ export function writeMcpConfig() {
     const config = {
         mcpServers,
     };
-    fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
+    const fileDescriptor = fs.openSync(MCP_CONFIG_PATH, "w", 0o600);
+    try {
+        fs.fchmodSync(fileDescriptor, 0o600);
+        fs.writeFileSync(
+            fileDescriptor,
+            JSON.stringify(config, null, 2),
+            "utf-8",
+        );
+    } finally {
+        fs.closeSync(fileDescriptor);
+    }
     console.error(`[MCP] Config written to ${MCP_CONFIG_PATH}`);
 }
 

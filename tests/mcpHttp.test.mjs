@@ -105,8 +105,11 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
     );
     const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
     const apiKey = "test-morpheus-api-key";
+    const configPath = path.join(workingDir, ".mcp-config.json");
 
     try {
+        fs.writeFileSync(configPath, "stale config", { mode: 0o666 });
+        fs.chmodSync(configPath, 0o666);
         const result = spawnSync(
             process.execPath,
             [
@@ -128,9 +131,7 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
 
         assert.equal(result.status, 0, result.stderr);
         assert.doesNotMatch(result.stderr, new RegExp(apiKey));
-        const config = JSON.parse(
-            fs.readFileSync(path.join(workingDir, ".mcp-config.json"), "utf8"),
-        );
+        const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
         assert.deepEqual(config.mcpServers.morpheus, {
             type: "http",
             url: "http://morpheus_bot_prod:5268/api/mcp",
@@ -138,6 +139,9 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
                 Authorization: `Bearer ${apiKey}`,
             },
         });
+        if (process.platform !== "win32") {
+            assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
+        }
     } finally {
         fs.rmSync(workingDir, { recursive: true, force: true });
     }

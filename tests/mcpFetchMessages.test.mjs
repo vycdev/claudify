@@ -94,6 +94,54 @@ test("fetch-messages advertises and enforces its link limit", async (t) => {
     );
 });
 
+test("fetch-messages bounds large responses in requested order", async (t) => {
+    const channel = Object.create(TextChannel.prototype);
+    Object.defineProperties(channel, {
+        name: { value: "general" },
+        guild: {
+            value: {
+                id: "111111111111111111",
+                name: "Expected Server",
+            },
+        },
+        messages: {
+            value: {
+                fetch: async (id) => ({
+                    id,
+                    author: { tag: "user#0001" },
+                    content: `${id === "300000000000000000" ? "first-marker" : id === "300000000000000099" ? "last-marker" : "message"}-${"x".repeat(1800)}`,
+                    createdAt: new Date("2026-08-01T00:00:00.000Z"),
+                    attachments: new Map(),
+                    embeds: [],
+                }),
+            },
+        },
+    });
+
+    const originalFetch = discordClient.channels.fetch;
+    discordClient.channels.fetch = async () => channel;
+    try {
+        const client = await createTestClient(t);
+        const links = Array.from(
+            { length: 100 },
+            (_, index) =>
+                `https://discord.com/channels/111111111111111111/222222222222222222/${300000000000000000n + BigInt(index)}`,
+        );
+        const response = await client.callTool({
+            name: "fetch-messages",
+            arguments: { links },
+        });
+        const text = response.content[0].text;
+
+        assert.ok(text.length <= 120000);
+        assert.match(text, /first-marker/);
+        assert.doesNotMatch(text, /last-marker/);
+        assert.match(text, /truncated/i);
+    } finally {
+        discordClient.channels.fetch = originalFetch;
+    }
+});
+
 test("fetch-messages still reports malformed string links per item", async (t) => {
     const client = await createTestClient(t);
 

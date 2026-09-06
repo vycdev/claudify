@@ -88,12 +88,12 @@ function readPendingMetadata(text: string): {
     };
 }
 
-interface ReadableHistoryFile {
+interface StoredHistoryFile {
     displayName: string;
+    filePath: string;
+    directory: string;
     channelId: string | undefined;
     channelName: string | undefined;
-    date: string | undefined;
-    text: string;
 }
 
 function readStoredHistoryFile(
@@ -212,6 +212,42 @@ function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
     }
 
     return renderReadMessagesResponse(selected, true);
+}
+
+function renderFetchMessagesResponse(
+    entries: ReadMessageEntry[],
+    omitted: number,
+): string {
+    const hint = entries.some((entry) => entry.images?.length)
+        ? READ_MESSAGES_RESPONSE_HINT
+        : "";
+    const note = omitted > 0
+        ? `\n\n[Fetch-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; ${omitted} later result(s) omitted.]`
+        : "";
+    return JSON.stringify(entries, null, 2) + hint + note;
+}
+
+function boundFetchMessagesResponse(entries: ReadMessageEntry[]): string {
+    const full = renderFetchMessagesResponse(entries, 0);
+    if (full.length <= MCP_READ_MESSAGES_MAX_CHARS) return full;
+
+    const selected: ReadMessageEntry[] = [];
+    for (const entry of entries) {
+        const candidate = [...selected, entry];
+        const omitted = entries.length - candidate.length;
+        if (
+            renderFetchMessagesResponse(candidate, omitted).length
+            > MCP_READ_MESSAGES_MAX_CHARS
+        ) {
+            break;
+        }
+        selected.push(entry);
+    }
+
+    return renderFetchMessagesResponse(
+        selected,
+        entries.length - selected.length,
+    );
 }
 
 const ReadMessagesSchema = z.object({
@@ -518,7 +554,7 @@ export function createMcpServer(): Server {
                             "_",
                         )
                         : undefined;
-                    let files: ReadableHistoryFile[] = [];
+                    let files: StoredHistoryFile[] = [];
                     for (const entry of fs.readdirSync(dir, {
                         withFileTypes: true,
                     })) {
@@ -526,20 +562,15 @@ export function createMcpServer(): Server {
                             continue;
                         }
                         const filePath = path.join(dir, entry.name);
-                        const text = readStoredHistoryFile(filePath, dir);
-                        if (text === undefined) continue;
-                        const pendingMetadata = type === "pending"
-                            ? readPendingMetadata(text)
-                            : undefined;
                         files.push({
                             displayName: entry.name,
-                            channelId: pendingMetadata?.channelId,
+                            filePath,
+                            directory: dir,
+                            channelId: undefined,
                             channelName:
                                 type === "history"
                                     ? getLegacyHistoryChannel(entry.name)
-                                    : pendingMetadata?.channelName,
-                            date: pendingMetadata?.date,
-                            text,
+                                    : undefined,
                         });
                     }
 
@@ -555,20 +586,15 @@ export function createMcpServer(): Server {
                                 HISTORY_V2_DIR,
                                 entry.name,
                             );
-                            const text = readStoredHistoryFile(
-                                filePath,
-                                HISTORY_V2_DIR,
-                            );
-                            if (text === undefined) continue;
                             const parsed = parseChannelHistoryFileName(
                                 entry.name,
                             );
                             files.push({
                                 displayName: `v2/${entry.name}`,
+                                filePath,
+                                directory: HISTORY_V2_DIR,
                                 channelId: parsed?.channelId,
                                 channelName: parsed?.channelName,
-                                date: undefined,
-                                text,
                             });
                         }
                         files.sort((left, right) =>
@@ -577,57 +603,74 @@ export function createMcpServer(): Server {
                                 right.displayName,
                             ),
                         );
-                    }
-
-                    if (safeChannel) {
-                        files = files.filter((file) =>
-                            file.channelId !== undefined ||
-                            file.channelName !== undefined
-                                ? file.channelId === safeChannel ||
-                                  file.channelName === safeChannel
-                                : type === "history"
-                                  ? file.channelName === safeChannel
-                                  : file.displayName.startsWith(`${safeChannel}_`),
+                    } else {
+                        files.sort((left, right) =>
+                            left.displayName.localeCompare(right.displayName),
                         );
                     }
-                    if (date) {
+
+                    // History metadata is encoded in filenames. Do not read
+                    // unrelated bodies merely to select a channel or date.
+                    if (type === "history" && safeChannel) {
                         files = files.filter((file) =>
-                            type === "pending"
-                                ? file.date === date
-                                : file.displayName.endsWith(`_${date}.txt`),
+                            file.channelId === safeChannel ||
+                            file.channelName === safeChannel,
+                        );
+                    }
+                    if (type === "history" && date) {
+                        files = files.filter((file) =>
+                            file.displayName.endsWith(`_${date}.txt`),
                         );
                     }
 
                     const searchNormalized = search?.normalize("NFC").toLowerCase();
-                    const candidateFiles = searchNormalized
-                        ? files
-                        : files.slice(-limit);
-                    let matchingFiles = candidateFiles
-                        .map((file) => {
-                            let lines = file.text
-                                .split("\n")
-                                .filter((line) => line.trim().length > 0);
+                    const messages: string[] = [];
+                    let retainedChars = 0;
+                    for (let index = files.length - 1; index >= 0; index--) {
+                        const file = files[index];
+                        const text = readStoredHistoryFile(file.filePath, file.directory);
+                        if (text === undefined) continue;
 
-                            if (searchNormalized) {
-                                lines = lines.filter((line) =>
-                                    line
-                                        .normalize("NFC")
-                                        .toLowerCase()
-                                        .includes(searchNormalized),
-                                );
+                        // Pending metadata and returned content must come from
+                        // the same verified snapshot, including legacy headers.
+                        if (type === "pending") {
+                            const metadata = readPendingMetadata(text);
+                            if (safeChannel) {
+                                const matches = metadata.channelId !== undefined ||
+                                        metadata.channelName !== undefined
+                                    ? metadata.channelId === safeChannel ||
+                                      metadata.channelName === safeChannel
+                                    : file.displayName.startsWith(`${safeChannel}_`);
+                                if (!matches) continue;
                             }
+                            if (date && metadata.date !== date) continue;
+                        }
 
-                            return { file: file.displayName, lines };
-                        })
-                        .filter(({ lines }) =>
-                            !searchNormalized || lines.length > 0,
-                        );
+                        let lines = text.split("\n")
+                            .filter((line) => line.trim().length > 0);
+                        if (searchNormalized) {
+                            lines = lines.filter((line) =>
+                                line.normalize("NFC").toLowerCase().includes(searchNormalized),
+                            );
+                            if (lines.length === 0) continue;
+                        }
 
-                    if (searchNormalized) {
-                        matchingFiles = matchingFiles.slice(-limit);
+                        const omitted = Math.max(0, lines.length - maxLines);
+                        const selected = lines.slice(-maxLines);
+                        const note = omitted > 0
+                            ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
+                            : ` (${selected.length} matching lines)`;
+                        const rendered = `=== ${file.displayName}${note} ===\n${selected.join("\n")}`;
+                        // Preserve enough overflow for boundHistoryResponse to
+                        // report truncation, without retaining entire archives.
+                        const message = takeUtf16Suffix(rendered, MCP_HISTORY_MAX_CHARS + 2);
+                        retainedChars += message.length +
+                            (messages.length ? HISTORY_RESPONSE_SEPARATOR.length : 0);
+                        messages.push(message);
+                        if (messages.length >= limit || retainedChars > MCP_HISTORY_MAX_CHARS) break;
                     }
 
-                    if (matchingFiles.length === 0)
+                    if (messages.length === 0)
                         return {
                             content: [
                                 {
@@ -637,28 +680,18 @@ export function createMcpServer(): Server {
                             ],
                         };
 
-                    const messages = matchingFiles.map(({ file, lines }) => {
-                        const omitted = Math.max(0, lines.length - maxLines);
-                        const selected = lines.slice(-maxLines);
-                        const note = omitted > 0
-                            ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
-                            : ` (${selected.length} matching lines)`;
-
-                        return `=== ${file}${note} ===\n${selected.join("\n")}`;
-                    });
-
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: boundHistoryResponse(messages),
+                                text: boundHistoryResponse(messages.reverse()),
                             },
                         ],
                     };
                 }
                 case "fetch-messages": {
                     const { links } = FetchMessagesSchema.parse(args);
-                    const results = [];
+                    const results: ReadMessageEntry[] = [];
                     for (const link of links) {
                         const parsedLink = parseDiscordMessageLink(link);
                         if (!parsedLink) {
@@ -687,7 +720,7 @@ export function createMcpServer(): Server {
                                 continue;
                             }
                             const msg = await channel.messages.fetch(messageId);
-                            const entry: any = {
+                            const entry: ReadMessageEntry = {
                                 link,
                                 id: msg.id,
                                 channel: `#${channel.name}`,
@@ -732,15 +765,11 @@ export function createMcpServer(): Server {
                             });
                         }
                     }
-                    const resultText = JSON.stringify(results, null, 2);
-                    const hasImages = results.some(
-                        (r: any) => r.images?.length,
-                    );
-                    const hint = hasImages
-                        ? "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above."
-                        : "";
                     return {
-                        content: [{ type: "text", text: resultText + hint }],
+                        content: [{
+                            type: "text",
+                            text: boundFetchMessagesResponse(results),
+                        }],
                     };
                 }
                 case "read-messages": {
@@ -749,7 +778,9 @@ export function createMcpServer(): Server {
                     const channel = await findChannel(channelIdentifier, server);
                     const messages = await channel.messages.fetch({ limit });
                     const formatted: ReadMessageEntry[] = [];
-                    for (const msg of messages.values()) {
+                    // Discord returns fetched messages newest-first. Render them in
+                    // chronological order so response truncation drops the oldest.
+                    for (const msg of Array.from(messages.values()).reverse()) {
                         const entry: ReadMessageEntry = {
                             id: msg.id,
                             channel: `#${channel.name}`,

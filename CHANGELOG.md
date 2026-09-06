@@ -12,7 +12,10 @@
 
 ### Fixed
 
-- Read MCP saved-history files through verified descriptors so path swaps cannot expose symbolic-link targets.
+- Read MCP saved-history files through verified descriptors, filtering candidates before reading and stopping once the newest requested results fill the response.
+- Restrict the generated MCP configuration to owner read/write permissions on POSIX systems before persisting authentication credentials.
+- Include source-backed JSON fact documents in `!storage` profile file counts.
+- Refuse to save pending Discord messages through symbolic-link destinations.
 - Protect legacy and source-backed user/server memory reads and writes from symbolic links, junctions, and path swaps.
 - Require a text response for `!ask` commands even when their prompt is phrased without a question mark.
 - Remove malformed `[REACT:]` directives from legacy Claude responses instead of sending them as Discord text.
@@ -53,7 +56,7 @@
 - Bound `!usage` ccusage subprocess lifetime so a hung usage query is terminated and reported instead of keeping the request pending.
 - Normalize whitespace and `#` display prefixes in MCP server and channel identifiers before lookup.
 - Generate daily summaries for days containing a complete single exchange.
-- Bound loaded daily summaries to the configured history recap character budget.
+- Bound the combined loaded daily summaries to the configured history recap character budget.
 - Prevent profile responses from triggering Discord mentions from stored profile text.
 - Route bot message and reaction triggers from Discord threads through the same request handling as regular text channels.
 - Prevent mixed reaction replies from narrating the bot's internal choice to react while preserving natural reaction-plus-text responses.

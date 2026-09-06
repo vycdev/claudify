@@ -44,7 +44,7 @@ test("bounds read-messages responses while retaining the newest messages", async
                 createdAt: new Date(Date.UTC(2026, 7, 1, index, 0)),
                 attachments: new Map(),
             }];
-        }),
+        }).reverse(),
     );
     const channel = Object.create(TextChannel.prototype);
     Object.defineProperties(channel, {

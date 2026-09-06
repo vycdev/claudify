@@ -4,13 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("storage statistics ignore symlinked files and directories", async (t) => {
+test("storage statistics count persisted documents and ignore symlinks", async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-storage-"));
     const storageDir = path.join(root, "storage");
     const externalDir = path.join(root, "external");
     fs.mkdirSync(storageDir);
     fs.mkdirSync(externalDir);
     fs.writeFileSync(path.join(storageDir, "inside.txt"), "inside", "utf8");
+    fs.writeFileSync(path.join(storageDir, "facts.json"), "{}", "utf8");
     fs.writeFileSync(path.join(storageDir, "inside.bin"), "bin", "utf8");
     fs.writeFileSync(path.join(externalDir, "outside.txt"), "outside", "utf8");
     fs.symlinkSync(
@@ -26,9 +27,12 @@ test("storage statistics ignore symlinked files and directories", async (t) => {
     );
 
     assert.equal(countStorageFiles(storageDir), 1);
+    assert.equal(countStorageFiles(storageDir, [".txt", ".json"]), 2);
     assert.equal(
         getStorageDirectorySize(storageDir),
-        Buffer.byteLength("inside") + Buffer.byteLength("bin"),
+        Buffer.byteLength("inside") +
+            Buffer.byteLength("{}") +
+            Buffer.byteLength("bin"),
     );
     assert.equal(countStorageFiles(path.join(storageDir, "linked-directory")), 0);
     assert.equal(
