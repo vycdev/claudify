@@ -14,6 +14,7 @@ import {
     MCP_FETCH_MESSAGES_MAX_LINKS,
     MCP_READ_MESSAGES_MAX_CHARS,
     MCP_HISTORY_MAX_CHARS,
+    MESSAGES_DIR,
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
@@ -28,6 +29,7 @@ import {
     isCalendarDate,
 } from "./historyFiles.js";
 import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
+import { readVerifiedUtf8File } from "../storage/safeRead.js";
 
 const ReactToMessageSchema = z.object({
     server: z
@@ -55,12 +57,12 @@ function isWithinDiscordMessageLimit(message: string): boolean {
     return true;
 }
 
-function readPendingMetadata(filePath: string): {
+function readPendingMetadata(text: string): {
     channelId: string | undefined;
     channelName: string | undefined;
     date: string | undefined;
 } {
-    const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+    const lines = text.split("\n");
     const separatorIndex = lines.indexOf("---");
     const headerLines = lines.slice(0, separatorIndex === -1 ? 4 : separatorIndex);
     const channelLine = headerLines.find((line) => line.startsWith("Channel: #"));
@@ -84,6 +86,26 @@ function readPendingMetadata(filePath: string): {
                 ? timestamp.toISOString().slice(0, 10)
                 : undefined,
     };
+}
+
+interface StoredHistoryFile {
+    displayName: string;
+    filePath: string;
+    directory: string;
+    channelId: string | undefined;
+    channelName: string | undefined;
+}
+
+function readStoredHistoryFile(
+    filePath: string,
+    expectedDirectory: string,
+): string | undefined {
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        expectedDirectory,
+    );
+    return result.state === "valid" ? result.text : undefined;
 }
 
 const HISTORY_RESPONSE_SEPARATOR = "\n\n===\n\n";
@@ -532,112 +554,123 @@ export function createMcpServer(): Server {
                             "_",
                         )
                         : undefined;
-                    let files = fs
-                        .readdirSync(dir, { withFileTypes: true })
-                        .filter(
-                            (entry) =>
-                                entry.isFile() && entry.name.endsWith(".txt"),
-                        )
-                        .map((entry) => {
-                            const filePath = path.join(dir, entry.name);
-                            const pendingMetadata =
-                                type === "pending"
-                                    ? readPendingMetadata(filePath)
-                                    : undefined;
-                            return {
-                                displayName: entry.name,
-                                filePath,
-                                channelId: pendingMetadata?.channelId,
-                                channelName:
-                                    type === "history"
-                                        ? getLegacyHistoryChannel(entry.name)
-                                        : pendingMetadata?.channelName,
-                                date: pendingMetadata?.date,
-                            };
+                    let files: StoredHistoryFile[] = [];
+                    for (const entry of fs.readdirSync(dir, {
+                        withFileTypes: true,
+                    })) {
+                        if (!entry.isFile() || !entry.name.endsWith(".txt")) {
+                            continue;
+                        }
+                        const filePath = path.join(dir, entry.name);
+                        files.push({
+                            displayName: entry.name,
+                            filePath,
+                            directory: dir,
+                            channelId: undefined,
+                            channelName:
+                                type === "history"
+                                    ? getLegacyHistoryChannel(entry.name)
+                                    : undefined,
                         });
+                    }
 
                     if (type === "history") {
-                        const channelFiles = fs
-                            .readdirSync(HISTORY_V2_DIR, { withFileTypes: true })
-                            .filter(
-                                (entry) =>
-                                    entry.isFile() &&
-                                    entry.name.endsWith(".txt"),
-                            )
-                            .map((entry) => {
-                                const parsed = parseChannelHistoryFileName(
-                                    entry.name,
-                                );
-                                return {
-                                    displayName: `v2/${entry.name}`,
-                                    filePath: path.join(
-                                        HISTORY_V2_DIR,
-                                        entry.name,
-                                    ),
-                                    channelId: parsed?.channelId,
-                                    channelName: parsed?.channelName,
-                                    date: undefined,
-                                };
+                        for (const entry of fs.readdirSync(HISTORY_V2_DIR, {
+                            withFileTypes: true,
+                        })) {
+                            if (
+                                !entry.isFile()
+                                || !entry.name.endsWith(".txt")
+                            ) continue;
+                            const filePath = path.join(
+                                HISTORY_V2_DIR,
+                                entry.name,
+                            );
+                            const parsed = parseChannelHistoryFileName(
+                                entry.name,
+                            );
+                            files.push({
+                                displayName: `v2/${entry.name}`,
+                                filePath,
+                                directory: HISTORY_V2_DIR,
+                                channelId: parsed?.channelId,
+                                channelName: parsed?.channelName,
                             });
-                        files.push(...channelFiles);
+                        }
                         files.sort((left, right) =>
                             compareHistoryFilenames(
                                 left.displayName,
                                 right.displayName,
                             ),
                         );
-                    }
-
-                    if (safeChannel) {
-                        files = files.filter((file) =>
-                            file.channelId !== undefined ||
-                            file.channelName !== undefined
-                                ? file.channelId === safeChannel ||
-                                  file.channelName === safeChannel
-                                : type === "history"
-                                  ? file.channelName === safeChannel
-                                  : file.displayName.startsWith(`${safeChannel}_`),
+                    } else {
+                        files.sort((left, right) =>
+                            left.displayName.localeCompare(right.displayName),
                         );
                     }
-                    if (date) {
+
+                    // History metadata is encoded in filenames. Do not read
+                    // unrelated bodies merely to select a channel or date.
+                    if (type === "history" && safeChannel) {
                         files = files.filter((file) =>
-                            type === "pending"
-                                ? file.date === date
-                                : file.displayName.endsWith(`_${date}.txt`),
+                            file.channelId === safeChannel ||
+                            file.channelName === safeChannel,
+                        );
+                    }
+                    if (type === "history" && date) {
+                        files = files.filter((file) =>
+                            file.displayName.endsWith(`_${date}.txt`),
                         );
                     }
 
                     const searchNormalized = search?.normalize("NFC").toLowerCase();
-                    const candidateFiles = searchNormalized
-                        ? files
-                        : files.slice(-limit);
-                    let matchingFiles = candidateFiles
-                        .map((file) => {
-                            let lines = fs
-                                .readFileSync(file.filePath, "utf-8")
-                                .split("\n")
-                                .filter((line) => line.trim().length > 0);
+                    const messages: string[] = [];
+                    let retainedChars = 0;
+                    for (let index = files.length - 1; index >= 0; index--) {
+                        const file = files[index];
+                        const text = readStoredHistoryFile(file.filePath, file.directory);
+                        if (text === undefined) continue;
 
-                            if (searchNormalized) {
-                                lines = lines.filter((line) =>
-                                    line
-                                        .normalize("NFC")
-                                        .toLowerCase()
-                                        .includes(searchNormalized),
-                                );
+                        // Pending metadata and returned content must come from
+                        // the same verified snapshot, including legacy headers.
+                        if (type === "pending") {
+                            const metadata = readPendingMetadata(text);
+                            if (safeChannel) {
+                                const matches = metadata.channelId !== undefined ||
+                                        metadata.channelName !== undefined
+                                    ? metadata.channelId === safeChannel ||
+                                      metadata.channelName === safeChannel
+                                    : file.displayName.startsWith(`${safeChannel}_`);
+                                if (!matches) continue;
                             }
+                            if (date && metadata.date !== date) continue;
+                        }
 
-                            return { file: file.displayName, lines };
-                        })
-                        .filter(({ lines }) =>
-                            !searchNormalized || lines.length > 0,
-                        );
+                        let lines = text.split("\n")
+                            .filter((line) => line.trim().length > 0);
+                        if (searchNormalized) {
+                            lines = lines.filter((line) =>
+                                line.normalize("NFC").toLowerCase().includes(searchNormalized),
+                            );
+                            if (lines.length === 0) continue;
+                        }
 
-                    if (searchNormalized) {
-                        matchingFiles = matchingFiles.slice(-limit);
+                        const omitted = Math.max(0, lines.length - maxLines);
+                        const selected = lines.slice(-maxLines);
+                        const note = omitted > 0
+                            ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
+                            : ` (${selected.length} matching lines)`;
+                        const rendered = `=== ${file.displayName}${note} ===\n${selected.join("\n")}`;
+                        // Preserve enough overflow for boundHistoryResponse to
+                        // report truncation, without retaining entire archives.
+                        const message = takeUtf16Suffix(rendered, MCP_HISTORY_MAX_CHARS + 2);
+                        retainedChars += message.length +
+                            (messages.length ? HISTORY_RESPONSE_SEPARATOR.length : 0);
+                        messages.push(message);
+                        if (messages.length >= limit || retainedChars > MCP_HISTORY_MAX_CHARS) break;
                     }
 
-                    if (matchingFiles.length === 0)
+                    if (messages.length === 0)
                         return {
                             content: [
                                 {
@@ -647,21 +680,11 @@ export function createMcpServer(): Server {
                             ],
                         };
 
-                    const messages = matchingFiles.map(({ file, lines }) => {
-                        const omitted = Math.max(0, lines.length - maxLines);
-                        const selected = lines.slice(-maxLines);
-                        const note = omitted > 0
-                            ? ` (${selected.length} of ${lines.length} matching lines; ${omitted} older omitted)`
-                            : ` (${selected.length} matching lines)`;
-
-                        return `=== ${file}${note} ===\n${selected.join("\n")}`;
-                    });
-
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: boundHistoryResponse(messages),
+                                text: boundHistoryResponse(messages.reverse()),
                             },
                         ],
                     };
