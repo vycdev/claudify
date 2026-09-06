@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Restrict the generated MCP configuration to owner read/write permissions on POSIX systems before persisting authentication credentials.
 - Include source-backed JSON fact documents in `!storage` profile file counts.
 - Refuse to save pending Discord messages through symbolic-link destinations.
 - Protect legacy and source-backed user/server memory reads and writes from symbolic links, junctions, and path swaps.
