@@ -139,7 +139,9 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
                 Authorization: `Bearer ${apiKey}`,
             },
         });
-        assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
+        if (process.platform !== "win32") {
+            assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
+        }
     } finally {
         fs.rmSync(workingDir, { recursive: true, force: true });
     }

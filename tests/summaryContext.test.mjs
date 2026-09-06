@@ -49,3 +49,20 @@ test("loaded daily summaries do not split surrogate pairs at the budget", () => 
     assert.equal(loaded.endsWith("\uD83D"), false);
     assert.doesNotMatch(loaded, /trailing data/);
 });
+
+test("combined daily summaries stay within the configured recap budget", () => {
+    const channelId = "combined-summary-channel";
+    for (let daysAgo = 1; daysAgo <= 2; daysAgo++) {
+        const date = new Date(Date.now() - daysAgo * 86400000);
+        fs.writeFileSync(
+            getSummaryPath(channelId, date, "general"),
+            `${daysAgo === 1 ? "newest" : "older"}-${"x".repeat(60)}`,
+            "utf8",
+        );
+    }
+
+    const loaded = loadRecentSummaries(channelId, 2, "general");
+
+    assert.ok(loaded.length <= 80);
+    assert.match(loaded, /newest/);
+});

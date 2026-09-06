@@ -59,6 +59,7 @@ export function loadRecentSummaries(
     channelName: string = "channel",
 ): string {
     const summaries: string[] = [];
+    let remainingChars = HISTORY_RECAP_MAX_CHARS;
     for (let i = 1; i <= days; i++) {
         const date = new Date(Date.now() - i * 86400000);
         const summaryPath = getSummaryPath(channelId, date, channelName);
@@ -66,13 +67,20 @@ export function loadRecentSummaries(
             const summary = fs
                 .readFileSync(summaryPath, "utf-8")
                 .trim();
-            const boundedSummary = truncateUtf16(
-                summary,
-                HISTORY_RECAP_MAX_CHARS,
-            );
-            if (!boundedSummary) continue;
+            if (!summary) continue;
+
             const dateStr = date.toISOString().split("T")[0];
-            summaries.push(`[${dateStr}] ${boundedSummary}`);
+            const prefix = `[${dateStr}] `;
+            const separatorLength = summaries.length > 0 ? 2 : 0;
+            const contentBudget =
+                remainingChars - prefix.length - separatorLength;
+            if (contentBudget <= 0) break;
+
+            const boundedSummary = truncateUtf16(summary, contentBudget);
+            if (!boundedSummary) continue;
+            summaries.push(`${prefix}${boundedSummary}`);
+            remainingChars -=
+                prefix.length + boundedSummary.length + separatorLength;
         }
     }
     return summaries.reverse().join("\n\n");
