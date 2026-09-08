@@ -10,6 +10,9 @@ import {
 } from "../config.js";
 import { createMcpServer } from "./server.js";
 
+const NO_FOLLOW_FLAG =
+    typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
+
 const ALLOWED_ORIGINS = new Set([
     `http://localhost:${MCP_PORT}`,
     `http://127.0.0.1:${MCP_PORT}`,
@@ -109,7 +112,22 @@ export function writeMcpConfig() {
     const config = {
         mcpServers,
     };
-    const fileDescriptor = fs.openSync(MCP_CONFIG_PATH, "w", 0o600);
+    let fileDescriptor: number;
+    try {
+        fileDescriptor = fs.openSync(
+            MCP_CONFIG_PATH,
+            fs.constants.O_WRONLY
+                | fs.constants.O_CREAT
+                | fs.constants.O_TRUNC
+                | NO_FOLLOW_FLAG,
+            0o600,
+        );
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+            throw new Error("MCP config path must not be a symbolic link");
+        }
+        throw error;
+    }
     try {
         fs.fchmodSync(fileDescriptor, 0o600);
         fs.writeFileSync(

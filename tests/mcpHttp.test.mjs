@@ -147,6 +147,44 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
     }
 });
 
+test("generated MCP config does not follow a symbolic-link destination", () => {
+    const workingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-mcp-config-symlink-"),
+    );
+    const victimPath = path.join(workingDir, "victim.txt");
+    const configPath = path.join(workingDir, ".mcp-config.json");
+    const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+
+    try {
+        fs.writeFileSync(victimPath, "DO NOT OVERWRITE");
+        fs.symlinkSync(victimPath, configPath);
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ],
+            {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: path.join(workingDir, "messages"),
+                    MORPHEUS_MCP_URL: "",
+                    MORPHEUS_MCP_API_KEY: "",
+                },
+            },
+        );
+
+        assert.notEqual(result.status, 0);
+        assert.equal(fs.readFileSync(victimPath, "utf8"), "DO NOT OVERWRITE");
+        assert.equal(fs.lstatSync(configPath).isSymbolicLink(), true);
+    } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+    }
+});
+
 test("MCP HTTP requests are validated without stopping the server", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-http-"),
