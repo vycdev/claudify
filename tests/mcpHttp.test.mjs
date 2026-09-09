@@ -147,6 +147,96 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
     }
 });
 
+function assertConfigSymlinkProtection(t, stripNoFollow) {
+    const workingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-mcp-config-symlink-"),
+    );
+    const victimPath = path.join(workingDir, "victim.txt");
+    const configPath = path.join(workingDir, ".mcp-config.json");
+    const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+    const stripFlag = stripNoFollow
+        ? `import fs from "node:fs"; const originalOpen = fs.openSync; fs.openSync = (file, flags, ...args) => originalOpen(file, typeof flags === "number" ? flags & ~(fs.constants.O_NOFOLLOW || 0) : flags, ...args);`
+        : "";
+
+    try {
+        fs.writeFileSync(victimPath, "DO NOT OVERWRITE");
+        try {
+            fs.symlinkSync(victimPath, configPath);
+        } catch (error) {
+            if (process.platform === "win32" && error.code === "EPERM") {
+                t.skip("Creating file symlinks requires Windows Developer Mode or elevation");
+                return;
+            }
+            throw error;
+        }
+        const result = spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `${stripFlag} const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ],
+            {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    MESSAGES_DIR: path.join(workingDir, "messages"),
+                    MORPHEUS_MCP_URL: "",
+                    MORPHEUS_MCP_API_KEY: "",
+                },
+            },
+        );
+
+        assert.notEqual(result.status, 0);
+        assert.equal(fs.readFileSync(victimPath, "utf8"), "DO NOT OVERWRITE");
+        assert.equal(fs.lstatSync(configPath).isSymbolicLink(), true);
+    } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+    }
+}
+for (const stripNoFollow of [false, true]) {
+    test(`generated MCP config does not follow a symbolic-link destination (no-follow unavailable: ${stripNoFollow})`, (t) => {
+        assertConfigSymlinkProtection(t, stripNoFollow);
+    });
+}
+
+for (const scenario of ["failed-write", "hard-link"]) {
+    test(`atomic MCP config preserves existing data: ${scenario}`, () => {
+        const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-config-atomic-"));
+        const configPath = path.join(workingDir, ".mcp-config.json");
+        const victimPath = path.join(workingDir, "victim.txt");
+        const moduleUrl = new URL("../build/mcp/http.js", import.meta.url).href;
+        try {
+            fs.writeFileSync(victimPath, "DO NOT OVERWRITE");
+            if (scenario === "hard-link") fs.linkSync(victimPath, configPath);
+            else fs.writeFileSync(configPath, "PREVIOUS CONFIG");
+            const patch = scenario === "failed-write"
+                ? `import fs from "node:fs"; const originalWrite = fs.writeFileSync; fs.writeFileSync = (file, ...args) => { if (typeof file === "number") throw new Error("simulated write failure"); return originalWrite(file, ...args); };`
+                : "";
+            const result = spawnSync(process.execPath, ["--input-type=module", "--eval",
+                `${patch} const { writeMcpConfig } = await import(${JSON.stringify(moduleUrl)}); writeMcpConfig();`,
+            ], {
+                cwd: workingDir,
+                encoding: "utf8",
+                env: { ...process.env, MESSAGES_DIR: path.join(workingDir, "messages"),
+                    MORPHEUS_MCP_URL: "", MORPHEUS_MCP_API_KEY: "" },
+            });
+            if (scenario === "failed-write") {
+                assert.notEqual(result.status, 0);
+                assert.equal(fs.readFileSync(configPath, "utf8"), "PREVIOUS CONFIG");
+            } else {
+                assert.equal(result.status, 0, result.stderr);
+                assert.ok(JSON.parse(fs.readFileSync(configPath, "utf8")).mcpServers.discord);
+            }
+            assert.equal(fs.readFileSync(victimPath, "utf8"), "DO NOT OVERWRITE");
+            assert.deepEqual(fs.readdirSync(workingDir).filter(name => name.startsWith(".mcp-config.json.tmp-")), []);
+        } finally {
+            fs.rmSync(workingDir, { recursive: true, force: true });
+        }
+    });
+}
+
 test("MCP HTTP requests are validated without stopping the server", async (t) => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-http-"),

@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Atomically write private MCP configuration without following symbolic-link destinations, including platforms without `O_NOFOLLOW`.
 - Honor small configured MCP live and fetched-message response limits even when only a truncation notice fits.
 - Read MCP saved-history files through verified descriptors, filtering candidates before reading and stopping once the newest requested results fill the response.
 - Restrict the generated MCP configuration to owner read/write permissions on POSIX systems before persisting authentication credentials.
