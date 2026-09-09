@@ -1,8 +1,8 @@
 import path from "path";
 import { MESSAGES_DIR, RESPONSE_EVENTS_DIR } from "../config.js";
 import {
+    appendVerifiedUtf8File,
     readVerifiedUtf8File,
-    writeVerifiedUtf8File,
 } from "./safeRead.js";
 
 export type ResponseEventReason =
@@ -60,18 +60,9 @@ export function appendResponseEvent(event: ResponseEvent): void {
         event.channelId,
         new Date(event.createdAt),
     );
-    const existing = readVerifiedUtf8File(
+    if (!appendVerifiedUtf8File(
         filePath,
-        MESSAGES_DIR,
-        RESPONSE_EVENTS_DIR,
-    );
-    if (existing.state === "unsafe") {
-        throw new Error("Could not safely read response events");
-    }
-    const text = `${existing.state === "valid" ? existing.text : ""}${JSON.stringify(event)}\n`;
-    if (!writeVerifiedUtf8File(
-        filePath,
-        text,
+        `${JSON.stringify(event)}\n`,
         MESSAGES_DIR,
         RESPONSE_EVENTS_DIR,
     )) {
