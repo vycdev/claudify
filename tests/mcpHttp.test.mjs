@@ -147,7 +147,7 @@ test("generated MCP config includes authenticated Morpheus HTTP transport", () =
     }
 });
 
-function assertConfigSymlinkProtection(stripNoFollow) {
+function assertConfigSymlinkProtection(t, stripNoFollow) {
     const workingDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-mcp-config-symlink-"),
     );
@@ -160,7 +160,15 @@ function assertConfigSymlinkProtection(stripNoFollow) {
 
     try {
         fs.writeFileSync(victimPath, "DO NOT OVERWRITE");
-        fs.symlinkSync(victimPath, configPath);
+        try {
+            fs.symlinkSync(victimPath, configPath);
+        } catch (error) {
+            if (process.platform === "win32" && error.code === "EPERM") {
+                t.skip("Creating file symlinks requires Windows Developer Mode or elevation");
+                return;
+            }
+            throw error;
+        }
         const result = spawnSync(
             process.execPath,
             [
@@ -188,8 +196,8 @@ function assertConfigSymlinkProtection(stripNoFollow) {
     }
 }
 for (const stripNoFollow of [false, true]) {
-    test(`generated MCP config does not follow a symbolic-link destination (no-follow unavailable: ${stripNoFollow})`, () => {
-        assertConfigSymlinkProtection(stripNoFollow);
+    test(`generated MCP config does not follow a symbolic-link destination (no-follow unavailable: ${stripNoFollow})`, (t) => {
+        assertConfigSymlinkProtection(t, stripNoFollow);
     });
 }
 
