@@ -1,6 +1,7 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import http from "http";
 import fs from "fs";
+import { randomUUID } from "crypto";
 import {
     MCP_MAX_REQUEST_BYTES,
     MCP_PORT,
@@ -9,6 +10,9 @@ import {
     MORPHEUS_MCP_URL,
 } from "../config.js";
 import { createMcpServer } from "./server.js";
+
+const NO_FOLLOW_FLAG =
+    typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
 
 const ALLOWED_ORIGINS = new Set([
     `http://localhost:${MCP_PORT}`,
@@ -109,16 +113,47 @@ export function writeMcpConfig() {
     const config = {
         mcpServers,
     };
-    const fileDescriptor = fs.openSync(MCP_CONFIG_PATH, "w", 0o600);
     try {
+        const existing = fs.lstatSync(MCP_CONFIG_PATH);
+        if (!existing.isFile() || existing.isSymbolicLink()) {
+            throw new Error("MCP config path must be a regular file, not a symbolic link");
+        }
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+        }
+    }
+
+    // Never truncate or write through the destination itself. An exclusive
+    // sibling plus rename also protects platforms without O_NOFOLLOW and
+    // preserves existing data if writing the new configuration fails.
+    const temporaryPath = `${MCP_CONFIG_PATH}.tmp-${process.pid}-${randomUUID()}`;
+    let fileDescriptor: number | undefined;
+    let created = false;
+    try {
+        fileDescriptor = fs.openSync(
+            temporaryPath,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NO_FOLLOW_FLAG,
+            0o600,
+        );
+        created = true;
         fs.fchmodSync(fileDescriptor, 0o600);
         fs.writeFileSync(
             fileDescriptor,
             JSON.stringify(config, null, 2),
             "utf-8",
         );
-    } finally {
+        fs.fsyncSync(fileDescriptor);
         fs.closeSync(fileDescriptor);
+        fileDescriptor = undefined;
+        fs.renameSync(temporaryPath, MCP_CONFIG_PATH);
+        created = false;
+    } finally {
+        try {
+            if (fileDescriptor !== undefined) fs.closeSync(fileDescriptor);
+        } finally {
+            if (created) fs.rmSync(temporaryPath, { force: true });
+        }
     }
     console.error(`[MCP] Config written to ${MCP_CONFIG_PATH}`);
 }

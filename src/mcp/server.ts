@@ -123,6 +123,19 @@ function takeUtf16Suffix(text: string, maxChars: number): string {
     return text.slice(start);
 }
 
+function takeUtf16Prefix(text: string, maxChars: number): string {
+    let end = Math.min(text.length, maxChars);
+    if (
+        end > 0 &&
+        end < text.length &&
+        /[\uD800-\uDBFF]/.test(text[end - 1]) &&
+        /[\uDC00-\uDFFF]/.test(text[end])
+    ) {
+        end--;
+    }
+    return text.slice(0, end);
+}
+
 function boundHistoryResponse(messages: string[]): string {
     const fullLength = messages.reduce(
         (length, message) => length + message.length,
@@ -211,7 +224,10 @@ function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
         selected.unshift(entries[index]);
     }
 
-    return renderReadMessagesResponse(selected, true);
+    return takeUtf16Prefix(
+        renderReadMessagesResponse(selected, true),
+        MCP_READ_MESSAGES_MAX_CHARS,
+    );
 }
 
 function renderFetchMessagesResponse(
@@ -244,9 +260,12 @@ function boundFetchMessagesResponse(entries: ReadMessageEntry[]): string {
         selected.push(entry);
     }
 
-    return renderFetchMessagesResponse(
-        selected,
-        entries.length - selected.length,
+    return takeUtf16Prefix(
+        renderFetchMessagesResponse(
+            selected,
+            entries.length - selected.length,
+        ),
+        MCP_READ_MESSAGES_MAX_CHARS,
     );
 }
 
