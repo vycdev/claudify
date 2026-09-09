@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Protect response-event audit reads and writes from symbolic links and directory swaps.
 - Read MCP saved-history files through verified descriptors, filtering candidates before reading and stopping once the newest requested results fill the response.
 - Restrict the generated MCP configuration to owner read/write permissions on POSIX systems before persisting authentication credentials.
 - Include source-backed JSON fact documents in `!storage` profile file counts.
