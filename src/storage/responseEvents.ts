@@ -1,6 +1,9 @@
-import fs from "fs";
 import path from "path";
-import { RESPONSE_EVENTS_DIR } from "../config.js";
+import { MESSAGES_DIR, RESPONSE_EVENTS_DIR } from "../config.js";
+import {
+    appendVerifiedUtf8File,
+    readVerifiedUtf8File,
+} from "./safeRead.js";
 
 export type ResponseEventReason =
     | "answer"
@@ -53,11 +56,18 @@ export function getResponseEventsPath(
 }
 
 export function appendResponseEvent(event: ResponseEvent): void {
-    fs.appendFileSync(
-        getResponseEventsPath(event.channelId, new Date(event.createdAt)),
-        `${JSON.stringify(event)}\n`,
-        "utf8",
+    const filePath = getResponseEventsPath(
+        event.channelId,
+        new Date(event.createdAt),
     );
+    if (!appendVerifiedUtf8File(
+        filePath,
+        `${JSON.stringify(event)}\n`,
+        MESSAGES_DIR,
+        RESPONSE_EVENTS_DIR,
+    )) {
+        throw new Error("Could not safely save response event");
+    }
 }
 
 function isResponseEvent(value: unknown): value is ResponseEvent {
@@ -77,8 +87,13 @@ function isResponseEvent(value: unknown): value is ResponseEvent {
 }
 
 function readEvents(filePath: string): ResponseEvent[] {
-    if (!fs.existsSync(filePath)) return [];
-    return fs.readFileSync(filePath, "utf8")
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        RESPONSE_EVENTS_DIR,
+    );
+    if (result.state !== "valid") return [];
+    return result.text
         .split("\n")
         .filter(Boolean)
         .flatMap((line) => {

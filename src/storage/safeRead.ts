@@ -282,6 +282,91 @@ export function readVerifiedUtf8File(
     return cleanupSucceeded ? result : { state: "unsafe" };
 }
 
+/** Append without reading or replacing the accumulated file. */
+export function appendVerifiedUtf8File(
+    filePath: string,
+    text: string,
+    rootDirectory: string,
+    expectedDirectory: string,
+): boolean {
+    if (
+        comparablePath(path.dirname(filePath))
+        !== comparablePath(expectedDirectory)
+    ) return false;
+
+    const directories = openVerifiedDirectoryChain(rootDirectory, expectedDirectory);
+    if (!directories) return false;
+
+    const appendable = (stat: fs.BigIntStats): boolean => stat.isFile()
+        && !stat.isSymbolicLink()
+        && hasStableIdentity(stat)
+        // Unlike replacement, appending would also modify every hard link.
+        && stat.nlink === 1n;
+    let descriptor: number | undefined;
+    let result = false;
+    let cleanupSucceeded = true;
+    try {
+        result = (() => {
+            let pathStat: fs.BigIntStats | undefined;
+            // Another writer may create the first log between lstat and open.
+            for (let attempt = 0; attempt < 2; attempt++) {
+                pathStat = undefined;
+                try {
+                    pathStat = fs.lstatSync(filePath, { bigint: true });
+                    if (!appendable(pathStat)) return false;
+                } catch (error: unknown) {
+                    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+                }
+                if (!directoryChainIsUnchanged(directories, expectedDirectory)) return false;
+                try {
+                    descriptor = fs.openSync(
+                        filePath,
+                        fs.constants.O_WRONLY
+                            | fs.constants.O_APPEND
+                            | (fs.constants.O_NOFOLLOW ?? 0)
+                            | (fs.constants.O_NONBLOCK ?? 0)
+                            | (pathStat ? 0 : fs.constants.O_CREAT | fs.constants.O_EXCL),
+                        0o600,
+                    );
+                    break;
+                } catch (error: unknown) {
+                    if (pathStat || (error as NodeJS.ErrnoException).code !== "EEXIST") return false;
+                }
+            }
+            if (descriptor === undefined) return false;
+
+            const openedStat = fs.fstatSync(descriptor, { bigint: true });
+            const currentStat = fs.lstatSync(filePath, { bigint: true });
+            if (
+                !appendable(openedStat)
+                || !appendable(currentStat)
+                || (pathStat && !isSameFile(pathStat, openedStat))
+                || !isSameFile(currentStat, openedStat)
+                || !directoryChainIsUnchanged(directories, expectedDirectory)
+            ) return false;
+
+            // A single O_APPEND write keeps concurrent event records together.
+            // Do not retry a partial write: another writer may have appended.
+            const bytes = Buffer.from(text, "utf8");
+            if (fs.writeSync(descriptor, bytes, 0, bytes.length, null) !== bytes.length) return false;
+
+            const finalStat = fs.fstatSync(descriptor, { bigint: true });
+            const finalPathStat = fs.lstatSync(filePath, { bigint: true });
+            return appendable(finalStat)
+                && appendable(finalPathStat)
+                && isSameFile(openedStat, finalStat)
+                && isSameFile(openedStat, finalPathStat)
+                && directoryChainIsUnchanged(directories, expectedDirectory);
+        })();
+    } catch {
+        result = false;
+    } finally {
+        if (descriptor !== undefined && !closeDescriptor(descriptor)) cleanupSucceeded = false;
+        if (!closeDirectories(directories)) cleanupSucceeded = false;
+    }
+    return cleanupSucceeded && result;
+}
+
 export function writeVerifiedUtf8File(
     filePath: string,
     text: string,
