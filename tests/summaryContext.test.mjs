@@ -66,3 +66,23 @@ test("combined daily summaries stay within the configured recap budget", () => {
     assert.ok(loaded.length <= 80);
     assert.match(loaded, /newest/);
 });
+
+test("loaded daily summaries ignore symbolic-link files", () => {
+    const date = new Date(Date.now() - 3 * 86400000);
+    const summaryPath = getSummaryPath(
+        "symlink-summary-channel",
+        date,
+        "general",
+    );
+    const outsidePath = path.join(messagesDir, "outside-summary-read.txt");
+    fs.writeFileSync(outsidePath, "outside content", "utf8");
+    fs.symlinkSync(outsidePath, summaryPath);
+
+    const loaded = loadRecentSummaries(
+        "symlink-summary-channel",
+        3,
+        "general",
+    );
+
+    assert.equal(loaded, "");
+});

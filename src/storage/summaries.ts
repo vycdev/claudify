@@ -4,6 +4,7 @@ import {
     HISTORY_RECAP_MAX_CHARS,
     HISTORY_RECAP_MAX_LINES,
     HISTORY_V2_DIR,
+    MESSAGES_DIR,
     SUMMARIES_V2_DIR,
 } from "../config.js";
 import { runModel } from "../model.js";
@@ -13,6 +14,10 @@ import {
     getChannelHistoryPath,
     parseChannelHistoryFileName,
 } from "./historyPaths.js";
+import {
+    readVerifiedUtf8File,
+    writeVerifiedUtf8File,
+} from "./safeRead.js";
 
 const summariesInProgress = new Set<string>();
 
@@ -63,10 +68,13 @@ export function loadRecentSummaries(
     for (let i = 1; i <= days; i++) {
         const date = new Date(Date.now() - i * 86400000);
         const summaryPath = getSummaryPath(channelId, date, channelName);
-        if (fs.existsSync(summaryPath)) {
-            const summary = fs
-                .readFileSync(summaryPath, "utf-8")
-                .trim();
+        const summaryRead = readVerifiedUtf8File(
+            summaryPath,
+            MESSAGES_DIR,
+            SUMMARIES_V2_DIR,
+        );
+        if (summaryRead.state === "valid") {
+            const summary = summaryRead.text.trim();
             if (!summary) continue;
 
             const dateStr = date.toISOString().split("T")[0];
@@ -99,20 +107,35 @@ export async function generateDailySummary(
     const logPath = getLogPath(channelId, channelName, date);
     const summaryPath = getSummaryPath(channelId, date, channelName);
 
-    if (
-        !fs.existsSync(logPath) ||
-        fs.existsSync(summaryPath) ||
-        summariesInProgress.has(summaryPath)
-    ) {
-        return;
-    }
+    if (summariesInProgress.has(summaryPath)) return;
 
     summariesInProgress.add(summaryPath);
     try {
-        const log = fs.readFileSync(logPath, "utf-8").trim();
+        const existingSummary = readVerifiedUtf8File(
+            summaryPath,
+            MESSAGES_DIR,
+            SUMMARIES_V2_DIR,
+        );
+        if (existingSummary.state !== "missing") return;
+
+        const logRead = readVerifiedUtf8File(
+            logPath,
+            MESSAGES_DIR,
+            HISTORY_V2_DIR,
+        );
+        if (logRead.state !== "valid") return;
+
+        const log = logRead.text.trim();
         const summaryInput = trimSummaryInput(log);
         if (!summaryInput || summaryInput.split("\n").length < 2) {
-            fs.writeFileSync(summaryPath, summaryInput, "utf-8");
+            if (!writeVerifiedUtf8File(
+                summaryPath,
+                summaryInput,
+                MESSAGES_DIR,
+                SUMMARIES_V2_DIR,
+            )) {
+                console.error(`[Summary] Refused unsafe summary write: ${summaryPath}`);
+            }
             return;
         }
 
@@ -132,10 +155,20 @@ export async function generateDailySummary(
             );
 
             if (stdout.trim()) {
-                fs.writeFileSync(summaryPath, stdout.trim(), "utf-8");
-                console.error(
-                    `[Summary] Saved summary for #${channelName} on ${dateStr}`,
-                );
+                if (writeVerifiedUtf8File(
+                    summaryPath,
+                    stdout.trim(),
+                    MESSAGES_DIR,
+                    SUMMARIES_V2_DIR,
+                )) {
+                    console.error(
+                        `[Summary] Saved summary for #${channelName} on ${dateStr}`,
+                    );
+                } else {
+                    console.error(
+                        `[Summary] Refused unsafe summary write: ${summaryPath}`,
+                    );
+                }
             }
         } catch (err: any) {
             console.error(`[Summary] Failed to generate summary: ${err.message}`);

@@ -88,3 +88,25 @@ test("daily summaries include a single user-and-bot exchange", async () => {
         "A single-exchange summary",
     );
 });
+
+test("daily summary writes do not follow a destination symlink created during generation", async () => {
+    const date = new Date("2026-08-04T12:00:00Z");
+    const logPath = getDailyLogPath("channel-4", date, "general");
+    const summaryPath = getSummaryPath("channel-4", date, "general");
+    const outsidePath = path.join(messagesDir, "outside-summary.txt");
+    fs.writeFileSync(logPath, "u: q\nb: a\n", "utf8");
+    fs.writeFileSync(outsidePath, "keep me", "utf8");
+
+    await generateDailySummary(
+        "channel-4",
+        "general",
+        date,
+        async () => {
+            fs.symlinkSync(outsidePath, summaryPath);
+            return { stdout: "unsafe replacement", stderr: "" };
+        },
+    );
+
+    assert.equal(fs.readFileSync(outsidePath, "utf8"), "keep me");
+    assert.equal(fs.lstatSync(summaryPath).isSymbolicLink(), true);
+});

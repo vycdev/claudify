@@ -20,6 +20,7 @@
 - Bind failed Codex login-message cleanup to its own session and send completion notices directly to the initiating administrator, even after the command is deleted.
 - Resolve credential and message-storage ancestors before checking Codex home isolation, including symlink aliases.
 - Exclude private authentication commands and their attachments from later live/reply/reaction context, MCP retrieval, and new history writes.
+- Protect daily summary reads and writes from symbolic links and directory swaps.
 - Protect response-event audit reads and writes from symbolic links and directory swaps, while appending through verified descriptors without rereading daily logs or losing concurrent events.
 - Atomically write private MCP configuration without following symbolic-link destinations, including platforms without `O_NOFOLLOW`.
 - Honor small configured MCP live and fetched-message response limits even when only a truncation notice fits.
