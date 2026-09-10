@@ -19,8 +19,8 @@ RUN apk add --no-cache --virtual .node-pty-build-deps python3 make g++ \
     && npm ci --omit=dev \
     && apk del .node-pty-build-deps
 
-# Install Claude Code CLI for auto-response feature
-RUN npm install -g @anthropic-ai/claude-code@2.1.220
+# Install both subscription-backed CLIs. Pin the Codex app-server protocol.
+RUN npm install -g @anthropic-ai/claude-code@2.1.220 @openai/codex@0.154.0
 
 COPY --from=build /app/build ./build
 COPY prompts/ ./prompts/

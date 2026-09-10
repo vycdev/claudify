@@ -1,13 +1,14 @@
 import fs from "fs";
 import {
-    CLAUDE_WORKLOAD_CONFIG,
+    MODEL_WORKLOAD_CONFIG,
     HISTORY_RECAP_MAX_CHARS,
     HISTORY_RECAP_MAX_LINES,
     HISTORY_V2_DIR,
     MESSAGES_DIR,
     SUMMARIES_V2_DIR,
 } from "../config.js";
-import { runClaude } from "../claude.js";
+import { runModel } from "../model.js";
+import type { ModelRunner } from "../modelTypes.js";
 import { renderPrompt } from "../prompts.js";
 import {
     getChannelHistoryPath,
@@ -48,7 +49,6 @@ function trimSummaryInput(log: string): string {
 
     return selected.join("\n").trim();
 }
-type ClaudeRunner = typeof runClaude;
 
 export function getSummaryPath(
     channelId: string,
@@ -102,7 +102,7 @@ export async function generateDailySummary(
     channelId: string,
     channelName: string,
     date: Date,
-    claudeRunner: ClaudeRunner = runClaude,
+    modelRunner: ModelRunner = runModel,
 ): Promise<void> {
     const logPath = getLogPath(channelId, channelName, date);
     const summaryPath = getSummaryPath(channelId, date, channelName);
@@ -144,14 +144,14 @@ export async function generateDailySummary(
             console.error(
                 `[Summary] Generating summary for #${channelName} on ${dateStr}`,
             );
-            const { stdout } = await claudeRunner(
+            const { stdout } = await modelRunner(
                 [
                     "-p",
                     "--system-prompt",
                     renderPrompt("dailySummarySystem"),
                 ],
                 summaryInput,
-                CLAUDE_WORKLOAD_CONFIG["daily-summary"],
+                MODEL_WORKLOAD_CONFIG["daily-summary"],
             );
 
             if (stdout.trim()) {

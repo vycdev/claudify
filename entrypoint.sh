@@ -1,5 +1,9 @@
 #!/bin/sh
 
+if [ "${BOT_PROVIDER:-claude}" = "codex" ]; then
+  codex --version || exit 1
+  printf "%s\n" "[Entrypoint] Codex subscription provider selected. Use !codex auth login in an authorized admin DM if authentication is needed."
+else
 # Restore Claude config from backup if missing
 if [ ! -f /root/.claude.json ]; then
   BACKUP=$(ls -t /root/.claude/backups/.claude.json.backup.* 2>/dev/null | head -1)
@@ -25,6 +29,8 @@ if ! claude auth status >/dev/null 2>&1; then
   echo "  docker exec -it <container_name> claude auth login"
   echo "============================================"
   echo ""
+fi
+
 fi
 
 exec node build/index.js

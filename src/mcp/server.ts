@@ -18,6 +18,7 @@ import {
     PENDING_DIR,
 } from "../config.js";
 import { client } from "../discord/client.js";
+import { snapshotConversationMessage } from "../sensitiveAuth.js";
 import {
     findChannel,
     normalizeChannelIdentifier,
@@ -738,7 +739,11 @@ export function createMcpServer(): Server {
                                 });
                                 continue;
                             }
-                            const msg = await channel.messages.fetch(messageId);
+                            const msg = snapshotConversationMessage(await channel.messages.fetch(messageId));
+                            if (!msg) {
+                                results.push({ link, id: messageId, error: "Sensitive authentication message omitted" });
+                                continue;
+                            }
                             const entry: ReadMessageEntry = {
                                 link,
                                 id: msg.id,
@@ -799,7 +804,10 @@ export function createMcpServer(): Server {
                     const formatted: ReadMessageEntry[] = [];
                     // Discord returns fetched messages newest-first. Render them in
                     // chronological order so response truncation drops the oldest.
-                    for (const msg of Array.from(messages.values()).reverse()) {
+                    const snapshots = Array.from(messages.values(), snapshotConversationMessage).reverse();
+                    for (const msg of snapshots) {
+                        // Do not expose attachment metadata or download private auth images.
+                        if (!msg) continue;
                         const entry: ReadMessageEntry = {
                             id: msg.id,
                             channel: `#${channel.name}`,

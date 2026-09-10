@@ -83,10 +83,10 @@ src/
 
 - **ES Modules**: All imports use `.js` extensions (Node16 module resolution).
 - **Strict TypeScript**: `strict: true` in tsconfig. No `any` except in catch blocks.
-- **Model selection**: Every Claude CLI caller passes a typed workload to
-  `runClaude()`. `CLAUDE_WORKLOAD_CONFIG` resolves response, profile-update,
-  server-memory-update, and daily-summary settings once at startup. Workload
-  overrides inherit `BOT_MODEL`/`BOT_EFFORT` by default; do not bypass this map
+- **Model selection**: Every AI workload caller passes a typed workload to
+  `runModel()`. `MODEL_WORKLOAD_CONFIG` resolves response, profile-update,
+  server-memory-update, and daily-summary settings once at startup.
+  Claude overrides inherit `BOT_MODEL`/`BOT_EFFORT`; Codex uses `CODEX_MODEL`/`CODEX_EFFORT` and its own workload overrides. Do not bypass this map
   or re-read environment variables per request.
 - **Error handling**: Catch at boundaries (event handlers, background jobs). Log with `console.error` and prefixed tags like `[Bot]`, `[Claude CLI]`, `[Profile]`, `[Summary]`.
 - **Discord limits**: Messages max 2000 chars, 10 embeds per message. The `smartSplit()` function in `split.ts` handles splitting.
@@ -104,7 +104,7 @@ User message (trigger: !ask / @mention / reply / 🤖 reaction)
   → Build active-turn state (current message, direct reply, adjacency signals)
   → Fetch live channel context and exclude messages already in the active turn
   → Load saved history + summaries + user profile + server memory
-  → askClaude() → runClaude() → Claude CLI subprocess
+  → askClaude() → runModel() → Claude CLI or Codex app-server
   → Parse structured response envelope
   → Enforce required text and reaction target invariants
   → React and/or smartSplit() → Send text reply (chunked if needed)
@@ -127,7 +127,7 @@ HTTP POST /mcp → Parse JSON-RPC → Route to tool handler → Execute → JSON
 | `DISCORD_TOKEN` | Yes | — | Discord bot token |
 | `MESSAGES_DIR` | No | `./messages/` | Root storage directory |
 | `REQUIRED_ROLE_ID` | No | `""` (anyone) | Discord role ID for access control |
-| `AUTH_ADMIN_USER_IDS` | No | `""` (disabled) | Comma-separated Discord user IDs allowed to manage Claude CLI authentication |
+| `AUTH_ADMIN_USER_IDS` | No | `""` (disabled) | Comma-separated Discord user IDs allowed to manage Claude and Codex authentication |
 | `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` | No | `300000` | Timeout for an interactive Discord authentication session |
 | `COOLDOWN_MS` | No | `10000` | Per-user cooldown in ms |
 | `BOT_MODEL` | No | `claude-haiku-4-5` | Global Claude model fallback |
@@ -231,6 +231,15 @@ messages/
 | `node-pty` | Pseudo-terminal for interactive Claude authentication |
 | `zod` | Input validation for MCP tools |
 
+## Codex provider
+
+- `BOT_PROVIDER=codex` selects the official Codex app-server, with managed ChatGPT device authentication, never API keys. Default model: `gpt-5.6-luna`.
+- `model.ts` routes all four workloads. Preserve the legacy Claude runner seam for injected tests; Codex translates system prompts and native image inputs at the adapter boundary.
+- `codexClient.ts` owns bounded stdio JSON-RPC and a sanitized child environment. `codex.ts` validates model/effort, subscription auth, sandbox policy, and MCP result evidence. Never enable shell or interactive approval fallbacks.
+- `codexAuth.ts` owns the login lifecycle. Discord handlers in `commands/codexAuth.ts` must reject guild and unauthorized requests before touching auth. Route `!codex` before history logging.
+- Keep `CODEX_HOME` private, dedicated, and outside `MESSAGES_DIR`. Never print raw auth/server payloads or import a personal Codex config.
+- Run `node scripts/codex-smoke.mjs` with Codex CLI 0.154.0 for an unauthenticated real-protocol/MCP check. It performs no inference; live browser login and Discord delivery need separate verification.
+
 ## Docker
 
-The project includes `Dockerfile`, `docker-compose.yml`, and `entrypoint.sh` for containerized deployment. Volumes persist `messages/` data and Claude CLI auth.
+The project includes `Dockerfile`, `docker-compose.yml`, and `entrypoint.sh` for containerized deployment. Volumes persist `messages/` data, Claude CLI auth, and a separate Codex home.

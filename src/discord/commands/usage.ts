@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { BOT_PROVIDER } from "../../config.js";
 import { Message, TextChannel, EmbedBuilder } from "discord.js";
 
 export type CurrentUsagePeriodKind = "week" | "month";
@@ -395,6 +396,10 @@ export function buildCurrentPeriodUsageEmbed(
 }
 
 export async function handleUsage(msg: Message): Promise<void> {
+    if (BOT_PROVIDER === "codex") {
+        await msg.reply("Codex uses the bot's ChatGPT subscription, not API billing. Authorized admins can DM !codex usage for provider-reported limits. Historical Claude token reports are not Codex usage.");
+        return;
+    }
     const args = msg.content.trim().split(/\s+/).slice(1);
     const subcommand = args[0] || "today";
 

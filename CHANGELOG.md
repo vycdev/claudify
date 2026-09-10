@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add an opt-in Codex subscription provider with per-workload model/effort settings, private admin device-code login/logout and allowance checks, bounded app-server execution, image input, and MCP action verification. Existing Claude deployments remain the default.
 - Add persistent, authenticated Morpheus MCP configuration for Claude-powered Discord responses.
 - Add current-week and current-month usage aggregates with UTC date ranges and per-model breakdowns.
 - Add owner-only Discord slash commands for Claude CLI authentication.
@@ -12,6 +13,13 @@
 
 ### Fixed
 
+- Show every reported Codex allowance bucket, with the legacy usage response as a fallback, and accept Windows line endings in the nested security-test fixtures.
+- Run module-mocked security suites in the default test command and reject silently skipped nested test runs.
+- Enforce Codex tool restrictions with explicit no-environment threads and a tools-only MCP bridge; hidden resource operations cannot bypass the upstream boundary.
+- Snapshot Discord message content, embeds, attachments, and reply references before asynchronous processing so later auth-command edits cannot enter context or storage.
+- Bind failed Codex login-message cleanup to its own session and send completion notices directly to the initiating administrator, even after the command is deleted.
+- Resolve credential and message-storage ancestors before checking Codex home isolation, including symlink aliases.
+- Exclude private authentication commands and their attachments from later live/reply/reaction context, MCP retrieval, and new history writes.
 - Protect daily summary reads and writes from symbolic links and directory swaps.
 - Protect response-event audit reads and writes from symbolic links and directory swaps, while appending through verified descriptors without rereading daily logs or losing concurrent events.
 - Atomically write private MCP configuration without following symbolic-link destinations, including platforms without `O_NOFOLLOW`.

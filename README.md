@@ -1,6 +1,6 @@
 # Claudify
 
-An AI-powered Discord bot that uses Claude Code CLI to answer questions directly in your server. It also doubles as an MCP server, so Claude Desktop or Claude Code can read and send Discord messages.
+An AI-powered Discord bot that uses Claude Code CLI or a Codex subscription to answer questions directly in your server. It also doubles as an MCP server, so Claude Desktop or Claude Code can read and send Discord messages.
 
 ## How it works
 
@@ -21,7 +21,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 2. Set your environment variables in `docker-compose.yml`:
    - `DISCORD_TOKEN` — your bot token
    - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave as placeholder to allow everyone)
-   - `AUTH_ADMIN_USER_IDS` — comma-separated Discord user IDs allowed to manage Claude authentication (leave empty to disable)
+   - `AUTH_ADMIN_USER_IDS` — comma-separated Discord user IDs allowed to manage Claude and Codex authentication (leave empty to disable)
    - `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` — optional Discord login-session timeout (default: `300000`)
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
    - `BOT_MODEL` — global Claude model fallback for every workload (default: `claude-haiku-4-5`)
@@ -37,6 +37,138 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 ```bash
 docker compose up -d
 ```
+
+### Codex subscription provider
+
+Claude remains the default. To use Codex, change these entries in the Compose
+service's `environment` section, then rebuild and restart the service:
+
+```env
+BOT_PROVIDER=codex
+CODEX_MODEL=gpt-5.6-luna
+CODEX_EFFORT=medium
+CODEX_HOME=/codex
+AUTH_ADMIN_USER_IDS=your_discord_user_id
+```
+
+```bash
+docker compose up -d --build
+```
+
+The image includes Codex CLI **0.154.0**. For a non-Docker install, install
+`@openai/codex@0.154.0` and set the same variables in the bot's environment or
+`.env`. Outside Docker, omit `CODEX_HOME` to use `~/.claudify-codex`.
+
+**Login from Discord:**
+
+1. In ChatGPT security settings, enable device-code authentication if required
+   by your account or workspace. Your account must have access to Codex and the
+   selected model.
+2. DM the bot `!codex auth login`, or use `/codex-auth login` in a private DM.
+3. Open the official OpenAI link and enter the short code **in your browser**.
+   Only approve a login you initiated for this bot. Never paste a password,
+   API key, or OAuth token into Discord.
+4. The bot confirms completion privately after verifying ChatGPT authentication.
+   Use `!codex auth status` to check, `!codex auth cancel` to cancel your pending
+   login, or `!codex auth logout` to sign the bot out. Slash equivalents are
+   available under `/codex-auth`.
+
+Codex owns the OAuth flow, token persistence, and refresh through its official
+[app-server](https://developers.openai.com/codex/app-server/). It does not need
+an inbound callback port or a code pasted back into Discord. Login sessions
+expire after `CODEX_AUTH_LOGIN_TIMEOUT_MS`, default `900000`. Auth commands are
+intercepted before message logging, restricted to `AUTH_ADMIN_USER_IDS`, and
+rejected in guild channels. Rejected authentication commands and their attachments
+are also excluded from later conversation context and MCP message retrieval.
+Existing history files are not retroactively rewritten. An empty admin list
+disables authentication commands.
+
+This is **one shared bot account**, not a separate subscription per Discord
+member. Anyone permitted to use the bot consumes that account's allowance,
+including background profile, server-memory, and summary work. Set
+`REQUIRED_ROLE_ID` appropriately and use only an account you are authorized to
+connect. Existing in-flight work may finish after logout.
+
+`!usage` does not show Claude API-cost estimates as Codex usage. Authorized
+admins can DM `!codex usage`, or use `/codex-auth usage`, for OpenAI's current
+subscription allowance windows. These are account-wide limits, not bot-only
+historical token totals. Claudify never purchases credits or redeems banked resets.
+
+| Workload | Model override | Effort override |
+|----------|----------------|-----------------|
+| User response | `CODEX_RESPONSE_MODEL` | `CODEX_RESPONSE_EFFORT` |
+| User-profile update | `CODEX_PROFILE_MODEL` | `CODEX_PROFILE_EFFORT` |
+| Server-memory update | `CODEX_SERVER_MEMORY_MODEL` | `CODEX_SERVER_MEMORY_EFFORT` |
+| Daily summary | `CODEX_SUMMARY_MODEL` | `CODEX_SUMMARY_EFFORT` |
+
+Overrides inherit `CODEX_MODEL` and `CODEX_EFFORT` independently when blank,
+unset, or `inherit`. Codex never inherits `BOT_MODEL` or `CLAUDE_*` settings.
+Models must be explicit IDs. Claudify does not select a replacement model. If
+OpenAI reports rerouting during a turn, Claudify rejects the result without
+retrying or bypassing the reroute; usage or an action may already have occurred.
+Effort accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, but
+the selected account/model must advertise support for the chosen value.
+`default` omits the effort override. Model availability and effort support are
+checked before inference. API-key accounts are refused, even if API credentials
+exist elsewhere on the host.
+
+`CODEX_RESPONSE_EFFORT_MODE=adaptive` uses `CODEX_RESPONSE_SIMPLE_EFFORT`,
+default `low`, for simple turns while preserving configured effort for complex
+turns. The simple setting accepts `inherit` for response effort or `default` to
+omit the override. Settings are resolved once at startup; restart after changes.
+
+Codex runs fresh, ephemeral threads with the bot's existing assembled history,
+profiles, and response-envelope contract. Images are supplied as native image
+inputs. Luna requires Codex Code Mode for JavaScript tool orchestration; this is
+not a Node.js or shell environment. Claudify explicitly starts the Code Mode host,
+disables its in-process fallback, supplies no local environments, and verifies
+the returned thread environment, read-only sandbox, model, and approval policy.
+Shell tools, local-file browsing, skills, hooks, plugins, and subagents are disabled.
+Interactive approval requests are rejected.
+
+Responses can use web search and authorized Discord/Morpheus MCP tools.
+Background maintenance gets neither MCP nor web access. Each response uses a
+short-lived, loopback-only MCP bridge that forwards only discovered authorized
+tool calls with validated arguments. Resource, prompt, and other MCP operations
+cannot reach the upstream servers. Upstream authentication headers stay in the
+bot process rather than entering Codex configuration. This boundary does not rely
+on hiding tool names from the model. Saved history is accessed through MCP rather
+than unrestricted local file tools. MCP action results remain subject to the
+existing Morpheus grounding checks. The configured services retain their own
+permissions and may perform the external actions their authorized tools expose.
+
+The `codex-home` volume persists credentials separately from message history and
+Claude auth. Treat it as a secret, including in backups. `CODEX_HOME` must be
+outside `MESSAGES_DIR` after resolving ancestor symlinks, must not itself be a
+symlink, and must not contain an unrelated `config.toml`. Configure Claudify through
+its environment, not a personal Codex profile. Do not mount an existing developer Codex home into the bot.
+
+To roll back, set `BOT_PROVIDER=claude` and restart. Existing Claude settings,
+credentials, and stored Discord history remain intact. No automatic cross-provider
+failover occurs on authentication errors, quota exhaustion, or timeouts.
+
+**Verification:** Run `npm test` with Node 22, matching the Docker image. The test
+suite is offline. To exercise the real pinned Codex
+app-server, read-only thread setup, and a harmless local MCP round trip without
+logging in or running inference:
+
+```bash
+npm run build
+node scripts/codex-smoke.mjs
+node scripts/codex-policy-smoke.mjs
+```
+
+The policy smoke uses the real pinned CLI and production tool policy with fixed,
+synthetic model responses from a local fixture. It checks allowed MCP execution,
+forbidden direct/nested tool calls, and blocked upstream resource requests. It
+does not perform subscription inference or contact the real model service.
+The CLI may still fetch public catalog metadata during startup, so this smoke
+is not completely network-isolated.
+
+Set `CODEX_BIN` if the binary is not on PATH. A complete deployment check still
+requires browser approval in Discord and a real `!ask` response, followed by an
+image request and a permitted MCP action. The offline suite and unauthenticated
+smoke test do not establish account-specific model access or successful login.
 
 ### Per-workload Claude configuration
 

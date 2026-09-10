@@ -9,6 +9,7 @@ import {
     LIVE_CONTEXT_MAX_CHARS,
 } from "../config.js";
 import { client } from "./client.js";
+import { isSensitiveAuthMessage, snapshotConversationMessage } from "../sensitiveAuth.js";
 import { normalizeBotMentions } from "./mentions.js";
 import {
     enforceResponseContract,
@@ -21,6 +22,7 @@ import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
+import { handleCodexAuthTextMessage } from "./commands/codexAuth.js";
 import { parseAskCommand } from "./commands/ask.js";
 import { askClaude } from "../askClaude.js";
 import {
@@ -100,8 +102,9 @@ function summarizeEmbeds(msg: Message): string {
     return embedSummary ? ` [Embed: ${embedSummary}]` : "";
 }
 
-function messageContentForMemory(msg: Message): string {
-    let content = msg.content.trim();
+function messageContentForMemory(msg: Message, rawContent: string = msg.content): string {
+    if (isSensitiveAuthMessage(rawContent)) return "";
+    let content = rawContent.trim();
     if (msg.attachments.size > 0) {
         content += `${content ? " " : ""}[${msg.attachments.size} attachment(s)]`;
     }
@@ -119,17 +122,20 @@ export function buildReactionQuestion(
 }
 
 function formatMessageForContext(msg: Message): string {
+    const content = msg.content;
+    if (isSensitiveAuthMessage(content)) return "";
     const time = formatContextTime(msg.createdAt);
     const label = authorLabel(msg.author);
-    return `[${time}] ${label} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=${msg.author.bot}; created_at=${msg.createdAt.toISOString()}]: ${messageContentForMemory(msg) || "[no text]"}`;
+    return `[${time}] ${label} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=${msg.author.bot}; created_at=${msg.createdAt.toISOString()}]: ${messageContentForMemory(msg, content) || "[no text]"}`;
 }
 
 async function fetchChannelMessages(channel: BotMessageChannel, limit: number): Promise<Message[]> {
     const collected: Message[] = [];
     let before: string | undefined;
+    let fetchedCount = 0;
 
-    while (collected.length < limit) {
-        const batchLimit = Math.min(100, limit - collected.length);
+    while (fetchedCount < limit) {
+        const batchLimit = Math.min(100, limit - fetchedCount);
         const batch = await channel.messages.fetch(
             before ? { limit: batchLimit, before } : { limit: batchLimit },
         );
@@ -137,7 +143,13 @@ async function fetchChannelMessages(channel: BotMessageChannel, limit: number): 
         if (batch.size === 0) break;
 
         const messages = Array.from(batch.values());
-        collected.push(...messages);
+        fetchedCount += messages.length;
+        // Detach this batch before fetching another page. Count omitted messages
+        // against the fetch limit too, so private traffic cannot extend pagination.
+        for (const message of messages) {
+            const snapshot = snapshotConversationMessage(message);
+            if (snapshot) collected.push(snapshot);
+        }
         const oldest = messages.reduce((currentOldest, message) =>
             message.createdTimestamp < currentOldest.createdTimestamp ? message : currentOldest,
         );
@@ -146,6 +158,8 @@ async function fetchChannelMessages(channel: BotMessageChannel, limit: number): 
         if (batch.size < batchLimit) break;
     }
 
+    // Every consumer (including search hints and memory participants) receives
+    // only conversation messages, not just a sanitized rendering of them.
     return collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 }
 
@@ -163,10 +177,13 @@ export async function fetchReplyChain(
         const message: Message | null = await channel.messages
             .fetch(messageId)
             .catch(() => null);
-        if (!message) break;
+        // Stop rather than skip: an older ancestor must not become the direct
+        // reply target, and private control traffic is a conversation boundary.
+        const snapshot: Message | null | undefined = message && snapshotConversationMessage(message);
+        if (!snapshot) break;
 
-        directFirst.push(message);
-        messageId = message.reference?.messageId;
+        directFirst.push(snapshot);
+        messageId = snapshot.reference?.messageId;
     }
 
     return directFirst.reverse();
@@ -180,13 +197,18 @@ export function formatLiveMessagesContext(
 ): string {
     if (messages.length === 0 || maxChars <= 0) return "";
 
-    const contextMessages = messages.filter(
+    const eligibleMessages = messages.filter(
         (message) => !excludedMessageIds.has(message.id),
     );
+    // Format once, omitting sensitive messages before touching attachments or embeds.
+    const entries = eligibleMessages
+        .map((message) => ({ message, text: formatMessageForContext(message) }))
+        .filter((entry) => entry.text !== "");
+    const contextMessages = entries.map((entry) => entry.message);
     if (contextMessages.length === 0) return "";
 
-    const excludedCount = messages.length - contextMessages.length;
-    const formattedMessages = contextMessages.map(formatMessageForContext);
+    const excludedCount = messages.length - eligibleMessages.length;
+    const formattedMessages = entries.map((entry) => entry.text);
     const buildHeader = (firstSelectedIndex: number): string => {
         const selectedCount = contextMessages.length - firstSelectedIndex;
         const oldest = contextMessages[firstSelectedIndex]?.createdAt.toISOString()
@@ -351,6 +373,8 @@ export function registerHandler() {
         try {
             if (msg.author.bot) return;
             if (await handleAuthTextMessage(msg)) return;
+            if (await handleCodexAuthTextMessage(msg)) return;
+            if (isSensitiveAuthMessage(msg.content)) return;
             if (!isBotMessageChannel(msg.channel)) return;
 
             logIncomingMessage(msg);
@@ -452,7 +476,9 @@ export function registerHandler() {
             // Ignore bot reactions
             if (user.bot) return;
 
-            const msg = reaction.message as Message;
+            // Hydrate, classify and snapshot before any asynchronous processing.
+            const msg = snapshotConversationMessage(reaction.message as Message);
+            if (!msg) return;
             if (!isBotMessageChannel(msg.channel)) return;
             if (!msg.guild) return;
 
@@ -641,6 +667,10 @@ async function processMessage(msg: Message): Promise<void> {
     userProcessing.add(userId);
 
     try {
+        // Queued messages may have been edited since initial command routing.
+        const snapshot = snapshotConversationMessage(msg);
+        if (!snapshot) return;
+        msg = snapshot;
         if (!isBotMessageChannel(msg.channel)) return;
 
         const askQuestion = parseAskCommand(msg.content);

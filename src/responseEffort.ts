@@ -1,5 +1,5 @@
 import type { ResponseEffortMode } from "./config.js";
-import type { ClaudeEffort, ClaudeRunOptions } from "./claudeTypes.js";
+import type { ModelEffort, ModelRunOptions } from "./modelTypes.js";
 
 export type ResponseEffortReason =
     | "fixed"
@@ -18,7 +18,7 @@ export interface ResponseEffortSignals {
 }
 
 export interface ResponseEffortSelection {
-    options: Readonly<ClaudeRunOptions>;
+    options: Readonly<ModelRunOptions>;
     reason: ResponseEffortReason;
 }
 
@@ -44,9 +44,9 @@ export function classifyResponseEffort(
 }
 
 export function selectResponseRunOptions(
-    baseOptions: Readonly<ClaudeRunOptions>,
+    baseOptions: Readonly<ModelRunOptions>,
     mode: ResponseEffortMode,
-    simpleEffort: ClaudeEffort | undefined,
+    simpleEffort: ModelEffort | undefined,
     signals: ResponseEffortSignals,
 ): ResponseEffortSelection {
     if (mode === "fixed") {

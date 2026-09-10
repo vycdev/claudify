@@ -1,13 +1,16 @@
 import {
-    CLAUDE_RESPONSE_EFFORT_MODE,
-    CLAUDE_RESPONSE_SIMPLE_EFFORT,
-    CLAUDE_WORKLOAD_CONFIG,
+    BOT_PROVIDER,
+    RESPONSE_EFFORT_MODE,
+    RESPONSE_SIMPLE_EFFORT,
+    MODEL_WORKLOAD_CONFIG,
     HISTORY_DIR,
     MESSAGES_DIR,
     MCP_CONFIG_PATH,
     getResponseModelDisplay,
 } from "./config.js";
-import { isClaudeTimeoutError, runClaude } from "./claude.js";
+import { isClaudeTimeoutError } from "./claude.js";
+import { runModel } from "./model.js";
+import type { ModelRunner } from "./modelTypes.js";
 import { client } from "./discord/client.js";
 import {
     isHistoricalLookupRequest,
@@ -30,7 +33,7 @@ import {
     type DiscordInvocationContext,
 } from "./discord/turn.js";
 
-type ClaudeRunner = typeof runClaude;
+
 
 export type {
     DiscordInvocationContext,
@@ -41,12 +44,15 @@ function getSystemPrompt(): string {
     const botName =
         client.user?.displayName || client.user?.username || "Claudify";
 
-    return renderPrompt("botSystem", {
+    const prompt = renderPrompt("botSystem", {
         botModel: getResponseModelDisplay(),
         botName,
         historyDir: HISTORY_DIR,
         messagesDir: MESSAGES_DIR,
     });
+    return BOT_PROVIDER === "codex"
+        ? `${prompt}\n\nCodex provider tool mapping: replace Claude-specific tool names above with the available Codex tools. Use web search for current facts and web pages, Discord MCP for saved and live history, and Morpheus MCP for Morpheus actions. Images are supplied directly. Read, Grep, Glob, shell execution, and local file editing are not available. Never claim to have used an unavailable tool.`
+        : prompt;
 }
 
 function canSafelyReadLegacyChannelHistory(
@@ -78,7 +84,7 @@ export async function askClaude(
     imagePaths: string[] = [],
     liveMessages: string = "",
     discordInvocation: DiscordInvocationContext | undefined = undefined,
-    claudeRunner: ClaudeRunner = runClaude,
+    modelRunner: ModelRunner = runModel,
 ): Promise<string> {
     // Only the newly authored message may opt into expanded history. Quoted
     // reply content is separate context and must not change retrieval behavior.
@@ -239,11 +245,11 @@ export async function askClaude(
 
     if (imagePaths.length > 0) {
         promptParts.push("");
-        promptParts.push(
-            `The user attached ${imagePaths.length} image(s). Use the Read tool to view them:`,
-        );
-        for (const imgPath of imagePaths) {
-            promptParts.push(`- ${imgPath}`);
+        if (BOT_PROVIDER === "codex") {
+            promptParts.push(`The user attached ${imagePaths.length} image(s), included directly with this request.`);
+        } else {
+            promptParts.push(`The user attached ${imagePaths.length} image(s). Use the Read tool to view them:`);
+            for (const imgPath of imagePaths) promptParts.push(`- ${imgPath}`);
         }
     }
 
@@ -275,9 +281,9 @@ export async function askClaude(
         liveMessages,
     );
     const responseSelection = selectResponseRunOptions(
-        CLAUDE_WORKLOAD_CONFIG.response,
-        CLAUDE_RESPONSE_EFFORT_MODE,
-        CLAUDE_RESPONSE_SIMPLE_EFFORT,
+        MODEL_WORKLOAD_CONFIG.response,
+        RESPONSE_EFFORT_MODE,
+        RESPONSE_SIMPLE_EFFORT,
         {
             question,
             imageCount: imagePaths.length,
@@ -287,10 +293,10 @@ export async function askClaude(
 
     try {
         console.error(
-            `[Claude CLI] Spawning claude with prompt via stdin (${prompt.length} chars)`,
+            `[Model] Invoking ${BOT_PROVIDER} with assembled prompt (${prompt.length} chars)`,
         );
         console.error(
-            `[Claude Routing] response effort=${responseSelection.options.effort ?? "default"} (${responseSelection.reason})`,
+            `[Model Routing] response effort=${responseSelection.options.effort ?? "default"} (${responseSelection.reason})`,
         );
 
         const args = [
@@ -307,10 +313,11 @@ export async function askClaude(
             "stream-json",
             "--verbose",
         ];
-        let runResult = await claudeRunner(
+        let runResult = await modelRunner(
             args,
             prompt,
             responseSelection.options,
+            imagePaths,
         );
 
         if (mustGroundMorpheus) {
@@ -322,10 +329,11 @@ export async function askClaude(
                 console.error(
                     "[Morpheus Grounding] Missing tool call; retrying once",
                 );
-                runResult = await claudeRunner(
+                runResult = await modelRunner(
                     args,
                     `${prompt}\n\n${MORPHEUS_GROUNDING_RETRY_INSTRUCTION}`,
                     responseSelection.options,
+                    imagePaths,
                 );
                 assessment = assessMorpheusGrounding(runResult.trace);
             }
@@ -344,13 +352,13 @@ export async function askClaude(
 
         const { stdout, stderr } = runResult;
 
-        if (stderr) console.error(`[Claude CLI] stderr: ${stderr}`);
+        if (stderr) console.error(`[Model] stderr: ${stderr}`);
         console.error(
-            `[Claude CLI] Response received (${stdout.length} chars)`,
+            `[Model] Response received (${stdout.length} chars)`,
         );
         if (!stdout.trim()) {
             console.error(
-                "[Claude CLI] WARNING: Empty response. Claude CLI may not be authenticated. Run: docker exec -it <container> claude auth login",
+                "[Model] WARNING: Empty response. Check the selected provider authentication with its private Discord auth command.",
             );
         }
         return (
@@ -358,17 +366,20 @@ export async function askClaude(
             "Sorry, I could not generate a response. The bot may not be authenticated yet - check the server logs."
         );
     } catch (error: any) {
-        console.error(`[Claude CLI] Error: ${error.message}`);
-        if (error.stderr) console.error(`[Claude CLI] stderr: ${error.stderr}`);
-        if (error.stdout) console.error(`[Claude CLI] stdout: ${error.stdout}`);
+        console.error(`[Model] Error: ${error.message}`);
+        if (error.stderr) console.error(`[Model] stderr: ${error.stderr}`);
+        if (error.stdout) console.error(`[Model] stdout: ${error.stdout}`);
         if (error.trace) {
             console.error(
-                `[Claude CLI] trace: ${JSON.stringify({
+                `[Model] trace: ${JSON.stringify({
                     malformedEventCount: error.trace.malformedEventCount,
                     resultEventReceived: error.trace.resultEventReceived,
                     toolCalls: error.trace.toolCalls,
                 })}`,
             );
+        }
+        if (error?.code === "CODEX_TIMEOUT") {
+            return "I couldn't finish that request within two minutes. An external action may have started; verify its state before retrying.";
         }
         if (isClaudeTimeoutError(error)) {
             return historicalLookup
