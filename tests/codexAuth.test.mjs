@@ -187,4 +187,75 @@ test("a pending logout blocks new login attempts", async () => {
     }
 });
 
+test("delivery cancellation is opaque, owner-protected, and cleans up its active session", async (t) => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    for (const status of ["canceled", "notFound"]) {
+        const client = transport(status);
+        const notices = [];
+        const manager = new CodexAuthManager({
+            clientFactory: async () => client,
+            loginTimeoutMs: 1000,
+        });
+        try {
+            const login = await manager.startLogin("owner", (m) => notices.push(m));
+            assert.deepEqual(Object.keys(login).sort(), [
+                "cancelDelivery", "userCode", "verificationUrl",
+            ]);
+            assert.equal(typeof login.cancelDelivery, "function");
+            await assert.rejects(manager.cancelLogin("other"), /owner/);
+            assert.equal(client.closed, false);
+            await login.cancelDelivery();
+            await login.cancelDelivery();
+            assert.equal(client.closed, true);
+            assert.deepEqual(
+                client.calls.filter(({ method }) => method === "account/login/cancel"),
+                [{ method: "account/login/cancel", params: { loginId: "login-1" } }],
+            );
+            assert.equal(await manager.cancelLogin("owner"), "not-pending");
+            t.mock.timers.tick(1000);
+            client.complete();
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.deepEqual(notices, []);
+        } finally {
+            await manager.cancelLogin("owner");
+        }
+    }
+});
+
+test("stale delivery cancellation cannot affect a replacement session after cancel, completion, or timeout", async (t) => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    for (const ending of ["cancel", "completion", "timeout"]) {
+        const clients = [transport(), transport()];
+        let next = 0;
+        const notices = [];
+        const manager = new CodexAuthManager({
+            clientFactory: async () => clients[next++],
+            loginTimeoutMs: 1000,
+        });
+        try {
+            const oldLogin = await manager.startLogin("owner", (m) => notices.push(m));
+            if (ending === "cancel") await manager.cancelLogin("owner");
+            if (ending === "completion") clients[0].complete();
+            if (ending === "timeout") t.mock.timers.tick(1000);
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(clients[0].closed, true);
+            await manager.startLogin("owner", () => {});
+            await oldLogin.cancelDelivery();
+            await oldLogin.cancelDelivery();
+            assert.equal(clients[1].closed, false, ending);
+            assert.equal(clients[1].calls.some(({ method }) => method === "account/login/cancel"), false);
+            await assert.rejects(manager.cancelLogin("other"), /owner/);
+            assert.equal(await manager.cancelLogin("owner"), "canceled");
+            t.mock.timers.tick(1000);
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(notices.length, ending === "cancel" ? 0 : 1);
+            assert.doesNotMatch(notices.join(""), /private@example|login-1|ABCD-1234/);
+        } finally {
+            await manager.cancelLogin("owner");
+        }
+    }
+});
+
 export { transport };

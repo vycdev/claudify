@@ -1,6 +1,7 @@
 import {
     BOT_PROVIDER,
     CODEX_HOME,
+    MESSAGES_DIR,
     MCP_PORT,
     MORPHEUS_MCP_URL,
     MORPHEUS_MCP_API_KEY,
@@ -29,6 +30,7 @@ if (MORPHEUS_MCP_URL && MORPHEUS_MCP_API_KEY)
     };
 const codexRunner = createCodexRunner({
     home: CODEX_HOME,
+    forbiddenRoots: [MESSAGES_DIR],
     mcpServers: servers,
 });
 export const runModel: ModelRunner = (args, input, options, imagePaths) => {

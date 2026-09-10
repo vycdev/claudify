@@ -14,9 +14,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { createCodexClient } from "../build/codexClient.js";
 import { codexThreadConfig } from "../build/codex.js";
+import { CODEX_NO_ENVIRONMENT, requireNoEnvironment } from "../build/codexPolicy.js";
+import { createCodexMcpBridge } from "../build/codexMcpBridge.js";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-codex-smoke-"));
 let client;
+let bridge;
 const httpServer = http.createServer(async (req, res) => {
     if (req.method !== "POST") {
         res.writeHead(405).end();
@@ -74,27 +77,24 @@ try {
         null,
         "Smoke test must use an empty, isolated auth home",
     );
+    bridge = await createCodexMcpBridge({ smoke: {
+        url: `http://127.0.0.1:${httpServer.address().port}/mcp`, enabled_tools: ["smoke"],
+    } });
     const thread = await client.request("thread/start", {
         model: "gpt-5.6-luna",
         modelProvider: "openai",
         ephemeral: true,
+        ...CODEX_NO_ENVIRONMENT,
         cwd: home,
         sandbox: "read-only",
         approvalPolicy: "never",
-        config: codexThreadConfig(
-            {
-                smoke: {
-                    url: `http://127.0.0.1:${httpServer.address().port}/mcp`,
-                    enabled_tools: ["smoke"],
-                },
-            },
-            true,
-        ),
+        config: codexThreadConfig(bridge.servers, true),
     });
     assert.equal(thread.model, "gpt-5.6-luna");
     assert.equal(thread.modelProvider, "openai");
     assert.equal(thread.sandbox.type, "readOnly");
     assert.equal(thread.approvalPolicy, "never");
+    requireNoEnvironment(thread);
     const tools = await client.request("mcpServerStatus/list", {
         threadId: thread.thread.id,
         detail: "toolsAndAuthOnly",
@@ -115,10 +115,13 @@ try {
             model: thread.model,
             sandbox: thread.sandbox.type,
             mcpRoundTrip: "passed",
+            toolsOnlyBridge: true,
+            environments: thread.thread.environments,
         }),
     );
 } finally {
     client?.close();
+    await bridge?.close();
     httpServer.closeAllConnections();
     await new Promise((resolve) => httpServer.close(resolve));
     // Give the app-server its bounded shutdown grace before removing its DBs.

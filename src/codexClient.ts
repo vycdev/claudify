@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { resolvePrivateCodexHome } from "./codexHome.js";
+import { CODEX_HOST_OVERRIDE } from "./codexPolicy.js";
 
 export interface CodexClient {
     request(
@@ -15,6 +17,7 @@ export interface CodexClient {
 
 export interface CodexClientOptions {
     home: string;
+    forbiddenRoots?: readonly string[];
     executable?: { command: string; args?: readonly string[] };
     requestTimeoutMs?: number;
 }
@@ -55,8 +58,9 @@ function environment(home: string): NodeJS.ProcessEnv {
 export async function createCodexClient(
     options: CodexClientOptions,
 ): Promise<CodexClient> {
-    const home = path.resolve(options.home);
+    const home = resolvePrivateCodexHome(options.home, options.forbiddenRoots);
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+    resolvePrivateCodexHome(home, options.forbiddenRoots);
     const stat = fs.lstatSync(home);
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new Error(
@@ -85,6 +89,8 @@ export async function createCodexClient(
             'cli_auth_credentials_store="file"',
             "-c",
             'model_provider="openai"',
+            "-c",
+            CODEX_HOST_OVERRIDE,
         ],
         { env: environment(home), cwd: home, stdio: ["pipe", "pipe", "pipe"] },
     );
@@ -225,7 +231,7 @@ export async function createCodexClient(
                 title: "Claudify",
                 version: "1.0.0",
             },
-            capabilities: { experimentalApi: false },
+            capabilities: { experimentalApi: true },
         });
         send({ method: "initialized", params: {} });
         return client;

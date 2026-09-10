@@ -131,7 +131,11 @@ export class CodexAuthManager {
     async startLogin(
         owner: string,
         notify: Notify,
-    ): Promise<{ verificationUrl: string; userCode: string }> {
+    ): Promise<{
+        verificationUrl: string;
+        userCode: string;
+        cancelDelivery: () => Promise<void>;
+    }> {
         if (this.session || this.loggingOut)
             throw new Error(
                 "A Codex authentication operation is already active.",
@@ -190,6 +194,10 @@ export class CodexAuthManager {
             return {
                 verificationUrl: url.toString(),
                 userCode: login.userCode,
+                // Bind failed-delivery cleanup to this session, not its owner.
+                cancelDelivery: async () => {
+                    await this.cancelSession(session);
+                },
             };
         } catch {
             this.finish(session);
@@ -204,6 +212,13 @@ export class CodexAuthManager {
         if (!session) return "not-pending";
         if (session.owner !== owner)
             throw new Error("Only the login owner may cancel this session.");
+        return this.cancelSession(session);
+    }
+
+    private async cancelSession(
+        session: LoginSession,
+    ): Promise<"canceled" | "not-pending"> {
+        if (this.session !== session) return "not-pending";
         try {
             if (session.loginId && session.client) {
                 const result = await session.client.request(

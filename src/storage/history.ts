@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { isSensitiveAuthMessage } from "../sensitiveAuth.js";
 import {
     HISTORY_DIR,
     HISTORY_FTS_MAX_CHARS,
@@ -118,6 +119,8 @@ export function appendToLog(
         authorBot: boolean;
     },
 ) {
+    // Guard the persistence sink too, before normalization or metadata wrapping.
+    if (isSensitiveAuthMessage(content)) return;
     const filePath = getDailyLogPath(channelId, timestamp, channelName);
     const time = `${timestamp.toISOString().slice(11, 19)} UTC`;
     const normalized = content.replace(/\s+/g, " ").trim() || "[no text]";

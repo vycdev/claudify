@@ -7,6 +7,7 @@ import test from "node:test";
 const moduleUrl = new URL("../build/codexClient.js", import.meta.url);
 const fixture = `
 const readline = require('node:readline');
+let initialized;
 readline.createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line);
  if(m.id===undefined)return;
@@ -15,9 +16,10 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   process.stdout.write(JSON.stringify({method:'model/rerouted',params:{threadId:'thread-1',toModel:'another-model'}})+'\\n'+JSON.stringify({id:900,method:'item/tool/requestUserInput',params:{}})+'\\n');return;
  }
  if(m.method==='hang')return;
+ if(m.method==='initialize')initialized=m.params;
  if(m.method==='die'){process.exit(1);return;}
  if(m.method==='notify')send({method:'account/updated',params:{authMode:'chatgpt'}});
- if(m.method==='env')send({id:m.id,result:{keys:Object.keys(process.env),argv:process.argv}});
+ if(m.method==='env')send({id:m.id,result:{keys:Object.keys(process.env),argv:process.argv,initialized}});
  else send({id:m.id,result:m.method==='account/read'?{account:null}: {ok:true}});
 });`;
 
@@ -50,6 +52,8 @@ test("Codex transport initializes and multiplexes without leaking API or Discord
         assert.ok(!env.keys.includes("DISCORD_TOKEN"));
         assert.ok(env.keys.includes("CODEX_HOME"));
         assert.ok(env.argv.includes('forced_login_method="chatgpt"'));
+        assert.ok(env.argv.includes('features.code_mode_host={enabled=true,disable_in_process_fallback=true}'));
+        assert.equal(env.initialized.capabilities.experimentalApi, true);
         await client.request("notify");
         assert.equal(events[0].params.authMode, "chatgpt");
         if (process.platform !== "win32")

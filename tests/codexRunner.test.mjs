@@ -40,7 +40,7 @@ export function fakeClient({
                 };
             if (method === "thread/start")
                 return {
-                    thread: { id: "thread-1" },
+                    thread: { id: "thread-1", environments: [] },
                     model: "gpt-5.6-luna",
                     modelProvider: "openai",
                     sandbox: { type: "readOnly" },
@@ -134,6 +134,7 @@ test("Codex runner uses a subscription, explicit model, isolated read-only threa
         home: "/tmp/unused-test-home",
         clientFactory: async () => client,
         mcpServers: { discord: { url: "http://127.0.0.1:3100/mcp" } },
+        bridgeFactory: async () => ({ servers: {}, close: async () => {} }),
     });
     const result = await run(
         ["-p", "--system-prompt", "You are a Discord bot."],
@@ -149,6 +150,9 @@ test("Codex runner uses a subscription, explicit model, isolated read-only threa
     assert.equal(thread.sandbox, "read-only");
     assert.equal(thread.approvalPolicy, "never");
     assert.equal(thread.ephemeral, true);
+    assert.deepEqual(thread.environments, []);
+    assert.deepEqual(client.calls.find(c => c.method === "turn/start").params.environments, []);
+    assert.equal(thread.config["orchestrator.skills.enabled"], false);
     assert.equal(thread.config["features.shell_tool"], false);
     assert.equal(thread.config["features.view_image"], false);
     assert.equal(thread.model, "gpt-5.6-luna");
@@ -157,7 +161,7 @@ test("Codex runner uses a subscription, explicit model, isolated read-only threa
 
 test("Codex rejects authentication, model, effort, and sandbox fallbacks", async () => {
     const { createCodexRunner } = await import("../build/codex.js");
-    for (const mode of ["api", "model", "effort", "sandbox"]) {
+    for (const mode of ["api", "model", "effort", "sandbox", "environment", "missing-environment"]) {
         const client = fakeClient({
             account: mode === "api" ? { type: "apiKey" } : { type: "chatgpt" },
         });
@@ -166,6 +170,8 @@ test("Codex rejects authentication, model, effort, and sandbox fallbacks", async
             const result = await original(method, params);
             if (method === "thread/start" && mode === "sandbox")
                 result.sandbox = { type: "dangerFullAccess" };
+            if (method === "thread/start" && mode === "environment") result.thread.environments = [{ type: "local" }];
+            if (method === "thread/start" && mode === "missing-environment") delete result.thread.environments;
             return result;
         };
         const run = createCodexRunner({
@@ -193,6 +199,7 @@ test("Codex background work has no MCP or web access and retains failed-action e
     const run = createCodexRunner({
         home: "/tmp/unused-test-home",
         clientFactory: async () => client,
+        bridgeFactory: async () => { throw new Error("Background must not connect to an upstream server"); },
         mcpServers: { discord: { url: "http://127.0.0.1:3100/mcp" } },
     });
     const result = await run(["-p"], "extract facts", {
@@ -224,4 +231,41 @@ test("Codex timeouts free the queue and never report success", async () => {
         (error) => error.code === "CODEX_TIMEOUT",
     );
     assert.ok(client.closed);
+});
+
+test("Codex runner owns bridge lifecycle and exposes only the gateway, including errors and timeout", async () => {
+    const { createCodexRunner } = await import("../build/codex.js");
+    for (const mode of ["success", "thread-error", "turn-timeout", "init-error", "late-init"]) {
+        const client = fakeClient({ pending: mode === "turn-timeout" });
+        const request = client.request.bind(client);
+        client.request = async (method, params) => {
+            if (mode === "thread-error" && method === "thread/start") throw new Error("Fixture thread error");
+            return request(method, params);
+        };
+        let closed = 0, signal, release;
+        const delayed = new Promise(resolve => { release = resolve; });
+        const upstream = { discord: { url: "http://trusted.invalid/mcp", http_headers: { Authorization: "SYNTHETIC-UPSTREAM-ONLY" }, enabled_tools: ["echo"] } };
+        const gateways = { discord: { url: "http://127.0.0.1:1234/opaque-fixture", enabled_tools: ["echo"], tools: { echo: { approval_mode: "approve" } } } };
+        const run = createCodexRunner({ home: "/tmp/unused", clientFactory: async () => client, mcpServers: upstream,
+            timeoutMs: 100, bridgeFactory: async (config, options) => {
+                assert.equal(config, upstream); signal = options.signal;
+                if (mode === "init-error") throw new Error("Fixture bridge init error");
+                if (mode === "late-init") await delayed;
+                return { servers: gateways, async close() { closed++; } };
+            } });
+        const operation = run([], "fixture", { workload: "response", model: "gpt-5.6-luna", effort: "medium" });
+        if (mode === "success") await operation;
+        else await assert.rejects(operation, /Fixture|timed out/i);
+        if (mode === "late-init") { release(); await new Promise(resolve => setImmediate(resolve)); }
+        assert.ok(signal.aborted); assert.ok(client.closed);
+        assert.equal(closed, mode === "init-error" ? 0 : 1, mode);
+        const thread = client.calls.find(c => c.method === "thread/start");
+        if (thread) {
+            assert.equal(thread.params.config.mcp_servers.discord.url, gateways.discord.url);
+            assert.deepEqual(thread.params.config.mcp_servers.discord.tools, gateways.discord.tools);
+            assert.ok(!JSON.stringify(thread).includes("SYNTHETIC-UPSTREAM-ONLY"));
+            assert.ok(!JSON.stringify(thread).includes("trusted.invalid"));
+        }
+        if (mode === "late-init" || mode === "init-error") assert.ok(!thread);
+    }
 });

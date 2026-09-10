@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { resolvePrivateCodexHome } from "./codexHome.js";
 import { parseBotProvider, resolveCodexConfig } from "./codexConfig.js";
 import type {
     ClaudeEffort,
@@ -330,10 +331,7 @@ export const RESPONSE_EFFORT_MODE = BOT_PROVIDER === "codex" ? codexConfig.mode 
 export const RESPONSE_SIMPLE_EFFORT = BOT_PROVIDER === "codex" ? codexConfig.simpleEffort : CLAUDE_RESPONSE_SIMPLE_EFFORT;
 export const CODEX_HOME = path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), ".claudify-codex"));
 export function assertSafeCodexHome(): void {
-    const relativeCodexHome = path.relative(path.resolve(MESSAGES_DIR), CODEX_HOME);
-    if (!relativeCodexHome || (!relativeCodexHome.startsWith(`..${path.sep}`) && relativeCodexHome !== ".." && !path.isAbsolute(relativeCodexHome))) {
-        throw new Error("CODEX_HOME must be outside MESSAGES_DIR so MCP tools cannot read credentials.");
-    }
+    resolvePrivateCodexHome(CODEX_HOME, [MESSAGES_DIR]);
 }
 if (BOT_PROVIDER === "codex") assertSafeCodexHome();
 export const CODEX_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(process.env.CODEX_AUTH_LOGIN_TIMEOUT_MS, 900_000, MAX_TIMER_DELAY_MS);

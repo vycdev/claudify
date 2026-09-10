@@ -78,7 +78,10 @@ Codex owns the OAuth flow, token persistence, and refresh through its official
 an inbound callback port or a code pasted back into Discord. Login sessions
 expire after `CODEX_AUTH_LOGIN_TIMEOUT_MS`, default `900000`. Auth commands are
 intercepted before message logging, restricted to `AUTH_ADMIN_USER_IDS`, and
-rejected in guild channels. An empty admin list disables authentication commands.
+rejected in guild channels. Rejected authentication commands and their attachments
+are also excluded from later conversation context and MCP message retrieval.
+Existing history files are not retroactively rewritten. An empty admin list
+disables authentication commands.
 
 This is **one shared bot account**, not a separate subscription per Discord
 member. Anyone permitted to use the bot consumes that account's allowance,
@@ -116,31 +119,51 @@ omit the override. Settings are resolved once at startup; restart after changes.
 
 Codex runs fresh, ephemeral threads with the bot's existing assembled history,
 profiles, and response-envelope contract. Images are supplied as native image
-inputs. Responses can use web search and the configured Discord/Morpheus MCP
-servers; background maintenance gets neither MCP nor web access. Shell tools,
-local-image file browsing, hooks, plugins, and subagents are disabled. A verified
-read-only sandbox and rejected interactive approvals prevent local file edits.
-Saved history is accessed through MCP rather than unrestricted local file tools.
-MCP action results remain subject to the existing Morpheus grounding checks.
+inputs. Luna requires Codex Code Mode for JavaScript tool orchestration; this is
+not a Node.js or shell environment. Claudify explicitly starts the Code Mode host,
+disables its in-process fallback, supplies no local environments, and verifies
+the returned thread environment, read-only sandbox, model, and approval policy.
+Shell tools, local-file browsing, skills, hooks, plugins, and subagents are disabled.
+Interactive approval requests are rejected.
+
+Responses can use web search and authorized Discord/Morpheus MCP tools.
+Background maintenance gets neither MCP nor web access. Each response uses a
+short-lived, loopback-only MCP bridge that forwards only discovered authorized
+tool calls with validated arguments. Resource, prompt, and other MCP operations
+cannot reach the upstream servers. Upstream authentication headers stay in the
+bot process rather than entering Codex configuration. This boundary does not rely
+on hiding tool names from the model. Saved history is accessed through MCP rather
+than unrestricted local file tools. MCP action results remain subject to the
+existing Morpheus grounding checks. The configured services retain their own
+permissions and may perform the external actions their authorized tools expose.
 
 The `codex-home` volume persists credentials separately from message history and
 Claude auth. Treat it as a secret, including in backups. `CODEX_HOME` must be
-outside `MESSAGES_DIR`, must not be a symlink, and must not contain an unrelated
-`config.toml`. Configure Claudify through its environment, not a personal Codex
-profile. Do not mount an existing developer Codex home into the bot.
+outside `MESSAGES_DIR` after resolving ancestor symlinks, must not itself be a
+symlink, and must not contain an unrelated `config.toml`. Configure Claudify through
+its environment, not a personal Codex profile. Do not mount an existing developer Codex home into the bot.
 
 To roll back, set `BOT_PROVIDER=claude` and restart. Existing Claude settings,
 credentials, and stored Discord history remain intact. No automatic cross-provider
 failover occurs on authentication errors, quota exhaustion, or timeouts.
 
-**Verification:** `npm test` is offline. To exercise the real pinned Codex
+**Verification:** Run `npm test` with Node 22, matching the Docker image. The test
+suite is offline. To exercise the real pinned Codex
 app-server, read-only thread setup, and a harmless local MCP round trip without
 logging in or running inference:
 
 ```bash
 npm run build
 node scripts/codex-smoke.mjs
+node scripts/codex-policy-smoke.mjs
 ```
+
+The policy smoke uses the real pinned CLI and production tool policy with fixed,
+synthetic model responses from a local fixture. It checks allowed MCP execution,
+forbidden direct/nested tool calls, and blocked upstream resource requests. It
+does not perform subscription inference or contact the real model service.
+The CLI may still fetch public catalog metadata during startup, so this smoke
+is not completely network-isolated.
 
 Set `CODEX_BIN` if the binary is not on PATH. A complete deployment check still
 requires browser approval in Discord and a real `!ask` response, followed by an

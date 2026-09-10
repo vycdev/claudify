@@ -1,5 +1,7 @@
 import { createCodexClient, type CodexClient } from "./codexClient.js";
 import { enqueueModelRun } from "./claude.js";
+import { createCodexMcpBridge, type CodexMcpBridge } from "./codexMcpBridge.js";
+import { codexThreadConfig, CODEX_NO_ENVIRONMENT, requireNoEnvironment } from "./codexPolicy.js";
 import type {
     ClaudeExecutionTrace,
     ClaudeToolCallTrace,
@@ -13,8 +15,10 @@ export interface CodexMcpServer {
 }
 export interface CodexRunnerOptions {
     home: string;
+    forbiddenRoots?: readonly string[];
     mcpServers?: Record<string, CodexMcpServer>;
     clientFactory?: () => Promise<CodexClient>;
+    bridgeFactory?: typeof createCodexMcpBridge;
     timeoutMs?: number;
 }
 function record(value: unknown): Record<string, unknown> {
@@ -36,52 +40,7 @@ export async function requireCodexSubscription(
     return record(account);
 }
 
-export function codexThreadConfig(
-    mcpServers: Record<string, CodexMcpServer>,
-    response: boolean,
-): Record<string, unknown> {
-    const config: Record<string, unknown> = {
-        project_doc_max_bytes: 0,
-        web_search: response ? "live" : "disabled",
-        mcp_servers: response
-            ? Object.fromEntries(
-                  Object.entries(mcpServers).map(([name, server]) => [
-                      name,
-                      { ...server, required: true, enabled: true },
-                  ]),
-              )
-            : {},
-    };
-    // Read-only sandbox blocks apply_patch even when a model advertises it.
-    // Remove shell and local-file image tools, rather than relying on prompts.
-    for (const feature of [
-        "shell_tool",
-        "unified_exec",
-        "view_image",
-        "multi_agent",
-        "multi_agent_v2",
-        "apps",
-        "plugins",
-        "hooks",
-        "codex_hooks",
-        "plugin_hooks",
-        "js_repl",
-        "code_mode",
-        "code_mode_host",
-        "computer_use",
-        "browser_use",
-        "image_generation",
-        "memories",
-        "memory_tool",
-        "request_permissions_tool",
-        "skill_mcp_dependency_install",
-        "skill_env_var_dependency_prompt",
-        "tool_suggest",
-    ])
-        config[`features.${feature}`] = false;
-    config["features.skip_host_skill_discovery"] = true;
-    return config;
-}
+export { codexThreadConfig } from "./codexPolicy.js";
 
 async function checkModel(
     client: CodexClient,
@@ -150,8 +109,10 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
     return (args, input, options, imagePaths = []) =>
         enqueueModelRun(options.workload, async () => {
             const client = await (settings.clientFactory?.() ??
-                createCodexClient({ home: settings.home }));
+                createCodexClient({ home: settings.home, forbiddenRoots: settings.forbiddenRoots }));
             let timer: NodeJS.Timeout | undefined;
+            const runAbort = new AbortController();
+            let bridge: CodexMcpBridge | undefined;
             let unsubscribe: (() => void) | undefined;
             let threadId: string | undefined;
             let turnId: string | undefined;
@@ -174,6 +135,7 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                     );
                     reject(error);
                     rejectTurn?.(error);
+                    runAbort.abort();
                     client.close();
                 }, settings.timeoutMs ?? 120_000);
             });
@@ -188,6 +150,12 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                     imagePaths.length > 0,
                 );
                 const systemIndex = args.indexOf("--system-prompt");
+                if (options.workload === "response") {
+                    bridge = await (settings.bridgeFactory ?? createCodexMcpBridge)(
+                        settings.mcpServers ?? {}, { signal: runAbort.signal },
+                    );
+                    if (runAbort.signal.aborted) { await bridge.close(); runAbort.signal.throwIfAborted(); }
+                }
                 const thread = await client.request("thread/start", {
                     model: options.model,
                     modelProvider: "openai",
@@ -195,6 +163,7 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                     sandbox: "read-only",
                     approvalPolicy: "never",
                     ephemeral: true,
+                    ...CODEX_NO_ENVIRONMENT,
                     baseInstructions:
                         systemIndex >= 0
                             ? args[systemIndex + 1]
@@ -202,7 +171,7 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                     developerInstructions:
                         "You are running inside Claudify, a Discord bot. Use only the supplied Discord/Morpheus MCP tools and web search. Images are attached directly. Never execute shell commands, edit local files, read credentials, or try to change your configuration. History is available through Discord MCP tools, not Read/Grep/Glob. Do not claim an external action succeeded without a successful tool result.",
                     config: codexThreadConfig(
-                        settings.mcpServers ?? {},
+                        bridge?.servers ?? {},
                         options.workload === "response",
                     ),
                     serviceName: "claudify",
@@ -227,6 +196,7 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                     throw new Error(
                         "Codex did not apply the required read-only sandbox and approval policy.",
                     );
+                requireNoEnvironment(thread);
                 const completed = new Promise<void>((resolve, reject) => {
                     rejectTurn = reject;
                     unsubscribe = client.onNotification((method, params) => {
@@ -334,6 +304,7 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
                 void completed.catch(() => {});
                 const started = await client.request("turn/start", {
                     threadId,
+                    ...CODEX_NO_ENVIRONMENT,
                     input: [
                         { type: "text", text: input },
                         ...imagePaths.map((image) => ({
@@ -362,7 +333,9 @@ export function createCodexRunner(settings: CodexRunnerOptions): ModelRunner {
             } finally {
                 if (timer) clearTimeout(timer);
                 unsubscribe?.();
+                runAbort.abort();
                 client.close();
+                await bridge?.close();
             }
         });
 }

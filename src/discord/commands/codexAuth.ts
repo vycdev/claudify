@@ -9,6 +9,7 @@ import {
 import {
     AUTH_ADMIN_USER_IDS,
     CODEX_HOME,
+    MESSAGES_DIR,
     CODEX_AUTH_LOGIN_TIMEOUT_MS,
     assertSafeCodexHome,
 } from "../../config.js";
@@ -19,7 +20,7 @@ import { client } from "../client.js";
 const authManager = new CodexAuthManager({
     clientFactory: () => {
         assertSafeCodexHome();
-        return createCodexClient({ home: CODEX_HOME });
+        return createCodexClient({ home: CODEX_HOME, forbiddenRoots: [MESSAGES_DIR] });
     },
     loginTimeoutMs: CODEX_AUTH_LOGIN_TIMEOUT_MS,
 });
@@ -89,7 +90,7 @@ export function createCodexAuthHandlers(
                     `Open <${login.verificationUrl}> and enter **${login.userCode}** in your browser. Approve only if you initiated this login for Claudify.\n\nDo not paste the code or any token back into Discord. I will confirm completion privately. Use !codex auth cancel to stop.`,
                 );
             } catch (error) {
-                await manager.cancelLogin(owner).catch(() => {});
+                await login.cancelDelivery().catch(() => {});
                 throw error;
             }
             return;
@@ -136,7 +137,7 @@ export function createCodexAuthHandlers(
                     match ? (match[1]?.toLowerCase() ?? "help") : "help",
                     msg.author.id,
                     (text) => msg.reply(text),
-                    (text) => msg.reply(text),
+                    (text) => msg.author.send(text),
                 );
             } catch {
                 await msg.reply(SAFE_ERROR);
