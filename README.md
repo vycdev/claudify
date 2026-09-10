@@ -117,6 +117,12 @@ default `low`, for simple turns while preserving configured effort for complex
 turns. The simple setting accepts `inherit` for response effort or `default` to
 omit the override. Settings are resolved once at startup; restart after changes.
 
+Login completion is verified against the ChatGPT account, with a fresh
+app-server check if the login connection is stale or unavailable. If verification
+is inconclusive, use `!codex auth status` before logging in again: credentials
+may already be saved. Login diagnostics contain static outcome categories only,
+never account identities, device codes, or provider error payloads.
+
 Codex runs fresh, ephemeral threads with the bot's existing assembled history,
 profiles, and response-envelope contract. Images are supplied as native image
 inputs. Luna requires Codex Code Mode for JavaScript tool orchestration; this is
