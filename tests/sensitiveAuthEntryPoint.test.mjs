@@ -13,7 +13,7 @@ for (const name of ["sensitiveAuthHandler.test.mjs", "sensitiveAuthMcp.test.mjs"
         const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-test-entrypoint-"));
         try {
             fs.symlinkSync(fileURLToPath(new URL("../node_modules", import.meta.url)), path.join(root, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-            const source = fs.readFileSync(new URL(name, import.meta.url), "utf8");
+            const source = fs.readFileSync(new URL(name, import.meta.url), "utf8").replace(/\r\n/g, "\n");
             const branch = "\n} else {\n";
             assert.equal(source.split(branch).length, 2, "fixture must target the actual nested-suite branch");
             const fixture = path.join(root, name);

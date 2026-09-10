@@ -120,6 +120,47 @@ test("private usage reads provider limits without exposing account identity or A
     assert.ok(client.closed);
 });
 
+test("private usage labels every quota bucket and does not duplicate the legacy view", async () => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    const client = transport();
+    const original = client.request.bind(client);
+    const window = (usedPercent) => ({ usedPercent, windowDurationMins: 300 });
+    client.request = async (method, params) => method === "account/rateLimits/read"
+        ? {
+            rateLimits: { primary: window(10) },
+            rateLimitsByLimitId: {
+                codex: { limitName: "Standard", primary: window(10), secondary: window(25) },
+                extra: { limitId: "codex_extra", primary: window(100) },
+                unknown: { primary: null, secondary: { usedPercent: null } },
+            },
+        }
+        : original(method, params);
+    client.complete();
+    const manager = new CodexAuthManager({ clientFactory: async () => client, loginTimeoutMs: 1000 });
+    const usage = await manager.getUsage();
+    assert.match(usage, /Standard: 300-minute window: 90% remaining/);
+    assert.match(usage, /Standard: 300-minute window: 75% remaining/);
+    assert.match(usage, /codex_extra: 300-minute window: 0% remaining/);
+    assert.match(usage, /unknown: OpenAI did not report allowance windows/);
+    assert.equal(usage.match(/90% remaining/g)?.length, 1);
+    assert.ok(client.closed);
+});
+
+test("private usage falls back when the multi-bucket view is unavailable", async () => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    for (const byId of [undefined, null, {}, []]) {
+        const client = transport();
+        const original = client.request.bind(client);
+        client.request = async (method, params) => method === "account/rateLimits/read"
+            ? { rateLimitsByLimitId: byId, rateLimits: { primary: { usedPercent: 25 } } }
+            : original(method, params);
+        client.complete();
+        const manager = new CodexAuthManager({ clientFactory: async () => client, loginTimeoutMs: 1000 });
+        assert.match(await manager.getUsage(), /primary: 75% remaining/);
+        assert.ok(client.closed);
+    }
+});
+
 test("auth failures, expiry, and cancellation clean up without relaying secrets", async () => {
     const { CodexAuthManager } = await import("../build/codexAuth.js");
     for (const mode of [

@@ -45,41 +45,54 @@ export class CodexAuthManager {
         try {
             await requireCodexSubscription(client);
             const data = await client.request("account/rateLimits/read");
-            const limits =
-                data.rateLimits && typeof data.rateLimits === "object"
-                    ? (data.rateLimits as Record<string, unknown>)
-                    : {};
+            const byId = data.rateLimitsByLimitId;
+            const buckets: [string, unknown][] = byId && typeof byId === "object" && !Array.isArray(byId)
+                && Object.keys(byId).length > 0
+                ? Object.entries(byId as Record<string, unknown>)
+                : [["", data.rateLimits]];
             const lines = ["Codex subscription allowance reported by OpenAI:"];
-            for (const key of ["primary", "secondary"]) {
-                const raw = limits[key];
-                if (!raw || typeof raw !== "object") continue;
-                const window = raw as Record<string, unknown>;
-                const used = window.usedPercent;
-                if (
-                    typeof used !== "number" ||
-                    !Number.isFinite(used) ||
-                    used < 0 ||
-                    used > 100
-                )
-                    continue;
-                const minutes = window.windowDurationMins;
-                const label =
-                    typeof minutes === "number" &&
-                    Number.isSafeInteger(minutes) &&
-                    minutes > 0
-                        ? `${minutes}-minute window`
-                        : key;
-                const reset = window.resetsAt;
-                const resetText =
-                    typeof reset === "number" &&
-                    Number.isSafeInteger(reset) &&
-                    reset > 0 &&
-                    reset < 100_000_000_000
-                        ? `, resets <t:${reset}:R>`
-                        : "";
-                lines.push(
-                    `${label}: ${Math.round(100 - used)}% remaining${resetText}`,
-                );
+            for (const [id, bucket] of buckets) {
+                if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) continue;
+                const limits = bucket as Record<string, unknown>;
+                const bucketLabel = [limits.limitName, limits.limitId, id]
+                    .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+                    ?.trim();
+                const prefix = bucketLabel ? `${bucketLabel}: ` : "";
+                const previousLength = lines.length;
+                for (const key of ["primary", "secondary"]) {
+                    const raw = limits[key];
+                    if (!raw || typeof raw !== "object") continue;
+                    const window = raw as Record<string, unknown>;
+                    const used = window.usedPercent;
+                    if (
+                        typeof used !== "number" ||
+                        !Number.isFinite(used) ||
+                        used < 0 ||
+                        used > 100
+                    )
+                        continue;
+                    const minutes = window.windowDurationMins;
+                    const label =
+                        typeof minutes === "number" &&
+                        Number.isSafeInteger(minutes) &&
+                        minutes > 0
+                            ? `${minutes}-minute window`
+                            : key;
+                    const reset = window.resetsAt;
+                    const resetText =
+                        typeof reset === "number" &&
+                        Number.isSafeInteger(reset) &&
+                        reset > 0 &&
+                        reset < 100_000_000_000
+                            ? `, resets <t:${reset}:R>`
+                            : "";
+                    lines.push(
+                        `${prefix}${label}: ${Math.round(100 - used)}% remaining${resetText}`,
+                    );
+                }
+                if (lines.length === previousLength && bucketLabel) {
+                    lines.push(`${prefix}OpenAI did not report allowance windows.`);
+                }
             }
             return lines.length > 1
                 ? lines.join("\n")

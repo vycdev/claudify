@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Show every reported Codex allowance bucket, with the legacy usage response as a fallback, and accept Windows line endings in the nested security-test fixtures.
 - Run module-mocked security suites in the default test command and reject silently skipped nested test runs.
 - Enforce Codex tool restrictions with explicit no-environment threads and a tools-only MCP bridge; hidden resource operations cannot bypass the upstream boundary.
 - Snapshot Discord message content, embeds, attachments, and reply references before asynchronous processing so later auth-command edits cannot enter context or storage.
