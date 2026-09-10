@@ -11,6 +11,9 @@ function transport(cancelStatus = "canceled") {
         emitClose() {
             for (const fn of listeners) fn("$closed", {});
         },
+        emitCompletion(params) {
+            for (const fn of listeners) fn("account/login/completed", params);
+        },
         onNotification(fn) {
             listeners.add(fn);
             return () => listeners.delete(fn);
@@ -59,6 +62,134 @@ test("cancellation distinguishes provider notFound from an actual cancellation",
         );
         assert.equal(client.closed, true);
         assert.equal(await manager.cancelLogin("owner"), "not-pending");
+    }
+});
+
+test("completion rechecks saved auth with a fresh client after stale state or transport failure", async () => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    for (const mode of ["stale", "closed"]) {
+        const login = transport();
+        const fresh = transport();
+        fresh.complete();
+        if (mode === "closed") {
+            const original = login.request.bind(login);
+            login.request = async (method, params) => {
+                if (method === "account/read") {
+                    login.emitClose();
+                    throw new Error("secret raw transport payload");
+                }
+                return original(method, params);
+            };
+        }
+        let factories = 0;
+        const notices = [], outcomes = [];
+        const manager = new CodexAuthManager({
+            clientFactory: async () => factories++ === 0 ? login : fresh,
+            loginTimeoutMs: 1000,
+            onOutcome: outcome => outcomes.push(outcome),
+        });
+        await manager.startLogin("owner", message => notices.push(message));
+        login.emitCompletion({ loginId: "unrelated", success: true });
+        login.emitCompletion({ loginId: "login-1", success: true });
+        login.emitCompletion({ loginId: "login-1", success: true });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(factories, 2);
+        assert.equal(notices.length, 1);
+        assert.match(notices[0], /authenticated/);
+        assert.deepEqual(outcomes, ["verified-fresh"]);
+        assert.ok(login.closed && fresh.closed);
+        assert.doesNotMatch(JSON.stringify({ notices, outcomes }), /secret|private@example|ABCD|login-1/);
+    }
+});
+
+test("failed provider completion cannot be credited to an existing subscription", async () => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    const client = transport();
+    client.complete();
+    const notices = [], outcomes = [];
+    let factories = 0;
+    const manager = new CodexAuthManager({
+        clientFactory: async () => { factories++; return client; },
+        loginTimeoutMs: 1000,
+        onOutcome: outcome => outcomes.push(outcome),
+    });
+    await manager.startLogin("owner", message => notices.push(message));
+    client.emitCompletion({ loginId: "login-1", success: false, error: "secret token" });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(factories, 1);
+    assert.equal(notices.length, 1);
+    assert.match(notices[0], /OpenAI reported.*did not complete/);
+    assert.doesNotMatch(notices[0], /secret|authenticated/);
+    assert.deepEqual(outcomes, ["provider-failed"]);
+    assert.ok(client.closed);
+});
+
+test("missing, unsupported, or unreadable persisted auth is inconclusive, never success", async () => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    for (const mode of ["missing", "apiKey", "read-error", "factory-error"]) {
+        const login = transport(), fresh = transport();
+        if (mode === "apiKey") fresh.complete("apiKey");
+        if (mode === "read-error") fresh.request = async () => { throw new Error("secret"); };
+        let factories = 0;
+        const notices = [], outcomes = [];
+        const manager = new CodexAuthManager({
+            clientFactory: async () => {
+                if (factories++ === 0) return login;
+                if (mode === "factory-error") throw new Error("secret");
+                return fresh;
+            },
+            loginTimeoutMs: 1000,
+            onOutcome: outcome => outcomes.push(outcome),
+        });
+        await manager.startLogin("owner", message => notices.push(message));
+        login.emitCompletion({ loginId: "login-1", success: true });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(notices.length, 1);
+        assert.match(notices[0], /could not verify.*Check !codex auth status/);
+        assert.doesNotMatch(notices[0], /secret|is authenticated|Retry !codex auth login/);
+        assert.deepEqual(outcomes, ["verification-unavailable"]);
+        assert.ok(login.closed);
+        if (mode !== "factory-error") assert.ok(fresh.closed);
+    }
+});
+
+test("cancel or deadline during fresh-client creation/read suppresses late completion and closes clients", async (t) => {
+    const { CodexAuthManager } = await import("../build/codexAuth.js");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    for (const stage of ["factory", "read"]) {
+        for (const ending of ["cancel", "timeout"]) {
+            const login = transport(), fresh = transport(), replacement = transport();
+            const notices = [], outcomes = [];
+            let release, factories = 0;
+            const waiting = new Promise(resolve => { release = resolve; });
+            if (stage === "read") fresh.request = async () => waiting;
+            const manager = new CodexAuthManager({
+                clientFactory: async () => {
+                    factories++;
+                    if (factories === 1) return login;
+                    if (factories === 2) return stage === "factory" ? waiting : fresh;
+                    return replacement;
+                },
+                loginTimeoutMs: 1000,
+                onOutcome: outcome => outcomes.push(outcome),
+            });
+            await manager.startLogin("owner", message => notices.push(message));
+            login.emitCompletion({ loginId: "login-1", success: true });
+            await new Promise(resolve => setImmediate(resolve));
+            if (ending === "cancel") await manager.cancelLogin("owner");
+            else t.mock.timers.tick(1000);
+            await manager.startLogin("owner", () => {});
+            release(stage === "factory" ? fresh : { account: { type: "chatgpt" } });
+            await new Promise(resolve => setImmediate(resolve));
+            assert.ok(login.closed && fresh.closed);
+            assert.equal(replacement.closed, false);
+            assert.equal(notices.length, ending === "cancel" ? 0 : 1);
+            if (ending === "timeout") {
+                assert.match(notices[0], /verification timed out.*Check !codex auth status/);
+                assert.deepEqual(outcomes, ["verification-timeout"]);
+            } else assert.deepEqual(outcomes, []);
+            await manager.cancelLogin("owner");
+        }
     }
 });
 

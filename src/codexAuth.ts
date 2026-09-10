@@ -6,6 +6,7 @@ type Notify = (message: string) => void | Promise<void>;
 interface LoginSession {
     owner: string;
     client?: CodexClient;
+    verificationClient?: CodexClient;
     loginId?: string;
     timer?: NodeJS.Timeout;
     unsubscribe?: () => void;
@@ -16,6 +17,8 @@ interface LoginSession {
 export interface CodexAuthOptions {
     clientFactory: () => Promise<CodexClient>;
     loginTimeoutMs: number;
+    // Static categories only: never forward provider errors or auth payloads.
+    onOutcome?: (outcome: "verified" | "verified-fresh" | "provider-failed" | "verification-unavailable" | "verification-timeout") => void;
 }
 export class CodexAuthManager {
     private session?: LoginSession;
@@ -102,12 +105,16 @@ export class CodexAuthManager {
         }
     }
 
-    private finish(session: LoginSession, message?: string): void {
+    private finish(session: LoginSession, message?: string, outcome?: Parameters<NonNullable<CodexAuthOptions["onOutcome"]>>[0]): void {
         if (this.session !== session) return;
         this.session = undefined;
         if (session.timer) clearTimeout(session.timer);
         session.unsubscribe?.();
         session.client?.close();
+        session.verificationClient?.close();
+        if (outcome) {
+            try { this.options.onOutcome?.(outcome); } catch { /* Diagnostics must not affect auth. */ }
+        }
         if (message)
             void Promise.resolve()
                 .then(() => session.notify(message))
@@ -125,19 +132,42 @@ export class CodexAuthManager {
         }
         if (params.loginId !== session.loginId) return;
         session.completing = true;
+        if (params.success !== true) {
+            // A pre-existing saved account must not turn a failed new login
+            // into a successful one. The provider's error may contain secrets.
+            this.finish(session,
+                "OpenAI reported that this Codex login did not complete. Check !codex auth status before retrying; an existing login may still be saved. No API-key fallback was used.",
+                "provider-failed");
+            return;
+        }
+        const successMessage = "Codex is authenticated with a ChatGPT subscription. The credentials stay on the bot host.";
         try {
-            if (params.success !== true || !session.client)
-                throw new Error("Login failed.");
+            if (!session.client) throw new Error("Login connection unavailable.");
             await requireCodexSubscription(session.client);
-            this.finish(
-                session,
-                "Codex is authenticated with a ChatGPT subscription. The credentials stay on the bot host.",
-            );
+            this.finish(session, successMessage, "verified");
+            return;
+        } catch {
+            // Completion and account updates are separate notifications. A
+            // stale/closed login client is not proof that stored auth failed.
+        }
+        if (this.session !== session) return;
+        let verificationClient: CodexClient | undefined;
+        try {
+            // One fresh app-server reloads the dedicated persisted auth home.
+            // Requests and the existing session deadline bound this check.
+            verificationClient = await this.options.clientFactory();
+            if (this.session !== session) return;
+            session.verificationClient = verificationClient;
+            await requireCodexSubscription(verificationClient);
+            this.finish(session, successMessage, "verified-fresh");
         } catch {
             this.finish(
                 session,
-                "Codex login was not completed with a ChatGPT subscription. Retry !codex auth login. No API-key fallback was used.",
+                "OpenAI reported login completion, but I could not verify the saved ChatGPT subscription. Check !codex auth status before starting another login. No API-key fallback was used.",
+                "verification-unavailable",
             );
+        } finally {
+            verificationClient?.close();
         }
     }
 
@@ -158,7 +188,10 @@ export class CodexAuthManager {
         session.timer = setTimeout(() => {
             this.finish(
                 session,
-                "Codex login expired. Start a new login if needed.",
+                session.completing
+                    ? "Codex login verification timed out. Check !codex auth status before starting another login."
+                    : "Codex login expired. Start a new login if needed.",
+                session.completing ? "verification-timeout" : undefined,
             );
         }, this.options.loginTimeoutMs);
         try {
@@ -171,7 +204,7 @@ export class CodexAuthManager {
             session.unsubscribe = client.onNotification((method, params) => {
                 if (method === "account/login/completed")
                     void this.completed(session, params);
-                if (method === "$closed")
+                if (method === "$closed" && !session.completing)
                     this.finish(
                         session,
                         "Codex login connection ended. Check status or start a new login.",

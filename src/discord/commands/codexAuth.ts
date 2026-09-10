@@ -23,6 +23,7 @@ const authManager = new CodexAuthManager({
         return createCodexClient({ home: CODEX_HOME, forbiddenRoots: [MESSAGES_DIR] });
     },
     loginTimeoutMs: CODEX_AUTH_LOGIN_TIMEOUT_MS,
+    onOutcome: (outcome) => console.info(`[CodexAuth] Login outcome: ${outcome}`),
 });
 export const codexAuthCommand = new SlashCommandBuilder()
     .setName("codex-auth")
