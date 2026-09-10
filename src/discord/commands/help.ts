@@ -1,6 +1,7 @@
 import { Message } from "discord.js";
 import {
     AUTH_ADMIN_USER_IDS,
+    BOT_PROVIDER,
     COOLDOWN_MS,
     getResponseModelDisplay,
 } from "../../config.js";
@@ -22,7 +23,7 @@ export async function handleHelp(msg: Message): Promise<void> {
         ``,
         `**Commands**`,
         `\`!help\` — This message`,
-        `\`!usage [today|week|month|daily|blocks|monthly]\` — Token usage stats (\`month\` is current; \`monthly\` is history)`,
+        BOT_PROVIDER === "codex" ? "`!usage` — Codex subscription usage information" : `\`!usage [today|week|month|daily|blocks|monthly]\` — Token usage stats (\`month\` is current; \`monthly\` is history)`,
         `\`!profile [@user]\` — View a user's profile`,
         `\`!guild\` — View server memory`,
         `\`!storage\` — Storage stats`,
@@ -31,6 +32,7 @@ export async function handleHelp(msg: Message): Promise<void> {
                   ``,
                   `**Owner administration**`,
                   `DM me \`!auth help\` — Manage Claude CLI authentication privately`,
+                  "DM me `!codex auth help` — Manage Codex subscription login and limits privately",
               ]
             : []),
         ``,

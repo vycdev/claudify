@@ -21,6 +21,7 @@ import { handleGuild } from "./commands/guild.js";
 import { handleProfile } from "./commands/profile.js";
 import { handleHelp } from "./commands/help.js";
 import { handleAuthTextMessage } from "./commands/auth.js";
+import { handleCodexAuthTextMessage } from "./commands/codexAuth.js";
 import { parseAskCommand } from "./commands/ask.js";
 import { askClaude } from "../askClaude.js";
 import {
@@ -351,6 +352,7 @@ export function registerHandler() {
         try {
             if (msg.author.bot) return;
             if (await handleAuthTextMessage(msg)) return;
+            if (await handleCodexAuthTextMessage(msg)) return;
             if (!isBotMessageChannel(msg.channel)) return;
 
             logIncomingMessage(msg);

@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import os from "os";
+import { parseBotProvider, resolveCodexConfig } from "./codexConfig.js";
 import type {
     ClaudeEffort,
     ClaudeRunOptions,
@@ -321,8 +323,28 @@ export const CLAUDE_RESPONSE_SIMPLE_EFFORT = parseSimpleResponseEffort(
     CLAUDE_WORKLOAD_CONFIG.response.effort,
 );
 
+export const BOT_PROVIDER = parseBotProvider(process.env.BOT_PROVIDER);
+const codexConfig = resolveCodexConfig(BOT_PROVIDER === "codex" ? process.env : {});
+export const MODEL_WORKLOAD_CONFIG = BOT_PROVIDER === "codex" ? codexConfig.workloads : CLAUDE_WORKLOAD_CONFIG;
+export const RESPONSE_EFFORT_MODE = BOT_PROVIDER === "codex" ? codexConfig.mode : CLAUDE_RESPONSE_EFFORT_MODE;
+export const RESPONSE_SIMPLE_EFFORT = BOT_PROVIDER === "codex" ? codexConfig.simpleEffort : CLAUDE_RESPONSE_SIMPLE_EFFORT;
+export const CODEX_HOME = path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), ".claudify-codex"));
+export function assertSafeCodexHome(): void {
+    const relativeCodexHome = path.relative(path.resolve(MESSAGES_DIR), CODEX_HOME);
+    if (!relativeCodexHome || (!relativeCodexHome.startsWith(`..${path.sep}`) && relativeCodexHome !== ".." && !path.isAbsolute(relativeCodexHome))) {
+        throw new Error("CODEX_HOME must be outside MESSAGES_DIR so MCP tools cannot read credentials.");
+    }
+}
+if (BOT_PROVIDER === "codex") assertSafeCodexHome();
+export const CODEX_AUTH_LOGIN_TIMEOUT_MS = parsePositiveInteger(process.env.CODEX_AUTH_LOGIN_TIMEOUT_MS, 900_000, MAX_TIMER_DELAY_MS);
+
 export function getResponseModelDisplay(): string {
-    return CLAUDE_WORKLOAD_CONFIG.response.model ?? "Claude CLI default";
+    return MODEL_WORKLOAD_CONFIG.response.model ?? "Claude CLI default";
+}
+
+export function logModelWorkloadConfig(): void {
+    if (BOT_PROVIDER === "claude") { logClaudeWorkloadConfig(); return; }
+    for (const options of Object.values(MODEL_WORKLOAD_CONFIG)) console.error(`[Codex Config] ${options.workload}: model=${options.model}, effort=${options.effort ?? "default"}`);
 }
 
 export function logClaudeWorkloadConfig(): void {

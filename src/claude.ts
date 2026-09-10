@@ -85,7 +85,7 @@ function tryRunNext(): void {
     }
 }
 
-function enqueue<T>(
+export function enqueueModelRun<T>(
     workload: ClaudeRunOptions["workload"],
     fn: () => Promise<T>,
 ): Promise<T> {
@@ -261,7 +261,7 @@ export function createClaudeRunner(
     input: string,
     options: ClaudeRunOptions,
 ) => Promise<ClaudeRunResult> {
-    return (args, input, options) => enqueue(
+    return (args, input, options) => enqueueModelRun(
         options.workload,
         () => spawnClaude(args, input, options, executable),
     );

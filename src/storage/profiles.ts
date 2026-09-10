@@ -1,13 +1,14 @@
 import path from "path";
 import {
-    CLAUDE_WORKLOAD_CONFIG,
+    MODEL_WORKLOAD_CONFIG,
     MEMORY_FACT_MAX_CHARS,
     MESSAGES_DIR,
     PROFILES_DIR,
     PROFILE_MAX_CHARS,
     SERVER_MEMORY_MAX_CHARS,
 } from "../config.js";
-import { runClaude } from "../claude.js";
+import { runModel } from "../model.js";
+import type { ModelRunner } from "../modelTypes.js";
 import { renderPrompt } from "../prompts.js";
 import {
     extractHumanSourceMessageIds,
@@ -18,8 +19,6 @@ import {
     type MemoryFactCandidate,
 } from "./memoryFacts.js";
 import { readVerifiedUtf8File } from "./safeRead.js";
-
-type ClaudeRunner = typeof runClaude;
 
 interface ProfileFactCandidate extends MemoryFactCandidate {
     userId: string;
@@ -270,7 +269,7 @@ export function getServerMemory(guildId: string): string {
 export async function backgroundProfileUpdate(
     users: { tag: string; id: string }[],
     conversationContext: string,
-    claudeRunner: ClaudeRunner = runClaude,
+    modelRunner: ModelRunner = runModel,
 ): Promise<void> {
     if (users.length === 0) return;
 
@@ -293,10 +292,10 @@ export async function backgroundProfileUpdate(
                     profileMaxChars: PROFILE_MAX_CHARS,
                     profileSections,
                 });
-                const { stdout } = await claudeRunner(
+                const { stdout } = await modelRunner(
                     ["-p"],
                     prompt,
-                    CLAUDE_WORKLOAD_CONFIG["profile-update"],
+                    MODEL_WORKLOAD_CONFIG["profile-update"],
                 );
                 const candidates = parseProfileCandidates(stdout);
                 const allowedUsers = new Set(uniqueUsers.map((user) => user.id));
@@ -359,7 +358,7 @@ export async function backgroundServerMemoryUpdate(
     guildName: string,
     channelName: string,
     conversationContext: string,
-    claudeRunner: ClaudeRunner = runClaude,
+    modelRunner: ModelRunner = runModel,
 ): Promise<void> {
     return serializeUpdate([`server:${guildId}`], async () => {
         const existingMemory = getServerMemory(guildId);
@@ -373,10 +372,10 @@ export async function backgroundServerMemoryUpdate(
                 memoryFactMaxChars: MEMORY_FACT_MAX_CHARS,
                 serverMemoryMaxChars: SERVER_MEMORY_MAX_CHARS,
             });
-            const { stdout } = await claudeRunner(
+            const { stdout } = await modelRunner(
                 ["-p"],
                 prompt,
-                CLAUDE_WORKLOAD_CONFIG["server-memory-update"],
+                MODEL_WORKLOAD_CONFIG["server-memory-update"],
             );
             const sourceMetadata = extractSourceMessageMetadata(
                 conversationContext,

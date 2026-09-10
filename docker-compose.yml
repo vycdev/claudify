@@ -8,6 +8,21 @@ services:
       - AUTH_ADMIN_USER_IDS=
       - CLAUDE_AUTH_LOGIN_TIMEOUT_MS=300000
       - MESSAGES_DIR=/app/messages
+      - BOT_PROVIDER=claude
+      - CODEX_HOME=/codex
+      - CODEX_MODEL=gpt-5.6-luna
+      - CODEX_EFFORT=medium
+      - CODEX_AUTH_LOGIN_TIMEOUT_MS=900000
+      - CODEX_RESPONSE_MODEL=
+      - CODEX_RESPONSE_EFFORT=
+      - CODEX_RESPONSE_EFFORT_MODE=fixed
+      - CODEX_RESPONSE_SIMPLE_EFFORT=low
+      - CODEX_PROFILE_MODEL=
+      - CODEX_PROFILE_EFFORT=
+      - CODEX_SERVER_MEMORY_MODEL=
+      - CODEX_SERVER_MEMORY_EFFORT=
+      - CODEX_SUMMARY_MODEL=
+      - CODEX_SUMMARY_EFFORT=
       - BOT_MODEL=claude-haiku-4-5
       - BOT_EFFORT=
       - CLAUDE_RESPONSE_MODEL=claude-sonnet-5
@@ -35,7 +50,9 @@ services:
     volumes:
       - messages:/app/messages
       - claude-home:/root
+      - codex-home:/codex
 
 volumes:
   messages:
   claude-home:
+  codex-home:
