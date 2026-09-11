@@ -36,7 +36,11 @@ const codexRunner = createCodexRunner({
 export const runModel: ModelRunner = (args, input, options, imagePaths) => {
     if (BOT_PROVIDER === "codex")
         return codexRunner(args, input, options, imagePaths);
-    if (options.effort === "none" || options.effort === "minimal")
+    if (
+        options.effort === "none"
+        || options.effort === "minimal"
+        || options.effort === "ultra"
+    )
         throw new Error("Unsupported Claude effort.");
     return runClaude(args, input, {
         ...options,

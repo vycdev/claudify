@@ -25,6 +25,13 @@ test("Codex defaults to Luna and never inherits legacy Claude models", async () 
     });
     assert.equal(custom.workloads.response.model, "gpt-5.6-sol");
     assert.equal(custom.workloads["profile-update"].effort, "low");
+    const ultra = resolveCodexConfig({
+        CODEX_MODEL: "gpt-5.6-sol",
+        CODEX_EFFORT: "ultra",
+        CODEX_SUMMARY_EFFORT: "ultra",
+    });
+    assert.equal(ultra.workloads.response.effort, "ultra");
+    assert.equal(ultra.workloads["daily-summary"].effort, "ultra");
     const adaptive = resolveCodexConfig({
         CODEX_EFFORT: "high",
         CODEX_RESPONSE_SIMPLE_EFFORT: "inherit",
