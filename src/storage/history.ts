@@ -10,6 +10,7 @@ import {
     HISTORY_RECAP_MAX_LINES,
     HISTORY_SEARCH_CONTEXT_LINES,
     HISTORY_SEARCH_MAX_BLOCKS,
+    MESSAGES_DIR,
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
 import {
@@ -17,6 +18,7 @@ import {
     sanitizeHistorySegment,
 } from "./historyPaths.js";
 import { searchChannelHistory } from "./historySearch.js";
+import { appendVerifiedUtf8File } from "./safeRead.js";
 
 const HISTORY_STOP_WORDS = new Set([
     "about",
@@ -128,7 +130,14 @@ export function appendToLog(
         ? ` [message_id=${source.messageId}; author_id=${source.authorId}; author_bot=${source.authorBot}; created_at=${timestamp.toISOString()}]`
         : "";
     const line = `[${time}] ${author}${sourceMetadata}: ${normalized}\n`;
-    fs.appendFileSync(filePath, line, "utf-8");
+    if (!appendVerifiedUtf8File(
+        filePath,
+        line,
+        MESSAGES_DIR,
+        HISTORY_V2_DIR,
+    )) {
+        throw new Error("Could not safely append history");
+    }
 }
 
 export function isDeepHistoryRequest(question: string): boolean {
