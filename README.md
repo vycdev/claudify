@@ -106,8 +106,9 @@ unset, or `inherit`. Codex never inherits `BOT_MODEL` or `CLAUDE_*` settings.
 Models must be explicit IDs. Claudify does not select a replacement model. If
 OpenAI reports rerouting during a turn, Claudify rejects the result without
 retrying or bypassing the reroute; usage or an action may already have occurred.
-Effort accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, but
-the selected account/model must advertise support for the chosen value.
+Effort accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or
+`ultra`, but the selected account/model must advertise support for the chosen
+value.
 `default` omits the effort override. Model availability and effort support are
 checked before inference. API-key accounts are refused, even if API credentials
 exist elsewhere on the host.

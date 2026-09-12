@@ -19,6 +19,7 @@ const efforts = new Set([
     "high",
     "xhigh",
     "max",
+    "ultra",
 ]);
 function model(
     value: string | undefined,

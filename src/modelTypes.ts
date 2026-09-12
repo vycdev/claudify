@@ -7,7 +7,8 @@ export type ModelEffort =
     | "medium"
     | "high"
     | "xhigh"
-    | "max";
+    | "max"
+    | "ultra";
 export interface ModelRunOptions {
     workload: ClaudeWorkload;
     model?: string;

@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Accept the `ultra` Codex reasoning effort when the selected model advertises support for it.
 - Recheck persisted Codex subscription authentication with a fresh client after a failed completion check; distinguish provider failure from unavailable verification and log only safe outcome categories.
 - Show every reported Codex allowance bucket, with the legacy usage response as a fallback, and accept Windows line endings in the nested security-test fixtures.
 - Run module-mocked security suites in the default test command and reject silently skipped nested test runs.
