@@ -6,6 +6,7 @@ export function fakeClient({
     failed = false,
     pending = false,
     rerouted = false,
+    efforts = ["medium"],
 } = {}) {
     const listeners = new Set();
     const calls = [];
@@ -31,9 +32,7 @@ export function fakeClient({
                     data: [
                         {
                             model: "gpt-5.6-luna",
-                            supportedReasoningEfforts: [
-                                { reasoningEffort: "medium" },
-                            ],
+                            supportedReasoningEfforts: efforts.map(reasoningEffort => ({ reasoningEffort })),
                         },
                     ],
                     nextCursor: null,
@@ -104,6 +103,28 @@ export function fakeClient({
         },
     };
 }
+
+test("Codex sends ultra unchanged only when the selected model advertises it", async () => {
+    const { createCodexRunner } = await import("../build/codex.js");
+    for (const supported of [true, false]) {
+        const client = fakeClient({ efforts: supported ? ["medium", "ultra"] : ["medium"] });
+        const run = createCodexRunner({
+            home: "/tmp/unused-test-home",
+            clientFactory: async () => client,
+        });
+        const operation = run([], "hello", {
+            workload: "response", model: "gpt-5.6-luna", effort: "ultra",
+        });
+        if (supported) {
+            await operation;
+            assert.equal(client.calls.find(call => call.method === "turn/start").params.effort, "ultra");
+        } else {
+            await assert.rejects(operation, /does not support the configured reasoning effort/);
+            assert.ok(!client.calls.some(call => call.method === "thread/start" || call.method === "turn/start"));
+        }
+        assert.equal(client.closed, true);
+    }
+});
 
 test("Codex rejects provider model rerouting without retrying or bypassing it", async () => {
     const { createCodexRunner } = await import("../build/codex.js");
