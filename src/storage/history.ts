@@ -10,6 +10,7 @@ import {
     HISTORY_RECAP_MAX_LINES,
     HISTORY_SEARCH_CONTEXT_LINES,
     HISTORY_SEARCH_MAX_BLOCKS,
+    MESSAGES_DIR,
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
 import {
@@ -17,6 +18,7 @@ import {
     sanitizeHistorySegment,
 } from "./historyPaths.js";
 import { searchChannelHistory } from "./historySearch.js";
+import { readVerifiedUtf8File } from "./safeRead.js";
 
 const HISTORY_STOP_WORDS = new Set([
     "about",
@@ -153,10 +155,14 @@ export function isHistoricalLookupRequest(question: string): boolean {
     return artifact.test(normalized) && priorReference.test(normalized);
 }
 
-function readLogLines(filePath: string): string[] {
-    if (!fs.existsSync(filePath)) return [];
-    return fs
-        .readFileSync(filePath, "utf-8")
+function readLogLines(filePath: string, expectedDirectory: string): string[] {
+    const result = readVerifiedUtf8File(
+        filePath,
+        MESSAGES_DIR,
+        expectedDirectory,
+    );
+    if (result.state !== "valid") return [];
+    return result.text
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
@@ -263,7 +269,7 @@ function loadLegacyHistoryMatches(
         if (entry.name.slice(0, suffix.index) !== safeChannelName) continue;
 
         const filePath = path.join(HISTORY_DIR, entry.name);
-        const lines = readLogLines(filePath);
+        const lines = readLogLines(filePath, HISTORY_DIR);
         for (let index = 0; index < lines.length; index++) {
             const normalized = lines[index].normalize("NFC").toLowerCase();
             if (!terms.some((term) => normalized.includes(term))) continue;
@@ -390,7 +396,7 @@ export function loadRecentHistory(
     const yesterdaySummary = getSummaryPath(channelId, yesterday, channelName);
     const yesterdayLog = getDailyLogPath(channelId, yesterday, channelName);
     if (!fs.existsSync(yesterdaySummary) && fs.existsSync(yesterdayLog)) {
-        const lines = readLogLines(yesterdayLog).filter(
+        const lines = readLogLines(yesterdayLog, HISTORY_V2_DIR).filter(
             (line) => !lineHasExcludedMessage(line, excludedMessageIds),
         );
         if (lines.length > 0) {
@@ -419,7 +425,7 @@ export function loadRecentHistory(
 
     const todayPath = getDailyLogPath(channelId, new Date(), channelName);
     if (fs.existsSync(todayPath)) {
-        const lines = readLogLines(todayPath).filter(
+        const lines = readLogLines(todayPath, HISTORY_V2_DIR).filter(
             (line) => !lineHasExcludedMessage(line, excludedMessageIds),
         );
         const relevantSnippets = buildRelevantSnippets(lines, searchTerms);
