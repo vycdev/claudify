@@ -3,10 +3,27 @@ import test from "node:test";
 
 import { ChannelType, Collection, NewsChannel } from "discord.js";
 
-const [{ client }, { findChannel }] = await Promise.all([
+const [{ client }, { findChannel, findGuild }] = await Promise.all([
     import("../build/discord/client.js"),
     import("../build/discord/helpers.js"),
 ]);
+
+test("findGuild reports when the bot is not in any servers", async () => {
+    const cachedGuilds = new Collection(client.guilds.cache);
+    client.guilds.cache.clear();
+
+    try {
+        await assert.rejects(
+            findGuild(),
+            /Bot is not in any servers/,
+        );
+    } finally {
+        client.guilds.cache.clear();
+        for (const [id, guild] of cachedGuilds) {
+            client.guilds.cache.set(id, guild);
+        }
+    }
+});
 
 function createAnnouncementChannel({
     channelId = "222222222222222222",
