@@ -18,7 +18,7 @@ import {
     sanitizeHistorySegment,
 } from "./historyPaths.js";
 import { searchChannelHistory } from "./historySearch.js";
-import { readVerifiedUtf8File } from "./safeRead.js";
+import { appendVerifiedUtf8File, readVerifiedUtf8File } from "./safeRead.js";
 
 const HISTORY_STOP_WORDS = new Set([
     "about",
@@ -130,7 +130,14 @@ export function appendToLog(
         ? ` [message_id=${source.messageId}; author_id=${source.authorId}; author_bot=${source.authorBot}; created_at=${timestamp.toISOString()}]`
         : "";
     const line = `[${time}] ${author}${sourceMetadata}: ${normalized}\n`;
-    fs.appendFileSync(filePath, line, "utf-8");
+    if (!appendVerifiedUtf8File(
+        filePath,
+        line,
+        MESSAGES_DIR,
+        HISTORY_V2_DIR,
+    )) {
+        throw new Error("Could not safely append history");
+    }
 }
 
 export function isDeepHistoryRequest(question: string): boolean {

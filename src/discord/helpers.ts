@@ -24,6 +24,9 @@ export function normalizeChannelIdentifier(channelIdentifier: string): string {
 export async function findGuild(guildIdentifier?: string) {
     const normalizedGuildIdentifier = normalizeGuildIdentifier(guildIdentifier);
     if (!normalizedGuildIdentifier) {
+        if (client.guilds.cache.size === 0) {
+            throw new Error("Bot is not in any servers");
+        }
         if (client.guilds.cache.size === 1) {
             return client.guilds.cache.first()!;
         }
