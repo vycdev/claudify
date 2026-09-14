@@ -7,8 +7,10 @@ import {
     HISTORY_SEARCH_DB_PATH,
     HISTORY_SEARCH_CONTEXT_LINES,
     HISTORY_V2_DIR,
+    MESSAGES_DIR,
 } from "../config.js";
 import { parseChannelHistoryFileName } from "./historyPaths.js";
+import { readVerifiedUtf8File } from "./safeRead.js";
 
 interface IndexedFileState {
     file_path: string;
@@ -53,8 +55,10 @@ function getDatabase(): DatabaseSync {
     return database;
 }
 
-function readIndexableLines(filePath: string): string[] {
-    return fs.readFileSync(filePath, "utf8")
+function readIndexableLines(filePath: string): string[] | undefined {
+    const result = readVerifiedUtf8File(filePath, MESSAGES_DIR, HISTORY_V2_DIR);
+    if (result.state !== "valid") return undefined;
+    return result.text
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean);
@@ -136,6 +140,11 @@ function synchronizeChannelIndex(db: DatabaseSync, channelId: string): void {
             }
 
             const lines = readIndexableLines(file.filePath);
+            if (!lines) {
+                deleteSearchRows.run(file.filePath);
+                deleteFileState.run(file.filePath);
+                continue;
+            }
             const appendOnly = Boolean(
                 state
                 && stat.size >= state.size
@@ -194,7 +203,6 @@ export function searchChannelHistory(
             file_path,
             line_number,
             history_date,
-            content,
             bm25(history_fts) AS rank
         FROM history_fts
         WHERE history_fts MATCH ?
@@ -211,7 +219,6 @@ export function searchChannelHistory(
         file_path: string;
         line_number: number;
         history_date: string;
-        content: string;
         rank: number;
     }>;
 
@@ -224,13 +231,15 @@ export function searchChannelHistory(
         let lines = fileLines.get(row.file_path);
         if (!lines) {
             lines = readIndexableLines(row.file_path);
+            if (!lines) continue;
             fileLines.set(row.file_path, lines);
         }
         const lineNumber = Number(row.line_number);
         const content = lines.slice(
             Math.max(0, lineNumber - HISTORY_SEARCH_CONTEXT_LINES),
             Math.min(lines.length, lineNumber + HISTORY_SEARCH_CONTEXT_LINES + 1),
-        ).join("\n") || row.content;
+        ).join("\n");
+        if (!content) continue;
         if (seenContent.has(content)) continue;
         const renderedLength = row.history_date.length + content.length + 3;
         if (usedChars + renderedLength > maxChars) break;
