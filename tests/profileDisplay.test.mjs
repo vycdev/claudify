@@ -77,3 +77,24 @@ test("profile and server-memory displays preserve astral Unicode across chunks",
         assert.equal(contents.join(""), expected);
     }
 });
+
+test("server-memory displays disable Discord mention parsing", async () => {
+    fs.writeFileSync(
+        path.join(PROFILES_DIR, "server_guild-2.txt"),
+        `A stored fact containing @everyone ${"x".repeat(2500)}`,
+        "utf8",
+    );
+
+    const messages = [];
+    await handleGuild({
+        guild: { id: "guild-2", name: "@everyone Guild" },
+        reply: async (options) => messages.push(options),
+        channel: { send: async (options) => messages.push(options) },
+    });
+
+    assert.ok(messages.length > 1);
+    for (const message of messages) {
+        assert.equal(typeof message.content, "string");
+        assert.deepEqual(message.allowedMentions, { parse: [] });
+    }
+});

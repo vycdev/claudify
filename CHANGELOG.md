@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Prevent `!guild` server-memory responses from triggering Discord mentions from stored memory or server names.
 - Verify recent, legacy, and full-text-search history reads before assembling model context; reject symbolic-link files and replaced storage directories.
 - Report when the bot is not in any Discord servers instead of incorrectly asking for a server name or ID.
 - Refuse to append channel history through symbolic links, hard links, or replaced storage directories.
