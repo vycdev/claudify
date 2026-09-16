@@ -81,7 +81,7 @@ test("profile and server-memory displays preserve astral Unicode across chunks",
 test("server-memory displays disable Discord mention parsing", async () => {
     fs.writeFileSync(
         path.join(PROFILES_DIR, "server_guild-2.txt"),
-        `A stored fact containing @everyone ${"x".repeat(2500)}`,
+        `A stored fact containing @everyone ${"x".repeat(2500)} <@123456789012345678> <@&234567890123456789>`,
         "utf8",
     );
 
@@ -97,4 +97,17 @@ test("server-memory displays disable Discord mention parsing", async () => {
         assert.equal(typeof message.content, "string");
         assert.deepEqual(message.allowedMentions, { parse: [] });
     }
+});
+
+test("empty server-memory displays disable mentions in server names", async () => {
+    const messages = [];
+    await handleGuild({
+        guild: { id: "guild-without-memory", name: "@here <@&234567890123456789> Guild" },
+        reply: async (options) => messages.push(options),
+        channel: { send: async (options) => messages.push(options) },
+    });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].content, /^No server memory found for @here/);
+    assert.deepEqual(messages[0].allowedMentions, { parse: [] });
 });
