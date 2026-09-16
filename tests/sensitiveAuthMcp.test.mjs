@@ -123,7 +123,7 @@ if (!process.execArgv.includes("--experimental-test-module-mocks")) {
                 assert.doesNotMatch(JSON.stringify({ result, downloads }), /SYNTHETIC_/);
                 assert.equal(downloads.length, 2);
                 assert.match(downloads[1].url, /ordinary-first\.txt/);
-                if (tool === "fetch-messages") assert.match(result.content[0].text, /ordinary description/);
+                assert.match(result.content[0].text, /ordinary description/);
             } finally {
                 release(); waitDownload = undefined; signalDownload = undefined;
                 await server.close();
@@ -176,6 +176,7 @@ if (!process.execArgv.includes("--experimental-test-module-mocks")) {
                     const text = response.content[0].text;
                     assert.doesNotMatch(text, /SYNTHETIC_SECRET/);
                     assert.match(text, /!authentic ordinary message/);
+                    assert.match(text, /ordinary_EMBED/);
                     assert.match(text, /ordinary\.png/);
                     assert.equal(downloads.length, 1);
                     assert.match(downloads[0].filename, /ordinary/);

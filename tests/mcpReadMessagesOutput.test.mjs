@@ -29,7 +29,7 @@ test.after(() => {
     else process.env.MCP_READ_MESSAGES_MAX_CHARS = previousLimit;
 });
 
-test("bounds read-messages responses while retaining the newest messages", async (t) => {
+async function assertBoundedReadMessages(t, embedHeavy) {
     const guild = {
         id: "111111111111111111",
         name: "Test Server",
@@ -40,9 +40,14 @@ test("bounds read-messages responses while retaining the newest messages", async
             return [id, {
                 id,
                 author: { tag: "user#0001" },
-                content: `${index === 0 ? "oldest-marker" : index === 99 ? "newest-marker" : "message"}-${"x".repeat(1800)}`,
+                content: embedHeavy ? "" : `${index === 0 ? "oldest-marker" : index === 99 ? "newest-marker" : "message"}-${"x".repeat(1800)}`,
                 createdAt: new Date(Date.UTC(2026, 7, 1, index, 0)),
                 attachments: new Map(),
+                embeds: embedHeavy ? [{
+                    title: index === 0 ? "oldest-marker" : index === 99 ? "newest-marker" : "message",
+                    description: "x".repeat(4000),
+                    url: "https://example.com/article",
+                }] : [],
             }];
         }).reverse(),
     );
@@ -92,4 +97,10 @@ test("bounds read-messages responses while retaining the newest messages", async
         discordClient.guilds.fetch = originalGuildFetch;
         discordClient.channels.fetch = originalChannelFetch;
     }
-});
+}
+
+for (const embedHeavy of [false, true]) {
+    test(`bounds ${embedHeavy ? "embed-heavy" : "text-heavy"} read-messages responses while retaining the newest messages`, async (t) => {
+        await assertBoundedReadMessages(t, embedHeavy);
+    });
+}

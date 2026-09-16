@@ -32,9 +32,19 @@ test("read-messages preserves attachment and embed metadata", async () => {
         ]),
         embeds: [
             {
+                title: "Release notes",
+                description: "An embed-only update",
+                url: null,
+            },
+            {
                 title: null,
                 description: null,
                 url: "https://example.com/article",
+            },
+            {
+                title: null,
+                description: null,
+                url: null,
             },
         ],
     };
@@ -84,6 +94,11 @@ test("read-messages preserves attachment and embed metadata", async () => {
             },
         ]);
         assert.deepEqual(entry.embeds, [
+            {
+                title: "Release notes",
+                description: "An embed-only update",
+                url: null,
+            },
             {
                 title: null,
                 description: null,
