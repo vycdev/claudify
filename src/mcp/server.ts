@@ -842,6 +842,17 @@ export function createMcpServer(): Server {
                             }
                         }
                         if (images.length > 0) entry.images = images;
+                        if (msg.embeds.length > 0) {
+                            entry.embeds = msg.embeds
+                                .map((embed) => ({
+                                    title: embed.title,
+                                    description: embed.description,
+                                    url: embed.url,
+                                }))
+                                .filter((embed) =>
+                                    embed.title || embed.description || embed.url
+                                );
+                        }
                         formatted.push(entry);
                     }
                     return {
