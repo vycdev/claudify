@@ -8,7 +8,7 @@ const [{ client: discordClient }, { createMcpServer }] = await Promise.all([
     import("../build/mcp/server.js"),
 ]);
 
-test("read-messages preserves attachment metadata", async () => {
+test("read-messages preserves attachment and embed metadata", async () => {
     const guild = {
         id: "111111111111111111",
         name: "Test Server",
@@ -30,6 +30,23 @@ test("read-messages preserves attachment metadata", async () => {
                 },
             ],
         ]),
+        embeds: [
+            {
+                title: "Release notes",
+                description: "An embed-only update",
+                url: null,
+            },
+            {
+                title: null,
+                description: null,
+                url: "https://example.com/article",
+            },
+            {
+                title: null,
+                description: null,
+                url: null,
+            },
+        ],
     };
     const channel = Object.create(TextChannel.prototype);
     Object.defineProperties(channel, {
@@ -74,6 +91,18 @@ test("read-messages preserves attachment metadata", async () => {
                 url: "https://cdn.example.test/notes.txt",
                 contentType: "text/plain",
                 size: 42,
+            },
+        ]);
+        assert.deepEqual(entry.embeds, [
+            {
+                title: "Release notes",
+                description: "An embed-only update",
+                url: null,
+            },
+            {
+                title: null,
+                description: null,
+                url: "https://example.com/article",
             },
         ]);
     } finally {
