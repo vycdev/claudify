@@ -161,15 +161,16 @@ test("responses route through response settings and report the response model", 
         /Never become hostile, defensive, contemptuous, or insulting/,
     );
 
-    let helpReply = "";
+    let helpReply;
     await handleHelp({
         author: { id: "user-1" },
-        reply: async (content) => {
-            helpReply = content;
+        reply: async (options) => {
+            helpReply = options;
         },
     });
-    assert.match(helpReply, /powered by `response-model`/);
-    assert.doesNotMatch(helpReply, /global-model/);
+    assert.match(helpReply.content, /powered by `response-model`/);
+    assert.doesNotMatch(helpReply.content, /global-model/);
+    assert.deepEqual(helpReply.allowedMentions, { parse: [] });
 });
 
 test("adaptive routing keeps Sonnet while lowering a simple response effort", async () => {
