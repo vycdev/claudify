@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Restrict Claude authentication slash commands to one-to-one bot DMs instead of accepting other private-channel contexts.
 - Preserve embed titles, descriptions, and URLs in live MCP `read-messages` results.
 - Prevent `!guild` server-memory responses from triggering Discord mentions from stored memory or server names.
 - Verify recent, legacy, and full-text-search history reads before assembling model context; reject symbolic-link files and replaced storage directories.
