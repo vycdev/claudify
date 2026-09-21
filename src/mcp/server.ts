@@ -32,12 +32,18 @@ import {
 import { parseChannelHistoryFileName } from "../storage/historyPaths.js";
 import { readVerifiedUtf8File } from "../storage/safeRead.js";
 
+const ChannelIdentifierSchema = z
+    .string()
+    .trim()
+    .min(1, "Channel must contain at least one non-whitespace character")
+    .describe('Channel name (e.g., "general") or ID');
+
 const ReactToMessageSchema = z.object({
     server: z
         .string()
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
-    channel: z.string().describe('Channel name (e.g., "general") or ID'),
+    channel: ChannelIdentifierSchema,
     messageId: z
         .string()
         .regex(/^\d+$/, "Invalid Discord message ID")
@@ -179,7 +185,7 @@ export const SendMessageSchema = z.object({
         .string()
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
-    channel: z.string().describe('Channel name (e.g., "general") or ID'),
+    channel: ChannelIdentifierSchema,
     message: z
         .string()
         .min(1)
@@ -275,7 +281,7 @@ const ReadMessagesSchema = z.object({
         .string()
         .optional()
         .describe("Server name or ID (optional if bot is only in one server)"),
-    channel: z.string().describe('Channel name (e.g., "general") or ID'),
+    channel: ChannelIdentifierSchema,
     limit: z.number().int().min(1).max(100).default(50),
 });
 
@@ -373,6 +379,8 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description: 'Channel name (e.g., "general") or ID',
+                            minLength: 1,
+                            pattern: "\\S",
                         },
                         message: {
                             type: "string",
@@ -401,6 +409,8 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description: 'Channel name (e.g., "general") or ID',
+                            minLength: 1,
+                            pattern: "\\S",
                         },
                         messageId: {
                             type: "string",
@@ -501,6 +511,8 @@ export function createMcpServer(): Server {
                         channel: {
                             type: "string",
                             description: 'Channel name (e.g., "general") or ID',
+                            minLength: 1,
+                            pattern: "\\S",
                         },
                         limit: {
                             type: "integer",
