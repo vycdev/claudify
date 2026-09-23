@@ -20,7 +20,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
 
 2. Set your environment variables in `docker-compose.yml`:
    - `DISCORD_TOKEN` — your bot token
-   - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave as placeholder to allow everyone)
+   - `REQUIRED_ROLE_ID` — Discord role ID that can use the bot (leave empty to allow everyone)
    - `AUTH_ADMIN_USER_IDS` — comma-separated Discord user IDs allowed to manage Claude and Codex authentication (leave empty to disable)
    - `CLAUDE_AUTH_LOGIN_TIMEOUT_MS` — optional Discord login-session timeout (default: `300000`)
    - `MESSAGES_DIR` — where message history is stored (default: `/app/messages`)
