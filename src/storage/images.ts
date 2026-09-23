@@ -98,8 +98,12 @@ function assertSafeAttachmentDestination(filePath: string): void {
     }
 
     try {
-        if (fs.lstatSync(filePath).isSymbolicLink()) {
+        const destination = fs.lstatSync(filePath);
+        if (destination.isSymbolicLink()) {
             throw new Error("Attachment destination must not be a symbolic link");
+        }
+        if (destination.nlink !== 1) {
+            throw new Error("Attachment destination must not be hard linked");
         }
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -115,7 +119,6 @@ function writeAttachmentFile(filePath: string, buffer: Buffer): void {
             filePath,
             fs.constants.O_WRONLY |
                 fs.constants.O_CREAT |
-                fs.constants.O_TRUNC |
                 NO_FOLLOW_FLAG,
         );
     } catch (error) {
@@ -126,6 +129,14 @@ function writeAttachmentFile(filePath: string, buffer: Buffer): void {
     }
 
     try {
+        const destination = fs.fstatSync(fileDescriptor);
+        if (!destination.isFile()) {
+            throw new Error("Attachment destination must be a regular file");
+        }
+        if (destination.nlink !== 1) {
+            throw new Error("Attachment destination must not be hard linked");
+        }
+        fs.ftruncateSync(fileDescriptor, 0);
         fs.writeFileSync(fileDescriptor, buffer);
     } finally {
         fs.closeSync(fileDescriptor);

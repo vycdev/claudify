@@ -47,6 +47,25 @@ test("attachment downloads do not follow symbolic-link destinations", async (t) 
     assert.equal(fs.readFileSync(regularPath, "utf8"), "overwritten");
 });
 
+test("attachment downloads do not overwrite hard-linked destinations", async (t) => {
+    const outsidePath = path.join(tempRoot, "hard-link-target.txt");
+    const hardLinkPath = path.join(messagesDir, "images", "hard-link.txt");
+    fs.writeFileSync(outsidePath, "original", "utf8");
+    fs.linkSync(outsidePath, hardLinkPath);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("overwritten");
+    t.after(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    await assert.rejects(
+        () => downloadAttachment("https://example.com/attachment", "hard-link.txt"),
+        /must not be hard linked/,
+    );
+    assert.equal(fs.readFileSync(outsidePath, "utf8"), "original");
+});
+
 test("attachment filenames cannot traverse symbolic-link directories", async () => {
     const outsideDir = path.join(tempRoot, "outside");
     const linkedDir = path.join(messagesDir, "images", "linked");

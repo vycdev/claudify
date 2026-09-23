@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Refuse to overwrite hard-linked attachment destinations when saving downloaded images.
 - Restrict Claude authentication slash commands to one-to-one bot DMs instead of accepting other private-channel contexts.
 - Prevent dynamic bot names in `!help` responses from triggering Discord mentions.
 - Reject exponent, hexadecimal, and signed syntax in non-negative integer environment settings instead of interpreting them as decimal configuration values.
