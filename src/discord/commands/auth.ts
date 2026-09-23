@@ -1,6 +1,7 @@
 import {
     ChatInputCommandInteraction,
     Events,
+    InteractionContextType,
     Message,
     SlashCommandBuilder,
 } from "discord.js";
@@ -22,7 +23,7 @@ export const authCommand = new SlashCommandBuilder()
     .setName("auth")
     .setDescription("Manage Claudify's Claude CLI authentication")
     .setDefaultMemberPermissions(null)
-    .setDMPermission(true)
+    .setContexts(InteractionContextType.BotDM)
     .addSubcommand((subcommand) =>
         subcommand
             .setName("status")
@@ -87,8 +88,11 @@ function safeErrorMessage(error: unknown): string {
         : "Claude authentication failed.";
 }
 
-export function isPrivateAuthContext(guildId: string | null): boolean {
-    return guildId === null;
+export function isPrivateAuthContext(
+    guildId: string | null,
+    context: InteractionContextType | null,
+): boolean {
+    return guildId === null && context === InteractionContextType.BotDM;
 }
 
 export type AuthTextCommand =
@@ -278,7 +282,7 @@ async function handleAuthInteraction(
         return;
     }
 
-    if (!isPrivateAuthContext(interaction.guildId)) {
+    if (!isPrivateAuthContext(interaction.guildId, interaction.context)) {
         await interaction.reply({
             content: "For security, use this command in a private DM.",
             ephemeral: true,

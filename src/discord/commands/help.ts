@@ -42,5 +42,8 @@ export async function handleHelp(msg: Message): Promise<void> {
         `• If I don't think a message needs a reply, I'll just leave a reaction`,
     ].join("\n");
 
-    await msg.reply(help);
+    await msg.reply({
+        content: help,
+        allowedMentions: { parse: [] },
+    });
 }

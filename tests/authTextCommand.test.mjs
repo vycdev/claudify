@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { InteractionContextType } from "discord.js";
 
 import {
     authCommand,
@@ -7,10 +8,20 @@ import {
     parseAuthTextCommand,
 } from "../build/discord/commands/auth.js";
 
-test("slash auth is available only in private contexts", () => {
-    assert.equal(isPrivateAuthContext(null), true);
-    assert.equal(isPrivateAuthContext("guild-id"), false);
-    assert.equal(authCommand.toJSON().dm_permission, true);
+test("slash auth is available only in bot DMs", () => {
+    assert.equal(
+        isPrivateAuthContext(null, InteractionContextType.BotDM),
+        true,
+    );
+    assert.equal(
+        isPrivateAuthContext(null, InteractionContextType.PrivateChannel),
+        false,
+    );
+    assert.equal(
+        isPrivateAuthContext("guild-id", InteractionContextType.Guild),
+        false,
+    );
+    assert.deepEqual(authCommand.toJSON().contexts, [InteractionContextType.BotDM]);
 });
 
 test("parses private auth text commands", () => {
