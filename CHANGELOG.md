@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Refuse to overwrite hard-linked attachment destinations when saving downloaded images.
 - Preserve embed titles, descriptions, and URLs in live MCP `read-messages` results.
 - Prevent `!guild` server-memory responses from triggering Discord mentions from stored memory or server names.
 - Verify recent, legacy, and full-text-search history reads before assembling model context; reject symbolic-link files and replaced storage directories.
