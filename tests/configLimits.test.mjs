@@ -146,6 +146,16 @@ test("context limits fall back for malformed values", () => {
     );
 });
 
+test("context limits reject non-decimal integer syntax", () => {
+    assert.deepEqual(
+        readConfigValues(
+            ["LIVE_CONTEXT_LIMIT", "DEEP_LIVE_CONTEXT_LIMIT", "HISTORY_RECENT_LINES"],
+            ["1e2", "0x10", "+5"],
+        ),
+        [35, 500, 80],
+    );
+});
+
 test("context limits preserve valid integers including zero", () => {
     assert.deepEqual(readLimits(["0", "1", "2", "3", "4", "5", "6", "12345"]), [
         0,
