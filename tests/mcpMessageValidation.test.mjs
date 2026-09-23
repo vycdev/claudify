@@ -63,6 +63,12 @@ test("MCP send-message enforces Discord's content limits", async (t) => {
         maxLength: DISCORD_MESSAGE_MAX_CHARS,
         pattern: "\\S",
     });
+    assert.deepEqual(sendMessageTool.inputSchema.properties.channel, {
+        type: "string",
+        description: 'Channel name (e.g., "general") or ID',
+        minLength: 1,
+        pattern: "\\S",
+    });
 
     await assert.rejects(
         () =>
@@ -95,6 +101,48 @@ test("MCP send-message enforces Discord's content limits", async (t) => {
             ),
         /Invalid arguments: message: String must contain at most 2000 character/,
     );
+});
+
+test("MCP live tools reject blank channel identifiers before Discord lookup", async (t) => {
+    const { createMcpServer } = await import("../build/mcp/server.js");
+    const server = createMcpServer();
+    t.after(() => server.close().catch(() => {}));
+    const listToolsHandler = server._requestHandlers.get("tools/list");
+    const callToolHandler = server._requestHandlers.get("tools/call");
+    assert.ok(listToolsHandler);
+    assert.ok(callToolHandler);
+
+    const { tools } = await listToolsHandler(
+        { method: "tools/list", params: {} },
+        {},
+    );
+    for (const name of ["send-message", "react-to-message", "read-messages"]) {
+        const tool = tools.find((candidate) => candidate.name === name);
+        assert.equal(tool.inputSchema.properties.channel.minLength, 1);
+        assert.equal(tool.inputSchema.properties.channel.pattern, "\\S");
+    }
+
+    const calls = [
+        {
+            name: "send-message",
+            arguments: { channel: " \t ", message: "hello" },
+        },
+        {
+            name: "react-to-message",
+            arguments: { channel: " \t ", messageId: "123", emoji: "👍" },
+        },
+        {
+            name: "read-messages",
+            arguments: { channel: " \t ", limit: 1 },
+        },
+    ];
+
+    for (const params of calls) {
+        await assert.rejects(
+            () => callToolHandler({ method: "tools/call", params }, {}),
+            /Invalid arguments: channel: Channel must contain at least one non-whitespace character/,
+        );
+    }
 });
 
 test("MCP react-to-message rejects empty emoji", async (t) => {
