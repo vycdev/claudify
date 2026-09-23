@@ -165,9 +165,12 @@ function parseNonNegativeInteger(
     fallback: number,
     maximum = Number.MAX_SAFE_INTEGER,
 ): number {
-    if (value === undefined || value.trim() === "") return fallback;
+    if (value === undefined) return fallback;
 
-    const parsed = Number(value);
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return fallback;
+
+    const parsed = Number(normalized);
     return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= maximum
         ? parsed
         : fallback;

@@ -14,6 +14,7 @@
 ### Fixed
 
 - Prevent dynamic bot names in `!help` responses from triggering Discord mentions.
+- Reject exponent, hexadecimal, and signed syntax in non-negative integer environment settings instead of interpreting them as decimal configuration values.
 - Preserve embed titles, descriptions, and URLs in live MCP `read-messages` results.
 - Prevent `!guild` server-memory responses from triggering Discord mentions from stored memory or server names.
 - Verify recent, legacy, and full-text-search history reads before assembling model context; reject symbolic-link files and replaced storage directories.
