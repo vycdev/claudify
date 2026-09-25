@@ -17,3 +17,11 @@ test("keeps reaction tags inside inline code spans as literal text", () => {
         },
     );
 });
+
+test("keeps reaction tags inside multiline inline code as literal text", () => {
+    const response = "Use `[REACT:literal]\nmore` in docs. [REACT:thumbsup] Done.";
+    const parsed = parseClaudeResponse(response);
+
+    assert.deepEqual(parsed.reactions, ["thumbsup"]);
+    assert.equal(parsed.text, "Use `[REACT:literal]\nmore` in docs. Done.");
+});
