@@ -89,6 +89,27 @@ test("daily summaries include a single user-and-bot exchange", async () => {
     );
 });
 
+test("a long final log line does not produce an empty daily summary", async () => {
+    const date = new Date("2026-08-05T12:00:00Z");
+    const logPath = getDailyLogPath("channel-long", date, "general");
+    const summaryPath = getSummaryPath("channel-long", date, "general");
+    fs.writeFileSync(logPath, `u: q\nb: ${"x".repeat(100)}\n`, "utf8");
+
+    await generateDailySummary(
+        "channel-long",
+        "general",
+        date,
+        async () => {
+            assert.fail("A single bounded line should not invoke the model");
+        },
+    );
+
+    assert.equal(
+        fs.readFileSync(summaryPath, "utf8"),
+        `b: ${"x".repeat(17)}`,
+    );
+});
+
 test("daily summary writes do not follow a destination symlink created during generation", async () => {
     const date = new Date("2026-08-04T12:00:00Z");
     const logPath = getDailyLogPath("channel-4", date, "general");
