@@ -41,13 +41,15 @@ function trimSummaryInput(log: string): string {
         : lines.slice(-HISTORY_RECAP_MAX_LINES);
 
     while (
-        selected.length > 0 &&
+        selected.length > 1 &&
         selected.join("\n").length > HISTORY_RECAP_MAX_CHARS
     ) {
         selected.shift();
     }
 
-    return selected.join("\n").trim();
+    // Keep a bounded excerpt of the latest line rather than discarding the
+    // entire day when one saved message exceeds the recap budget.
+    return truncateUtf16(selected.join("\n"), HISTORY_RECAP_MAX_CHARS).trim();
 }
 
 export function getSummaryPath(
