@@ -147,11 +147,10 @@ function findInlineCodeSpans(text: string): InlineCodeSpan[] {
         let markerEnd = index + 1;
         while (text[markerEnd] === "`") markerEnd++;
         const marker = text.slice(index, markerEnd);
-        const lineBreakOffset = text.slice(markerEnd).search(/[\r\n]/);
-        const lineEnd =
-            lineBreakOffset === -1 ? text.length : markerEnd + lineBreakOffset;
+        // CommonMark inline code spans may cross line breaks. Keep masking until
+        // the matching delimiter, even when the tag is on an earlier line.
         const closingStart = text.indexOf(marker, markerEnd);
-        if (closingStart === -1 || closingStart >= lineEnd) {
+        if (closingStart === -1) {
             index = markerEnd;
             continue;
         }
