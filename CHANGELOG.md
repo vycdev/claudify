@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Keep reaction tags inside multiline inline code as literal text.
 - Keep a bounded excerpt of an oversized final log line in daily summaries instead of saving an empty summary for the day.
 - Refuse to overwrite hard-linked attachment destinations when saving downloaded images.
 - Restrict Claude authentication slash commands to one-to-one bot DMs instead of accepting other private-channel contexts.
