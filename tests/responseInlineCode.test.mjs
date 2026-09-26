@@ -25,3 +25,21 @@ test("keeps reaction tags inside multiline inline code as literal text", () => {
     assert.deepEqual(parsed.reactions, ["thumbsup"]);
     assert.equal(parsed.text, "Use `[REACT:literal]\nmore` in docs. Done.");
 });
+
+test("unmatched backtick runs do not hide legacy reaction directives", () => {
+    for (const response of [
+        "``[REACT:thumbsup]```",
+        "`[REACT:thumbsup]``",
+    ]) {
+        const parsed = parseClaudeResponse(response);
+        assert.deepEqual(parsed.reactions, ["thumbsup"]);
+        assert.equal(parsed.text.includes("[REACT:thumbsup]"), false);
+    }
+});
+
+test("matching multi-backtick delimiters keep legacy reaction syntax literal", () => {
+    const response = "``[REACT:literal]`` [REACT:thumbsup]";
+    const parsed = parseClaudeResponse(response);
+    assert.deepEqual(parsed.reactions, ["thumbsup"]);
+    assert.equal(parsed.text, "``[REACT:literal]``");
+});

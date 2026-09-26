@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Do not hide legacy reaction directives after unmatched backtick runs of different lengths.
 - Keep reaction tags inside multiline inline code as literal text.
 - Keep a bounded excerpt of an oversized final log line in daily summaries instead of saving an empty summary for the day.
 - Refuse to overwrite hard-linked attachment destinations when saving downloaded images.
