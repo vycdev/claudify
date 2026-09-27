@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Bound combined stdout and stderr from the `!usage` subprocess so oversized output cannot accumulate without limit.
 - Keep reaction tags inside multiline inline code as literal text.
 - Keep a bounded excerpt of an oversized final log line in daily summaries instead of saving an empty summary for the day.
 - Refuse to overwrite hard-linked attachment destinations when saving downloaded images.
