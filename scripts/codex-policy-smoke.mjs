@@ -1,4 +1,4 @@
-// Offline policy regression test for Codex 0.154.0. Build first.
+// Offline policy regression test for Codex 0.156.1. Build first.
 // CODEX_BIN=/path/to/codex node scripts/codex-policy-smoke.mjs
 // Uses the production transport, policy builder and tools-only bridge.
 // All model responses are fixed synthetic SSE from loopback; no OAuth/inference.
@@ -25,8 +25,8 @@ const root = fs.mkdtempSync(path.join(process.env.CODEX_POLICY_ARTIFACT_DIR || o
 const save = (file, value) => fs.writeFileSync(path.join(root, file), JSON.stringify(value, null, 2));
 // Never inherit auth, proxy, provider, or personal Codex configuration.
 const childEnv = home => ({ PATH: process.env.PATH, HOME: home, CODEX_HOME: home });
-assert.equal(execFileSync(bin, ["--version"], { env: childEnv(root), cwd: root, encoding: "utf8" }).trim(), "codex-cli 0.154.0");
-const model = "gpt-5.6-luna";
+assert.equal(execFileSync(bin, ["--version"], { env: childEnv(root), cwd: root, encoding: "utf8" }).trim(), "codex-cli 0.156.1");
+const model = "gpt-6-luna";
 const provider = "policy-loopback-fixture"; // Deliberate test-only provider, never production OpenAI.
 const marker = "FIXED LOCAL RESOURCE CANARY; NOT A CREDENTIAL\n";
 const canary = path.join(root, "canary.txt");
@@ -120,6 +120,7 @@ const denied = [
     ["multi_agent_v1", "wait_agent", { agent_ids: ["nonexistent"] }],
     ["mcp__fixture", "blocked", {}],
     ["functions", "request_user_input", { questions: [] }],
+    ["clock", "sleep", { duration_ms: 1 }],
 ];
 const nestedName = (namespace, name) => namespace === "functions" ? name : `${namespace}__${name}`;
 try {
@@ -138,6 +139,9 @@ for(const [name,fn] of [['process',()=>process.cwd()],['require',()=>require('no
 ${response ? "text({kind:'mcp',result:await tools.mcp__fixture__echo({})});" : ""}`;
         fs.writeFileSync(path.join(root, `${name}-synthetic-cell.js`), cell);
         active.items = [
+            // This native tool only emits an agentMessage, already handled by
+            // Claudify; it neither waits for UI input nor executes host actions.
+            { type: "function_call", call_id: "question-message", namespace: "functions", name: "request_user_input_async", arguments: JSON.stringify({ questions: [{ title: "Synthetic question message" }] }) },
             { type: "custom_tool_call", call_id: "nested-probes", namespace: "functions", name: "exec", input: cell },
             { type: "custom_tool_call", call_id: "direct-patch", namespace: "functions", name: "apply_patch", input: patch },
             ...probes.map(([namespace, name, args]) => ({ type: "function_call", call_id: `direct-${namespace}-${name}`, namespace, name, arguments: JSON.stringify(args) })),
@@ -180,16 +184,19 @@ ${response ? "text({kind:'mcp',result:await tools.mcp__fixture__echo({})});" : "
             check("all runtime probes returned evidence", () => assert.deepEqual(rows.filter(r => r.kind === "runtime").map(r => r.name).sort(), ["Function-process", "fetch", "image-file", "image-http", "process", "require"]));
             check("all import probes returned evidence", () => assert.equal(rows.filter(r => r.kind === "import").length, 4));
             report.nestedTools = rows.find(row => row.kind === "catalog")?.names;
-            const allowed = response ? ["mcp__fixture__echo", "web__run"] : [];
+            // Codex exposes its read-only UTC clock. It has no
+            // filesystem/network authority; sleep and blocking input stay denied.
+            const allowed = response ? ["clock__curr_time", "mcp__fixture__echo", "web__run"] : ["clock__curr_time"];
             check("runtime nested allowlist", () => assert.deepEqual(report.nestedTools, allowed));
             const metadata = JSON.parse(last.client_metadata?.["x-codex-turn-metadata"] || "{}");
             report.toolMetadata = metadata.tool_namespaces_info;
             const info = Object.values(report.toolMetadata || {}).flatMap(ns => Object.values(ns.functions));
             check("authoritative nested metadata", () => assert.deepEqual(info.filter(t => t.code_mode_name).map(t => t.code_mode_name).sort(), allowed));
-            check("authoritative direct metadata", () => assert.deepEqual(info.filter(t => t.direct).map(t => t.name).sort(), ["exec", "wait"]));
+            check("authoritative direct metadata", () => assert.deepEqual(info.filter(t => t.direct).map(t => t.name).sort(), ["exec", "request_user_input_async", "wait"]));
             const advertised = last.input.filter(i => i.type === "additional_tools").flatMap(i => i.tools).flatMap(ns => ns.type === "namespace" ? ns.tools.map(t => `${ns.name}.${t.name}`) : [ns.name]);
             report.advertisedDirect = advertised;
-            check("serialized direct allowlist", () => assert.deepEqual(advertised.sort(), ["functions.exec", "functions.wait"]));
+            check("serialized direct allowlist", () => assert.deepEqual(advertised.sort(), ["functions.exec", "functions.request_user_input_async", "functions.wait"]));
+            check("async question is an ordinary assistant message", () => assert.ok(active.notifications.some(n => n.method === "item/completed" && n.params.item?.type === "agentMessage" && n.params.item?.text === "Synthetic question message" && n.params.item?.delivery === "async")));
             for (const [tool] of nested) check(`nested denial: ${tool}`, () => assert.match(rows.find(r => r.kind === "nested" && r.name === tool)?.error || "", /not a function/));
             for (const row of rows.filter(r => r.kind === "import" || r.kind === "runtime")) check(`${row.kind} denial: ${row.name}`, () => assert.ok(row.error && !row.allowed, JSON.stringify(row)));
             report.directOutputs = outputs.filter(o => o.call_id.startsWith("direct-"));

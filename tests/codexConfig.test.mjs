@@ -13,7 +13,7 @@ test("Codex defaults to Luna and never inherits legacy Claude models", async () 
         BOT_EFFORT: "max",
     });
     for (const entry of Object.values(config.workloads)) {
-        assert.equal(entry.model, "gpt-5.6-luna");
+        assert.equal(entry.model, "gpt-6-luna");
         assert.equal(entry.effort, "medium");
     }
     assert.ok(Object.isFrozen(config.workloads.response));
@@ -24,6 +24,7 @@ test("Codex defaults to Luna and never inherits legacy Claude models", async () 
         CODEX_PROFILE_EFFORT: "low",
     });
     assert.equal(custom.workloads.response.model, "gpt-5.6-sol");
+    assert.equal(custom.workloads["profile-update"].model, "gpt-5.6-luna");
     assert.equal(custom.workloads["profile-update"].effort, "low");
     const ultra = resolveCodexConfig({
         CODEX_MODEL: "gpt-5.6-sol",
@@ -46,4 +47,19 @@ test("Codex defaults to Luna and never inherits legacy Claude models", async () 
         () => resolveCodexConfig({ CODEX_EFFORT: "invalid" }),
         /CODEX_EFFORT/,
     );
+});
+
+test("GPT-6 Luna keeps high effort across deployed Codex workloads", async () => {
+    const { resolveCodexConfig } = await import("../build/codexConfig.js");
+    const config = resolveCodexConfig({
+        CODEX_MODEL: "gpt-6-luna",
+        CODEX_EFFORT: "high",
+        CODEX_RESPONSE_EFFORT: "high",
+        CODEX_RESPONSE_EFFORT_MODE: "fixed",
+    });
+    assert.equal(config.mode, "fixed");
+    for (const entry of Object.values(config.workloads)) {
+        assert.equal(entry.model, "gpt-6-luna");
+        assert.equal(entry.effort, "high");
+    }
 });

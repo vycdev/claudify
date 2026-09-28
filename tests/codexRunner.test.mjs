@@ -7,6 +7,8 @@ export function fakeClient({
     pending = false,
     rerouted = false,
     efforts = ["medium"],
+    model = "gpt-5.6-luna",
+    answerItem = {},
 } = {}) {
     const listeners = new Set();
     const calls = [];
@@ -31,7 +33,7 @@ export function fakeClient({
                 return {
                     data: [
                         {
-                            model: "gpt-5.6-luna",
+                            model,
                             supportedReasoningEfforts: efforts.map(reasoningEffort => ({ reasoningEffort })),
                         },
                     ],
@@ -40,7 +42,7 @@ export function fakeClient({
             if (method === "thread/start")
                 return {
                     thread: { id: "thread-1", environments: [] },
-                    model: "gpt-5.6-luna",
+                    model,
                     modelProvider: "openai",
                     sandbox: { type: "readOnly" },
                     approvalPolicy: "never",
@@ -52,7 +54,7 @@ export function fakeClient({
                             emit("model/rerouted", {
                                 threadId: "thread-1",
                                 turnId: "turn-1",
-                                fromModel: "gpt-5.6-luna",
+                                fromModel: model,
                                 toModel: "another-model",
                                 reason: "safety",
                             });
@@ -90,6 +92,7 @@ export function fakeClient({
                                 id: "answer",
                                 phase: "final_answer",
                                 text: '{"text":"Done"}',
+                                ...answerItem,
                             },
                         });
                         emit("turn/completed", {
@@ -103,6 +106,33 @@ export function fakeClient({
         },
     };
 }
+
+test("GPT-6 Luna preserves high effort and returns native async question messages", async () => {
+    const { createCodexRunner } = await import("../build/codex.js");
+    const client = fakeClient({
+        model: "gpt-6-luna",
+        efforts: ["high"],
+        answerItem: {
+            text: "Which article do you mean?",
+            delivery: "async",
+            questions: [{ title: "Which article do you mean?", options: null }],
+        },
+    });
+    const run = createCodexRunner({
+        home: "/tmp/unused-test-home",
+        clientFactory: async () => client,
+        bridgeFactory: async () => ({ servers: {}, close: async () => {} }),
+    });
+    const result = await run([], "Find the article", {
+        workload: "response", model: "gpt-6-luna", effort: "high",
+    });
+    assert.equal(result.stdout, "Which article do you mean?");
+    const turn = client.calls.find(call => call.method === "turn/start").params;
+    assert.equal(turn.model, "gpt-6-luna");
+    assert.equal(turn.effort, "high");
+    assert.deepEqual(turn.environments, []);
+    assert.equal(client.closed, true);
+});
 
 test("Codex sends ultra unchanged only when the selected model advertises it", async () => {
     const { createCodexRunner } = await import("../build/codex.js");

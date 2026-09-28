@@ -91,6 +91,10 @@ export async function createCodexClient(
             'model_provider="openai"',
             "-c",
             CODEX_HOST_OVERRIDE,
+            // The new CLI enables sleeping by default; Discord turns should
+            // finish rather than wait for another user message.
+            "-c",
+            "features.sleep_tool=false",
         ],
         { env: environment(home), cwd: home, stdio: ["pipe", "pipe", "pipe"] },
     );
