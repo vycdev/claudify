@@ -81,7 +81,7 @@ try {
         url: `http://127.0.0.1:${httpServer.address().port}/mcp`, enabled_tools: ["smoke"],
     } });
     const thread = await client.request("thread/start", {
-        model: "gpt-5.6-luna",
+        model: "gpt-6-luna",
         modelProvider: "openai",
         ephemeral: true,
         ...CODEX_NO_ENVIRONMENT,
@@ -90,7 +90,7 @@ try {
         approvalPolicy: "never",
         config: codexThreadConfig(bridge.servers, true),
     });
-    assert.equal(thread.model, "gpt-5.6-luna");
+    assert.equal(thread.model, "gpt-6-luna");
     assert.equal(thread.modelProvider, "openai");
     assert.equal(thread.sandbox.type, "readOnly");
     assert.equal(thread.approvalPolicy, "never");

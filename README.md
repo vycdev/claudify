@@ -45,7 +45,7 @@ service's `environment` section, then rebuild and restart the service:
 
 ```env
 BOT_PROVIDER=codex
-CODEX_MODEL=gpt-5.6-luna
+CODEX_MODEL=gpt-6-luna
 CODEX_EFFORT=medium
 CODEX_HOME=/codex
 AUTH_ADMIN_USER_IDS=your_discord_user_id
@@ -55,8 +55,8 @@ AUTH_ADMIN_USER_IDS=your_discord_user_id
 docker compose up -d --build
 ```
 
-The image includes Codex CLI **0.154.0**. For a non-Docker install, install
-`@openai/codex@0.154.0` and set the same variables in the bot's environment or
+The image includes Codex CLI **0.156.1**. For a non-Docker install, install
+`@openai/codex@0.156.1` and set the same variables in the bot's environment or
 `.env`. Outside Docker, omit `CODEX_HOME` to use `~/.claudify-codex`.
 
 **Login from Discord:**
