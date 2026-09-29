@@ -8,7 +8,7 @@ import test from "node:test";
 const imagesUrl = new URL("../build/storage/images.js", import.meta.url).href;
 const configUrl = new URL("../build/config.js", import.meta.url).href;
 
-function runAttachmentScript(messagesDir, source) {
+function runAttachmentScript(messagesDir, source, env = {}) {
     return spawnSync(
         process.execPath,
         ["--input-type=module", "--eval", source],
@@ -17,10 +17,105 @@ function runAttachmentScript(messagesDir, source) {
             env: {
                 ...process.env,
                 MESSAGES_DIR: messagesDir,
+                ...env,
             },
         },
     );
 }
+
+test("times out a stalled attachment before headers without saving a file", () => {
+    const messagesDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-attachment-timeout-"));
+    try {
+        const script = `
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            globalThis.fetch = (_url, { signal } = {}) => new Promise((resolve, reject) => {
+                setTimeout(() => reject(new Error("stalled")), 150);
+                signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+            });
+            try {
+                await downloadAttachment("https://example.test/stall.png", "stall.png");
+                process.exit(1);
+            } catch (error) {
+                if (error?.name !== "TimeoutError") process.exit(2);
+                if (fs.existsSync(path.join(process.env.MESSAGES_DIR, "images", "stall.png"))) process.exit(3);
+            }
+        `;
+        const result = runAttachmentScript(messagesDir, script, { ATTACHMENT_DOWNLOAD_TIMEOUT_MS: "30" });
+        assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+});
+
+test("times out an attachment body stalled after headers", () => {
+    const messagesDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-attachment-timeout-"));
+    try {
+        const script = `
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            globalThis.fetch = async (_url, { signal } = {}) => {
+                const body = new ReadableStream({
+                    start(controller) {
+                        const fallback = setTimeout(() => controller.error(new Error("stalled")), 150);
+                        signal?.addEventListener("abort", () => {
+                            clearTimeout(fallback);
+                            controller.error(signal.reason);
+                        }, { once: true });
+                    },
+                });
+                return new Response(body);
+            };
+            try {
+                await downloadAttachment("https://example.test/stall.png", "stall.png");
+                process.exit(1);
+            } catch (error) {
+                if (error?.name !== "TimeoutError") process.exit(2);
+                if (fs.existsSync(path.join(process.env.MESSAGES_DIR, "images", "stall.png"))) process.exit(3);
+            }
+        `;
+        const result = runAttachmentScript(messagesDir, script, { ATTACHMENT_DOWNLOAD_TIMEOUT_MS: "30" });
+        assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+});
+
+test("an actual HTTP response body is interrupted by the download deadline", () => {
+    const messagesDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-attachment-timeout-"));
+    try {
+        const script = `
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const { createServer } = await import("node:http");
+            const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            const server = createServer((_request, response) => {
+                response.writeHead(200, { "content-type": "image/png" });
+                response.write("partial");
+            });
+            await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+            try {
+                await downloadAttachment(
+                    \`http://127.0.0.1:\${server.address().port}/stall.png\`,
+                    "stall.png",
+                );
+                process.exitCode = 1;
+            } catch (error) {
+                if (error?.name !== "TimeoutError" && error?.name !== "AbortError") process.exitCode = 2;
+                if (fs.existsSync(path.join(process.env.MESSAGES_DIR, "images", "stall.png"))) process.exitCode = 3;
+            } finally {
+                server.closeAllConnections();
+                await new Promise((resolve) => server.close(resolve));
+            }
+        `;
+        const result = runAttachmentScript(messagesDir, script, { ATTACHMENT_DOWNLOAD_TIMEOUT_MS: "150" });
+        assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+});
 
 test("rejects oversized attachment responses before writing them", () => {
     const messagesDir = fs.mkdtempSync(
