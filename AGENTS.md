@@ -233,12 +233,12 @@ messages/
 
 ## Codex provider
 
-- `BOT_PROVIDER=codex` selects the official Codex app-server, with managed ChatGPT device authentication, never API keys. Default model: `gpt-5.6-luna`.
+- `BOT_PROVIDER=codex` selects the official Codex app-server, with managed ChatGPT device authentication, never API keys. Default model: `gpt-6-luna`.
 - `model.ts` routes all four workloads. Preserve the legacy Claude runner seam for injected tests; Codex translates system prompts and native image inputs at the adapter boundary.
 - `codexClient.ts` owns bounded stdio JSON-RPC and a sanitized child environment. `codex.ts` validates model/effort, subscription auth, sandbox policy, and MCP result evidence. Never enable shell or interactive approval fallbacks.
 - `codexAuth.ts` owns the login lifecycle. Discord handlers in `commands/codexAuth.ts` must reject guild and unauthorized requests before touching auth. Route `!codex` before history logging.
 - Keep `CODEX_HOME` private, dedicated, and outside `MESSAGES_DIR`. Never print raw auth/server payloads or import a personal Codex config.
-- Run `node scripts/codex-smoke.mjs` with Codex CLI 0.154.0 for an unauthenticated real-protocol/MCP check. It performs no inference; live browser login and Discord delivery need separate verification.
+- Run `node scripts/codex-smoke.mjs` with Codex CLI 0.156.1 for an unauthenticated real-protocol/MCP check. It performs no inference; live browser login and Discord delivery need separate verification.
 
 ## Docker
 
