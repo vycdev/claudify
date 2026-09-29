@@ -53,6 +53,7 @@ test("Codex transport initializes and multiplexes without leaking API or Discord
         assert.ok(env.keys.includes("CODEX_HOME"));
         assert.ok(env.argv.includes('forced_login_method="chatgpt"'));
         assert.ok(env.argv.includes('features.code_mode_host={enabled=true,disable_in_process_fallback=true}'));
+        assert.ok(env.argv.includes('features.sleep_tool=false'));
         assert.equal(env.initialized.capabilities.experimentalApi, true);
         await client.request("notify");
         assert.equal(events[0].params.authMode, "chatgpt");
