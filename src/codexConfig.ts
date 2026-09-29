@@ -48,7 +48,7 @@ function effort(
     return normalized as ModelEffort;
 }
 export function resolveCodexConfig(env: NodeJS.ProcessEnv) {
-    const globalModel = model(env.CODEX_MODEL, "gpt-5.6-luna", "CODEX_MODEL");
+    const globalModel = model(env.CODEX_MODEL, "gpt-6-luna", "CODEX_MODEL");
     const globalEffort = effort(env.CODEX_EFFORT, "medium", "CODEX_EFFORT");
     const names: Record<ClaudeWorkload, string> = {
         response: "RESPONSE",

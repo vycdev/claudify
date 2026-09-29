@@ -20,7 +20,7 @@ RUN apk add --no-cache --virtual .node-pty-build-deps python3 make g++ \
     && apk del .node-pty-build-deps
 
 # Install both subscription-backed CLIs. Pin the Codex app-server protocol.
-RUN npm install -g @anthropic-ai/claude-code@2.1.220 @openai/codex@0.154.0
+RUN npm install -g @anthropic-ai/claude-code@2.1.220 @openai/codex@0.156.1
 
 COPY --from=build /app/build ./build
 COPY prompts/ ./prompts/
