@@ -123,3 +123,16 @@ test("balances fences that use bare carriage-return line endings", () => {
     assert.ok(chunks.every((chunk) => chunk.length <= 40));
     chunks.forEach(assertBalancedFences);
 });
+
+test("balances CRLF fences without losing code or splitting a CRLF pair", () => {
+    const code = "x".repeat(100);
+    const text = `\`\`\`js\r\n${code}\r\n\`\`\``;
+    const chunks = smartSplit(text, 40);
+
+    assert.ok(chunks.length > 1);
+    assert.ok(chunks.every((chunk) => chunk.length <= 40));
+    chunks.forEach(assertBalancedFences);
+    assert.equal(chunks.join("").match(/x/g)?.length, code.length);
+    assert.ok(chunks.every((chunk) => !chunk.endsWith("\r")));
+    assert.ok(chunks.every((chunk) => !chunk.startsWith("\n")));
+});
