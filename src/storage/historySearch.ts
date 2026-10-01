@@ -93,6 +93,10 @@ function synchronizeChannelIndex(db: DatabaseSync, channelId: string): void {
     const deleteSearchRows = db.prepare(
         "DELETE FROM history_fts WHERE file_path = ?",
     );
+    const indexedLines = db.prepare(`
+        SELECT line_number, content FROM history_fts
+        WHERE file_path = ? ORDER BY CAST(line_number AS INTEGER)
+    `);
     const deleteFileState = db.prepare(
         "DELETE FROM history_fts_files WHERE file_path = ?",
     );
@@ -145,15 +149,29 @@ function synchronizeChannelIndex(db: DatabaseSync, channelId: string): void {
                 deleteFileState.run(file.filePath);
                 continue;
             }
+            // Size and line count do not prove a pure append: earlier lines may
+            // have changed at the same time. Compare the indexed prefix before
+            // taking the cheap append path.
+            const oldLines = state && stat.size >= state.size
+                ? indexedLines.all(file.filePath) as unknown as Array<{
+                    line_number: number;
+                    content: string;
+                }>
+                : [];
             const appendOnly = Boolean(
                 state
-                && stat.size >= state.size
-                && lines.length >= state.line_count,
+                && oldLines.length === state.line_count
+                && lines.length >= oldLines.length
+                && oldLines.every((row, index) =>
+                    Number(row.line_number) === index && row.content === lines[index]
+                ),
             );
-            const firstNewLine = appendOnly ? state!.line_count : 0;
             if (!appendOnly) deleteSearchRows.run(file.filePath);
-
-            for (let index = firstNewLine; index < lines.length; index++) {
+            for (
+                let index = appendOnly ? oldLines.length : 0;
+                index < lines.length;
+                index++
+            ) {
                 insertSearchRow.run(
                     channelId,
                     file.filePath,
