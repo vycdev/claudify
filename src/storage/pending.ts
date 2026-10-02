@@ -4,8 +4,15 @@ import { TextChannel, Message } from "discord.js";
 import { MESSAGES_DIR, PENDING_DIR } from "../config.js";
 import { writeVerifiedUtf8File } from "./safeRead.js";
 
+function pendingFilename(messageId: string): string {
+    if (!/^\d+$/.test(messageId)) {
+        throw new Error("Invalid pending message ID");
+    }
+    return `${messageId}.txt`;
+}
+
 export function savePending(msg: Message) {
-    const filename = `${msg.id}.txt`;
+    const filename = pendingFilename(msg.id);
     const content = [
         `Author: ${msg.author.tag}`,
         `Channel: #${(msg.channel as TextChannel).name}`,
@@ -26,6 +33,6 @@ export function savePending(msg: Message) {
 }
 
 export function removePending(msgId: string) {
-    const filePath = path.join(PENDING_DIR, `${msgId}.txt`);
+    const filePath = path.join(PENDING_DIR, pendingFilename(msgId));
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
