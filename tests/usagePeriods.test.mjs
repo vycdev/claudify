@@ -76,10 +76,14 @@ test("builds bounded UTC ccusage requests for current week and month", () => {
     ]);
 });
 
-test("keeps existing non-current-period usage request arguments unchanged", () => {
+test("requests today's usage using the same UTC boundary as its date filter", () => {
     assert.deepEqual(createUsageRequest("today", fixedNow)?.ccArgs, [
         "ccusage@latest", "claude", "daily", "--json", "--since", "20260805",
+        "--timezone", "UTC",
     ]);
+});
+
+test("keeps historical usage request arguments unchanged", () => {
     assert.deepEqual(createUsageRequest("daily", fixedNow)?.ccArgs, [
         "ccusage@latest", "claude", "daily", "--json",
     ]);
