@@ -174,7 +174,7 @@ export function createUsageRequest(subcommand: string, now = new Date()): UsageR
     switch (subcommand) {
         case "today":
             return {
-                ccArgs: ["ccusage@latest", "claude", "daily", "--json", "--since", today],
+                ccArgs: ["ccusage@latest", "claude", "daily", "--json", "--since", today, "--timezone", "UTC"],
                 title: "📊 Today's Usage",
                 embedColor: 0x5865f2,
             };
