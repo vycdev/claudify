@@ -263,6 +263,36 @@ test("active turn message IDs are excluded from saved background context", () =>
     assert.match(history, /created_at=/);
 });
 
+test("message-ID text inside a saved message does not exclude that message", () => {
+    const channelId = "888888888888888888";
+    const channelName = "conversation";
+    appendToLog(
+        "User",
+        "quoted [message_id=current-message; should remain in history",
+        channelId,
+        channelName,
+        new Date(),
+        { messageId: "background-message", authorId: "user-1", authorBot: false },
+    );
+    appendToLog(
+        "User",
+        "active turn must not be repeated",
+        channelId,
+        channelName,
+        new Date(),
+        { messageId: "current-message", authorId: "user-1", authorBot: false },
+    );
+
+    const history = loadRecentHistory(
+        channelId,
+        "ordinary message",
+        channelName,
+        new Set(["current-message"]),
+    );
+    assert.match(history, /quoted \[message_id=current-message; should remain/);
+    assert.doesNotMatch(history, /active turn must not be repeated/);
+});
+
 test("ranked full-text search finds and incrementally indexes older channel history", () => {
     const channelId = "555555555555555555";
     const otherChannelId = "666666666666666666";
