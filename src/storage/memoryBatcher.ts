@@ -52,6 +52,7 @@ function trimStartWithoutSplittingSurrogatePair(
 
 export class MemoryUpdateBatcher {
     private readonly pending = new Map<string, PendingMemoryBatch>();
+    private readonly inFlight = new Map<string, Promise<void>>();
 
     constructor(
         private readonly debounceMs: number = MEMORY_UPDATE_DEBOUNCE_MS,
@@ -112,6 +113,11 @@ export class MemoryUpdateBatcher {
     }
 
     async flush(scopeId: string): Promise<void> {
+        // A previous batch for this scope may still be writing profiles or
+        // server memory. Wait before starting the newer snapshot.
+        const previous = this.inFlight.get(scopeId);
+        if (previous) await previous.catch(() => {});
+
         const batch = this.pending.get(scopeId);
         if (!batch) return;
 
@@ -149,7 +155,15 @@ export class MemoryUpdateBatcher {
         console.error(
             `[MemoryBatch] Flushing ${scopeId}: ${users.length} user(s), ${batch.channelContexts.size} channel(s), ${combinedContext.length} chars`,
         );
-        await Promise.all(updates);
+        const current = Promise.all(updates).then(() => {});
+        this.inFlight.set(scopeId, current);
+        try {
+            await current;
+        } finally {
+            if (this.inFlight.get(scopeId) === current) {
+                this.inFlight.delete(scopeId);
+            }
+        }
     }
 }
 
