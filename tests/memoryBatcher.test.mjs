@@ -142,3 +142,46 @@ test("memory batches bound context and skip server memory for DMs", async () => 
     assert.match(profileCalls[0].context, /keep this suffix/);
     assert.equal(serverCalls.length, 0);
 });
+
+test("newer batches wait for an in-flight flush of the same scope", async () => {
+    const started = [];
+    let releaseFirst;
+    let firstStarted;
+    const firstStartedPromise = new Promise((resolve) => { firstStarted = resolve; });
+    const firstFinished = new Promise((resolve) => { releaseFirst = resolve; });
+    const batcher = new MemoryUpdateBatcher(
+        60_000,
+        600_000,
+        20_000,
+        async (_users, context) => {
+            started.push(context);
+            if (context.includes("old snapshot")) {
+                firstStarted();
+                await firstFinished;
+            }
+        },
+        async () => {},
+    );
+    const request = (conversationContext) => ({
+        scopeId: "channel:dm-1",
+        channelId: "dm-1",
+        channelName: "dm",
+        users: [{ id: "user-1", tag: "User" }],
+        conversationContext,
+    });
+
+    batcher.enqueue(request("old snapshot"));
+    const first = batcher.flush("channel:dm-1");
+    await firstStartedPromise;
+    batcher.enqueue(request("new snapshot"));
+    const second = batcher.flush("channel:dm-1");
+    try {
+        await Promise.resolve();
+        assert.equal(started.length, 1, "new update must not race an older update");
+    } finally {
+        releaseFirst();
+        await Promise.all([first, second]);
+    }
+    assert.equal(started.length, 2);
+    assert.match(started[1], /new snapshot/);
+});
