@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("pending writes do not follow symbolic-link destinations", async (t) => {
+test("pending writes refuse symlinks and removals reject traversal", async (t) => {
     const testDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-pending-symlink-"),
     );
@@ -12,7 +12,7 @@ test("pending writes do not follow symbolic-link destinations", async (t) => {
 
     const messagesDir = path.join(testDir, "messages");
     process.env.MESSAGES_DIR = messagesDir;
-    const { savePending } = await import("../build/storage/pending.js");
+    const { savePending, removePending } = await import("../build/storage/pending.js");
 
     const outsideFile = path.join(testDir, "outside.txt");
     const pendingPath = path.join(
@@ -21,6 +21,13 @@ test("pending writes do not follow symbolic-link destinations", async (t) => {
         "222222222222222222.txt",
     );
     fs.writeFileSync(outsideFile, "must not be overwritten", "utf8");
+    const unrelatedFile = path.join(messagesDir, "unrelated.txt");
+    fs.writeFileSync(unrelatedFile, "keep this file", "utf8");
+    assert.throws(
+        () => removePending("../unrelated"),
+        /invalid pending message ID/i,
+    );
+    assert.equal(fs.readFileSync(unrelatedFile, "utf8"), "keep this file");
     try {
         fs.symlinkSync(outsideFile, pendingPath);
     } catch (error) {
