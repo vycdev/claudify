@@ -22,6 +22,31 @@ test("times out a usage subprocess that does not exit", async () => {
     );
 });
 
+test("rejects excessive usage subprocess output instead of buffering it all", async () => {
+    await assert.rejects(
+        () => runUsageCommand(
+            ["-e", "process.stdout.write('x'.repeat(1_048_577))"],
+            { command: process.execPath, timeoutMs: 5_000 },
+        ),
+        /ccusage output exceeded 1048576 bytes/,
+    );
+});
+
+test("bounds combined stdout and stderr while preserving normal output", async () => {
+    assert.deepEqual(await runUsageCommand(
+        ["-e", "process.stdout.write('ok'); process.stderr.write('note')"],
+        { command: process.execPath, timeoutMs: 5_000 },
+    ), { stdout: "ok", stderr: "note" });
+
+    await assert.rejects(
+        () => runUsageCommand(
+            ["-e", "process.stdout.write('x'.repeat(600_000)); process.stderr.write('y'.repeat(600_000))"],
+            { command: process.execPath, timeoutMs: 5_000 },
+        ),
+        /ccusage output exceeded 1048576 bytes/,
+    );
+});
+
 test("calculates the current UTC week from Monday through now", () => {
     assert.deepEqual(getCurrentUsagePeriod("week", fixedNow), {
         since: "20260803",

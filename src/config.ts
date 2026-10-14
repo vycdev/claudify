@@ -400,6 +400,7 @@ export const HISTORY_FTS_MAX_CHARS = parseNonNegativeInteger(
 
 export const MCP_PORT = parsePort(process.env.MCP_PORT, 3100);
 export const MCP_MAX_REQUEST_BYTES = 1_048_576;
+export const USAGE_COMMAND_MAX_OUTPUT_BYTES = 1_048_576;
 export const MCP_READ_MESSAGES_MAX_CHARS = parsePositiveInteger(
     process.env.MCP_READ_MESSAGES_MAX_CHARS,
     120_000,

@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { BOT_PROVIDER } from "../../config.js";
+import { BOT_PROVIDER, USAGE_COMMAND_MAX_OUTPUT_BYTES } from "../../config.js";
 import { Message, TextChannel, EmbedBuilder } from "discord.js";
 
 export type CurrentUsagePeriodKind = "week" | "month";
@@ -78,8 +78,9 @@ export function runUsageCommand(
         const proc = spawn(command, args, {
             env: { ...process.env },
         });
-        let stdout = "";
-        let stderr = "";
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+        let outputBytes = 0;
         let settled = false;
         let forceKillTimeout: NodeJS.Timeout | undefined;
 
@@ -89,10 +90,7 @@ export function runUsageCommand(
                 forceKillTimeout = undefined;
             }
         };
-
-        const timeout = setTimeout(() => {
-            if (settled) return;
-            settled = true;
+        const terminate = (): void => {
             proc.kill();
             forceKillTimeout = setTimeout(() => {
                 forceKillTimeout = undefined;
@@ -104,14 +102,32 @@ export function runUsageCommand(
                 }
             }, FORCE_KILL_GRACE_MS);
             forceKillTimeout.unref();
+        };
+        const collect = (data: Buffer, chunks: Buffer[]): void => {
+            if (settled) return;
+            outputBytes += data.length;
+            if (outputBytes > USAGE_COMMAND_MAX_OUTPUT_BYTES) {
+                settled = true;
+                clearTimeout(timeout);
+                terminate();
+                reject(new Error(`ccusage output exceeded ${USAGE_COMMAND_MAX_OUTPUT_BYTES} bytes`));
+                return;
+            }
+            chunks.push(data);
+        };
+
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            terminate();
             reject(new Error(`ccusage timed out after ${timeoutMs} milliseconds`));
         }, timeoutMs);
 
         proc.stdout.on("data", (data) => {
-            stdout += data.toString();
+            collect(data, stdoutChunks);
         });
         proc.stderr.on("data", (data) => {
-            stderr += data.toString();
+            collect(data, stderrChunks);
         });
         proc.on("error", (error) => {
             clearTimeout(timeout);
@@ -125,6 +141,8 @@ export function runUsageCommand(
             clearForceKillTimeout();
             if (settled) return;
             settled = true;
+            const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+            const stderr = Buffer.concat(stderrChunks).toString("utf8");
             if (code === 0) {
                 resolve({ stdout, stderr });
             } else {
