@@ -179,10 +179,14 @@ function lineHasExcludedMessage(
     line: string,
     excludedMessageIds: ReadonlySet<string>,
 ): boolean {
-    for (const messageId of excludedMessageIds) {
-        if (line.includes(`[message_id=${messageId};`)) return true;
-    }
-    return false;
+    // The searched context can contain multiple saved lines. Only inspect the
+    // structured header of each line, not quoted metadata in message content.
+    return line.split("\n").some((savedLine) => {
+        const metadata = savedLine.match(
+            /^\[\d{2}:\d{2}:\d{2} UTC\] .*? \[message_id=([^;\]]+); author_id=[^;\]]+; author_bot=(?:true|false); created_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]: /,
+        );
+        return metadata !== null && excludedMessageIds.has(metadata[1]);
+    });
 }
 
 function trimLinesToBudget(
