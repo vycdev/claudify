@@ -17,6 +17,7 @@
 - Bound combined stdout and stderr from the `!usage` subprocess so oversized output cannot accumulate without limit.
 - Stop stalled image attachment downloads after a configurable total deadline, including response-body reads.
 - Align `!usage today` with its UTC date filter when the host timezone is not UTC.
+- Serialize overlapping background memory batches for the same scope so an older update cannot finish after a newer one.
 - Update the default Codex model to GPT-6 Luna and pin Codex CLI 0.156.1 for its model catalog; preserve configured reasoning effort and per-workload overrides.
 - Disable the upgraded Codex runtime's sleep tool and verify its harmless clock/question-message additions without relaxing shell, filesystem, or MCP resource restrictions.
 - Keep reaction tags inside multiline inline code as literal text.
