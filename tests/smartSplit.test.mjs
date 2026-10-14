@@ -39,6 +39,20 @@ test("does not split astral Unicode characters between surrogate pairs", () => {
     assert.deepEqual(smartSplit(text, 2000), [prefix, "😀"]);
 });
 
+test("keeps astral Unicode intact when balancing a split code fence", () => {
+    const code = `${"a".repeat(25)}😀${"b".repeat(60)}`;
+    const chunks = smartSplit(`\`\`\`js\n${code}\n\`\`\``, 32);
+
+    assert.ok(chunks.length > 2);
+    assert.ok(chunks.every((chunk) => chunk.length <= 32));
+    chunks.forEach(assertBalancedFences);
+    assert.ok(chunks.every((chunk) => !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(chunk)));
+    assert.equal(
+        chunks.join("").replaceAll("```js\n", "").replaceAll("\n```", ""),
+        code,
+    );
+});
+
 test("balances fenced code blocks across split messages", () => {
     const code = "x".repeat(220);
     const text = `Intro\n\n\`\`\`typescript\n${code}\n\`\`\`\n\nOutro`;
