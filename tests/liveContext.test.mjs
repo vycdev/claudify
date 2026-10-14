@@ -45,6 +45,48 @@ test("bounds live context while retaining the newest messages", () => {
     assert.match(context, /omitted_oldest=2/);
 });
 
+test("retains a bounded excerpt of the newest live message when it exceeds the context budget", () => {
+    const context = formatLiveMessagesContext(
+        [
+            message("old", "old background", "2026-08-09T10:00:00.000Z"),
+            message("new", `latest context ${"x".repeat(1000)}`, "2026-08-09T10:01:00.000Z"),
+        ],
+        2,
+        400,
+    );
+
+    assert.ok(context.length <= 400);
+    assert.match(context, /Included 1 background live message\(s\)/);
+    assert.match(context, /latest context/);
+    assert.match(context, /newest_truncated=true/);
+    assert.doesNotMatch(context, /old background/);
+});
+
+test("oversized live context does not emit incomplete metadata or surrogate pairs", () => {
+    const newest = message("new", `latest context ${"😀".repeat(1000)}`, "2026-08-09T10:01:00.000Z");
+    assert.equal(formatLiveMessagesContext([newest], 1, 80), "");
+    for (let budget = 250; budget < 270; budget++) {
+        const context = formatLiveMessagesContext([newest], 1, budget);
+        assert.ok(context.length <= budget);
+        assert.doesNotMatch(context, /[\uD800-\uDBFF]$/u);
+    }
+});
+
+test("truncated context retains complete metadata even with delimiter-like display names", () => {
+    const newest = message("new", "😀".repeat(1000), "2026-08-09T10:01:00.000Z");
+    newest.author.displayName = "name ]: misleading";
+    let excerpts = 0;
+    for (let budget = 250; budget <= 500; budget++) {
+        const context = formatLiveMessagesContext([newest], 1, budget);
+        assert.ok(context.length <= budget);
+        if (!context) continue;
+        excerpts++;
+        assert.match(context, /message_id=new; author_id=user-new; author_bot=false; created_at=2026-08-09T10:01:00.000Z\]: 😀/u);
+        assert.doesNotMatch(context, /[\uD800-\uDBFF]$/u);
+    }
+    assert.ok(excerpts > 0, "budgets large enough for an excerpt must retain one");
+});
+
 test("formats each live message only once while applying the budget", () => {
     let contentReads = 0;
     const messages = Array.from({ length: 500 }, (_, index) => {
