@@ -234,11 +234,25 @@ export function formatLiveMessagesContext(
         selectedMessageChars = candidateMessageChars;
     }
 
-    const text = [
+    if (firstSelectedIndex === contextMessages.length) {
+        // An oversized newest message must not erase all live context. Keep its
+        // beginning, including source metadata, within the remaining budget.
+        const newestIndex = contextMessages.length - 1;
+        const header = `${buildHeader(newestIndex)} newest_truncated=true`;
+        const available = maxChars - header.length - 1;
+        const newest = formattedMessages[newestIndex];
+        const contentStart = newest.indexOf("]: ");
+        if (contentStart < 0 || available <= contentStart + 3) return "";
+        let end = Math.min(available, newest.length);
+        if (end < newest.length && /[\uD800-\uDBFF]/u.test(newest[end - 1])
+            && /[\uDC00-\uDFFF]/u.test(newest[end])) end--;
+        return `${header}\n${newest.slice(0, end)}`;
+    }
+
+    return [
         buildHeader(firstSelectedIndex),
         ...formattedMessages.slice(firstSelectedIndex),
     ].join("\n");
-    return text.slice(0, maxChars);
 }
 
 export function selectLiveContextLimit(
