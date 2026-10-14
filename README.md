@@ -32,6 +32,7 @@ Claude is sandboxed — it can only search the web and read/write its own messag
    - `SUPPRESS_MENTIONS` — optional; set to `true` to prevent bot messages from notifying users, roles, `@everyone`, or `@here` (default: `false`)
    - `MCP_READ_MESSAGES_MAX_CHARS` — optional; maximum characters returned by `read-messages` (default: `120000`, maximum: `1000000`)
    - `MCP_HISTORY_MAX_CHARS` — optional; maximum characters returned by `read-message-history` (default: `120000`, maximum: `1000000`)
+   - `ATTACHMENT_DOWNLOAD_TIMEOUT_MS` — optional; total deadline for image downloads, including response bodies (default: `60000`)
 
 3. Run it:
 ```bash

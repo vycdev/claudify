@@ -288,6 +288,11 @@ export const MEMORY_UPDATE_BATCH_MAX_CHARS = parsePositiveInteger(
 );
 export const DISCORD_MESSAGE_MAX_CHARS = 2000;
 export const ATTACHMENT_FILENAME_MAX_BYTES = 240;
+export const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = parsePositiveInteger(
+    process.env.ATTACHMENT_DOWNLOAD_TIMEOUT_MS,
+    60_000,
+    MAX_TIMER_DELAY_MS,
+);
 export const MCP_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
 export const MCP_FETCH_MESSAGES_MAX_LINKS = 100;
 

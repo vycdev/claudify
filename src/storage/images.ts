@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { createHash } from "node:crypto";
 import {
+    ATTACHMENT_DOWNLOAD_TIMEOUT_MS,
     ATTACHMENT_FILENAME_MAX_BYTES,
     IMAGES_DIR,
     MCP_ATTACHMENT_MAX_BYTES,
@@ -161,7 +162,9 @@ export async function downloadAttachment(
     }
     const filePath = path.resolve(IMAGES_DIR, boundFilename(filename));
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+        signal: AbortSignal.timeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS),
+    });
     if (!response.ok) {
         throw new Error(
             `Failed to download attachment: HTTP ${response.status} ${response.statusText}`,
