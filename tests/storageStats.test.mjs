@@ -40,3 +40,31 @@ test("storage statistics count persisted documents and ignore symlinks", async (
         0,
     );
 });
+
+test("storage size retains other files when one disappears during traversal", async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-storage-race-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const kept = path.join(root, "kept.bin");
+    const vanishing = path.join(root, "vanishing.bin");
+    fs.writeFileSync(kept, "kept");
+    fs.writeFileSync(vanishing, "vanish");
+
+    const { getStorageDirectorySize } = await import(
+        "../build/discord/commands/storage.js"
+    );
+    const originalStat = fs.lstatSync;
+    fs.lstatSync = (file, ...args) => {
+        if (file === vanishing) {
+            fs.rmSync(vanishing);
+            const error = new Error("ENOENT: file disappeared");
+            error.code = "ENOENT";
+            throw error;
+        }
+        return originalStat(file, ...args);
+    };
+    try {
+        assert.equal(getStorageDirectorySize(root), 4);
+    } finally {
+        fs.lstatSync = originalStat;
+    }
+});

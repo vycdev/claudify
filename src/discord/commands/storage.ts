@@ -29,7 +29,13 @@ function walkStorageTree(
                     return total + walkStorageTree(filePath, onFile);
                 }
                 if (!entry.isFile()) return total;
-                return total + onFile(entry.name, filePath);
+                try {
+                    return total + onFile(entry.name, filePath);
+                } catch {
+                    // A pending file can disappear after readdir. Keep the
+                    // sizes of its siblings rather than zeroing the directory.
+                    return total;
+                }
             },
             0,
         );
@@ -51,7 +57,10 @@ export function countStorageFiles(
 export function getStorageDirectorySize(dir: string): number {
     return walkStorageTree(
         dir,
-        (_name, filePath) => fs.statSync(filePath).size,
+        (_name, filePath) => {
+            const stat = fs.lstatSync(filePath);
+            return stat.isFile() ? stat.size : 0;
+        },
     );
 }
 
