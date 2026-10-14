@@ -115,8 +115,9 @@ export class MemoryUpdateBatcher {
     async flush(scopeId: string): Promise<void> {
         // A previous batch for this scope may still be writing profiles or
         // server memory. Wait before starting the newer snapshot.
-        const previous = this.inFlight.get(scopeId);
-        if (previous) await previous.catch(() => {});
+        while (this.inFlight.has(scopeId)) {
+            await this.inFlight.get(scopeId)!.catch(() => {});
+        }
 
         const batch = this.pending.get(scopeId);
         if (!batch) return;
@@ -134,9 +135,12 @@ export class MemoryUpdateBatcher {
         const updates: Array<Promise<void>> = [];
 
         if (users.length > 0 && combinedContext) {
-            updates.push(this.profileUpdater(users, combinedContext));
+            updates.push(Promise.resolve().then(() =>
+                this.profileUpdater(users, combinedContext),
+            ));
         }
         if (batch.guildId && batch.guildName && combinedContext) {
+            const { guildId, guildName } = batch;
             const channelNames = Array.from(
                 batch.channelContexts.values(),
                 ({ name }) => name,
@@ -144,18 +148,24 @@ export class MemoryUpdateBatcher {
             const channelLabel = channelNames.length === 1
                 ? channelNames[0]
                 : `multiple channels: ${channelNames.join(", ")}`;
-            updates.push(this.serverMemoryUpdater(
-                batch.guildId,
-                batch.guildName,
+            updates.push(Promise.resolve().then(() => this.serverMemoryUpdater(
+                guildId,
+                guildName,
                 channelLabel,
                 combinedContext,
-            ));
+            )));
         }
 
         console.error(
             `[MemoryBatch] Flushing ${scopeId}: ${users.length} user(s), ${batch.channelContexts.size} channel(s), ${combinedContext.length} chars`,
         );
-        const current = Promise.all(updates).then(() => {});
+        // A rejected updater does not cancel the other writer. Retain the lock
+        // until both have settled so a newer snapshot cannot overtake either.
+        const current = Promise.allSettled(updates).then((results) => {
+            for (const result of results) {
+                if (result.status === "rejected") throw result.reason;
+            }
+        });
         this.inFlight.set(scopeId, current);
         try {
             await current;

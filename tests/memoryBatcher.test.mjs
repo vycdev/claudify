@@ -143,6 +143,48 @@ test("memory batches bound context and skip server memory for DMs", async () => 
     assert.equal(serverCalls.length, 0);
 });
 
+test("a rejected updater waits for the other writer before releasing the scope", async () => {
+    const started = [];
+    const gate = Promise.withResolvers();
+    const failure = new Error("profile write failed");
+    const batcher = new MemoryUpdateBatcher(
+        60_000, 600_000, 20_000,
+        async (_users, context) => {
+            started.push(`profile:${context}`);
+            if (context.includes("old snapshot")) throw failure;
+        },
+        async (_guildId, _guildName, _channelName, context) => {
+            started.push(`server:${context}`);
+            if (context.includes("old snapshot")) await gate.promise;
+        },
+    );
+    const request = (conversationContext) => ({
+        scopeId: "guild:1", guildId: "1", guildName: "Guild",
+        channelId: "1", channelName: "general",
+        users: [{ id: "1", tag: "User" }], conversationContext,
+    });
+    batcher.enqueue(request("old snapshot"));
+    let settled = false;
+    const first = batcher.flush("guild:1").catch((error) => {
+        settled = true;
+        assert.equal(error, failure);
+    });
+    await new Promise(setImmediate);
+    batcher.enqueue(request("new snapshot"));
+    const second = batcher.flush("guild:1");
+    const duplicate = batcher.flush("guild:1");
+    try {
+        await new Promise(setImmediate);
+        assert.equal(settled, false);
+        assert.equal(started.length, 2, "the older server writer must finish first");
+    } finally {
+        gate.resolve();
+        await Promise.all([first, second, duplicate]);
+    }
+    assert.equal(started.length, 4);
+    assert.ok(started.slice(2).every((context) => context.includes("new snapshot")));
+});
+
 test("newer batches wait for an in-flight flush of the same scope", async () => {
     const started = [];
     let releaseFirst;
