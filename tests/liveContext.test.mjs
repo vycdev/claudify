@@ -72,6 +72,21 @@ test("oversized live context does not emit incomplete metadata or surrogate pair
     }
 });
 
+test("truncated context retains complete metadata even with delimiter-like display names", () => {
+    const newest = message("new", "😀".repeat(1000), "2026-08-09T10:01:00.000Z");
+    newest.author.displayName = "name ]: misleading";
+    let excerpts = 0;
+    for (let budget = 250; budget <= 500; budget++) {
+        const context = formatLiveMessagesContext([newest], 1, budget);
+        assert.ok(context.length <= budget);
+        if (!context) continue;
+        excerpts++;
+        assert.match(context, /message_id=new; author_id=user-new; author_bot=false; created_at=2026-08-09T10:01:00.000Z\]: 😀/u);
+        assert.doesNotMatch(context, /[\uD800-\uDBFF]$/u);
+    }
+    assert.ok(excerpts > 0, "budgets large enough for an excerpt must retain one");
+});
+
 test("formats each live message only once while applying the budget", () => {
     let contentReads = 0;
     const messages = Array.from({ length: 500 }, (_, index) => {

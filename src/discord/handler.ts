@@ -121,12 +121,16 @@ export function buildReactionQuestion(
     return `[${msgAuthorLabel} said this, and ${userLabel} wants you to respond to it]: ${targetContent}`;
 }
 
+function formatMessageContextPrefix(msg: Message): string {
+    const time = formatContextTime(msg.createdAt);
+    const label = authorLabel(msg.author);
+    return `[${time}] ${label} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=${msg.author.bot}; created_at=${msg.createdAt.toISOString()}]: `;
+}
+
 function formatMessageForContext(msg: Message): string {
     const content = msg.content;
     if (isSensitiveAuthMessage(content)) return "";
-    const time = formatContextTime(msg.createdAt);
-    const label = authorLabel(msg.author);
-    return `[${time}] ${label} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=${msg.author.bot}; created_at=${msg.createdAt.toISOString()}]: ${messageContentForMemory(msg, content) || "[no text]"}`;
+    return `${formatMessageContextPrefix(msg)}${messageContentForMemory(msg, content) || "[no text]"}`;
 }
 
 async function fetchChannelMessages(channel: BotMessageChannel, limit: number): Promise<Message[]> {
@@ -241,11 +245,14 @@ export function formatLiveMessagesContext(
         const header = `${buildHeader(newestIndex)} newest_truncated=true`;
         const available = maxChars - header.length - 1;
         const newest = formattedMessages[newestIndex];
-        const contentStart = newest.indexOf("]: ");
-        if (contentStart < 0 || available <= contentStart + 3) return "";
+        // Display names can contain delimiters too; use the actual structured
+        // prefix rather than searching user-controlled text for "]: ".
+        const contentStart = formatMessageContextPrefix(contextMessages[newestIndex]).length;
+        if (available <= contentStart) return "";
         let end = Math.min(available, newest.length);
         if (end < newest.length && /[\uD800-\uDBFF]/u.test(newest[end - 1])
             && /[\uDC00-\uDFFF]/u.test(newest[end])) end--;
+        if (end <= contentStart) return "";
         return `${header}\n${newest.slice(0, end)}`;
     }
 
