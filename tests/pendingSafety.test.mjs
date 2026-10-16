@@ -48,4 +48,19 @@ test("pending writes refuse symlinks and removals reject traversal", async (t) =
         /safely save pending message/u,
     );
     assert.equal(fs.readFileSync(outsideFile, "utf8"), "must not be overwritten");
+    const ordinaryPending = path.join(messagesDir, "pending", "333333333333333333.txt");
+    fs.writeFileSync(ordinaryPending, "done", "utf8");
+    removePending("333333333333333333");
+    assert.equal(fs.existsSync(ordinaryPending), false);
+
+    // The pending directory itself may be replaced after initialization.
+    const outsideDir = path.join(testDir, "outside");
+    fs.mkdirSync(outsideDir);
+    const victim = path.join(outsideDir, "222222222222222222.txt");
+    fs.writeFileSync(victim, "keep this file", "utf8");
+    const pendingDir = path.dirname(pendingPath);
+    fs.rmSync(pendingDir, { recursive: true });
+    fs.symlinkSync(outsideDir, pendingDir, "dir");
+    removePending("222222222222222222");
+    assert.equal(fs.readFileSync(victim, "utf8"), "keep this file");
 });
