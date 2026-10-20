@@ -272,3 +272,28 @@ test("keeps historical model fields within Discord's embed limit", () => {
         field.name === "🤖 Additional Models" && field.value.startsWith("2 more model(s)")
     ));
 });
+
+test("long model names fit Discord's embed field-name limit", () => {
+    const entry = {
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 2,
+        totalCost: 1,
+        modelBreakdowns: [{
+            modelName: "model-" + "🟣".repeat(150),
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            cost: 1,
+        }],
+    };
+    const field = buildHistoricalUsageEmbed("Daily", 0x57f287, "today", entry)
+        .toJSON().fields.find((item) => item.name.includes("model-"));
+    assert.ok(field);
+    assert.ok(field.name.length <= 256);
+    assert.ok(field.name.endsWith("…"));
+    assert.doesNotMatch(field.name, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/u);
+});

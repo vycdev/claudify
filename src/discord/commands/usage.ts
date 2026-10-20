@@ -59,6 +59,7 @@ const EMPTY_TOTALS: UsageTotals = {
 };
 
 const DISCORD_MAX_EMBED_FIELDS = 25;
+const DISCORD_MAX_EMBED_FIELD_NAME_LENGTH = 256;
 const DEFAULT_USAGE_TIMEOUT_MS = 120_000;
 const FORCE_KILL_GRACE_MS = 1_000;
 
@@ -268,6 +269,16 @@ const shortModel = (name: string) => name
     .replace("claude-", "")
     .replace(/-\d{8}$/, "");
 
+function boundedModelFieldName(name: string): string {
+    if (name.length <= DISCORD_MAX_EMBED_FIELD_NAME_LENGTH) return name;
+    let truncated = "";
+    for (const character of name) {
+        if (truncated.length + character.length >= DISCORD_MAX_EMBED_FIELD_NAME_LENGTH) break;
+        truncated += character;
+    }
+    return `${truncated}…`;
+}
+
 export function formatUsageBlockTime(date: Date): string {
     return `${date.toLocaleTimeString("en-US", {
         hour: "2-digit",
@@ -332,7 +343,7 @@ function addModelBreakdownFields(
             detail += `\nCache W: ${formatTokens(model.cacheCreationTokens)} · Cache R: ${formatTokens(model.cacheReadTokens)}`;
         }
         embed.addFields({
-            name: `${modelEmoji(model.modelName)} ${shortModel(model.modelName)}`,
+            name: boundedModelFieldName(`${modelEmoji(model.modelName)} ${shortModel(model.modelName)}`),
             value: detail,
             inline: false,
         });
