@@ -49,6 +49,14 @@ test("retains complex effort for deterministic high-value signals", () => {
         "multi-part",
     );
     assert.equal(
+        classifyResponseEffort(signals("変更点は何ですか？原因は何ですか？")),
+        "multi-part",
+    );
+    assert.equal(
+        classifyResponseEffort(signals("what changed? 原因は何ですか？")),
+        "multi-part",
+    );
+    assert.equal(
         classifyResponseEffort(signals("explain the tradeoffs here")),
         "reasoning-intent",
     );
