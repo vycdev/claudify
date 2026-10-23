@@ -23,7 +23,7 @@ export async function handleHelp(msg: Message): Promise<void> {
         ``,
         `**Commands**`,
         `\`!help\` — This message`,
-        BOT_PROVIDER === "codex" ? "`!usage` — Codex subscription usage information" : `\`!usage [today|week|month|daily|blocks|monthly]\` — Token usage stats (\`month\` is current; \`monthly\` is history)`,
+        BOT_PROVIDER === "codex" ? "`!usage` — Guidance on checking Codex subscription limits (admin DM: `!codex usage`)" : `\`!usage [today|week|month|daily|blocks|monthly]\` — Token usage stats (\`month\` is current; \`monthly\` is history)`,
         `\`!profile [@user]\` — View a user's profile`,
         `\`!guild\` — View server memory`,
         `\`!storage\` — Storage stats`,
