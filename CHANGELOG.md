@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Keep CRLF line endings together when splitting ordinary Discord response text.
 - Do not hide legacy reaction directives after unmatched backtick runs of different lengths.
 - Bound combined stdout and stderr from the `!usage` subprocess so oversized output cannot accumulate without limit.
 - Stop stalled image attachment downloads after a configurable total deadline, including response-body reads.
