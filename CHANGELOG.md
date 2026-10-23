@@ -12,7 +12,9 @@
 - Add typed per-workload model and effort routing for responses, profile updates, server-memory updates, and daily summaries, with legacy global fallbacks and workload-aware logs.
 
 ### Fixed
+
 - Recognize unambiguous underscored channel IDs in saved history filenames so renamed-channel lookup and indexing retain their logs.
+- Keep CRLF line endings together when splitting ordinary Discord response text.
 - Do not hide legacy reaction directives after unmatched backtick runs of different lengths.
 - Bound combined stdout and stderr from the `!usage` subprocess so oversized output cannot accumulate without limit.
 - Stop stalled image attachment downloads after a configurable total deadline, including response-body reads.

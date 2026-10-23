@@ -126,6 +126,10 @@ function splitsSurrogatePair(text: string, position: number): boolean {
     );
 }
 
+function splitsCrLf(text: string, position: number): boolean {
+    return text[position - 1] === "\r" && text[position] === "\n";
+}
+
 function continuationOpener(fence: FenceSpan, maxLen: number): string {
     const minimumClosingLength = fence.marker.length + 1;
     return fence.opener.length + 1 + minimumClosingLength < maxLen
@@ -178,7 +182,8 @@ function findLargestFittingCandidate(
         const absoluteSplit = offset + splitAt;
         if (
             isInsideFenceLine(spans, absoluteSplit) ||
-            splitsSurrogatePair(text, absoluteSplit)
+            splitsSurrogatePair(text, absoluteSplit) ||
+            splitsCrLf(text, absoluteSplit)
         ) {
             continue;
         }
@@ -269,6 +274,7 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
                 if (
                     !isInsideFenceLine(spans, offset + preferredSplit) &&
                     !splitsSurrogatePair(text, offset + preferredSplit) &&
+                    !splitsCrLf(text, offset + preferredSplit) &&
                     prefix.length +
                         preferred.content.length +
                         preferred.suffix.length <=

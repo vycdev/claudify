@@ -34,5 +34,14 @@ export function savePending(msg: Message) {
 
 export function removePending(msgId: string) {
     const filePath = path.join(PENDING_DIR, pendingFilename(msgId));
+    // Unlike writes, unlink follows parent directory symlinks. A replaced
+    // pending directory must not delete a same-named file outside storage.
+    try {
+        if (!fs.lstatSync(MESSAGES_DIR).isDirectory()
+            || !fs.lstatSync(PENDING_DIR).isDirectory()) return;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
+    }
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
