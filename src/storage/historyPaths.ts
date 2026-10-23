@@ -77,7 +77,9 @@ export function parseChannelHistoryFileName(
     fileName: string,
 ): ChannelHistoryFile | null {
     const match = fileName.match(
-        new RegExp(`^${CHANNEL_HISTORY_PREFIX}([^_]+)__(.+)_(${DATE_PATTERN})\\.txt$`),
+        // Single underscores in IDs are unambiguous. Double underscores in
+        // an ID cannot be distinguished from the ID/name separator.
+        new RegExp(`^${CHANNEL_HISTORY_PREFIX}([^_]+(?:_[^_]+)*)__(.+)_(${DATE_PATTERN})\\.txt$`),
     );
     if (!match) return null;
 

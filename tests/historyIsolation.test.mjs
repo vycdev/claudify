@@ -105,6 +105,21 @@ test("channel history filenames preserve IDs with complex display names", () => 
     });
 });
 
+test("history files with a single underscore in the channel ID remain discoverable", () => {
+    const channelId = "channel_one";
+    const date = new Date("2026-08-02T00:00:00.000Z");
+    const filename = getChannelHistoryFileName(channelId, "old-name", date);
+    assert.deepEqual(parseChannelHistoryFileName(filename), {
+        channelId,
+        channelName: "old-name",
+        date: "2026-08-02",
+    });
+
+    const originalPath = getDailyLogPath(channelId, date, "old-name");
+    fs.writeFileSync(originalPath, "[10:00:00] user: saved text\n");
+    assert.equal(getDailyLogPath(channelId, date, "new-name"), originalPath);
+});
+
 test("legacy history requires an unambiguous live channel-name mapping", () => {
     assert.equal(
         uniquelyIdentifiesHistoryChannel(
