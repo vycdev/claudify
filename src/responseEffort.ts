@@ -37,7 +37,7 @@ export function classifyResponseEffort(
     if (CODE_OR_ERROR.test(question)) return "code-or-error";
     if (
         MULTI_PART_REQUEST.test(question)
-        || (question.match(/\?/gu)?.length ?? 0) >= 2
+        || (question.match(/[?？]/gu)?.length ?? 0) >= 2
     ) return "multi-part";
     if (COMPLEX_REASONING_INTENT.test(question)) return "reasoning-intent";
     return "simple";
