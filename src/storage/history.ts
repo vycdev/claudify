@@ -208,11 +208,22 @@ function trimLinesToBudget(
     }
 
     let charCount = selected.join(separator).length;
-    while (charCount > maxChars && selected.length > 0) {
+    while (charCount > maxChars && selected.length > 1) {
         const removed = selected.shift();
         omitted++;
         charCount -= removed?.length || 0;
-        if (selected.length > 0) charCount -= separator.length;
+        charCount -= separator.length;
+    }
+
+    if (selected.length > 0 && charCount > maxChars) {
+        if (maxChars === 0) {
+            return { lines: [], omitted: omitted + 1 };
+        }
+        // Keep the beginning of the newest saved record (including its author
+        // and timestamp) rather than claiming there are no saved messages.
+        let excerpt = selected[0].slice(0, maxChars - 1);
+        if (/[\uD800-\uDBFF]$/.test(excerpt)) excerpt = excerpt.slice(0, -1);
+        selected[0] = `${excerpt}…`;
     }
 
     return { lines: selected, omitted };
