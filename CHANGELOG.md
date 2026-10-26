@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Retain a bounded excerpt of the newest live MCP `read-messages` result when it alone exceeds the configured response limit.
 - Clarify that `!usage` only points Codex administrators to the private `!codex usage` limits command; it does not display limits itself.
 - Recognize unambiguous underscored channel IDs in saved history filenames so renamed-channel lookup and indexing retain their logs.
 - Keep CRLF line endings together when splitting ordinary Discord response text.
