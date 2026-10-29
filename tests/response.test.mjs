@@ -30,6 +30,29 @@ test("separates reaction tags from a text response", () => {
     );
 });
 
+test("preserves paragraph breaks around a standalone reaction tag", () => {
+    const response = parseClaudeResponse(
+        "First paragraph.\n[REACT: 👍]\n\nSecond paragraph.",
+    );
+    assert.deepEqual(response.reactions, ["👍"]);
+    assert.equal(response.text, "First paragraph.\n\nSecond paragraph.");
+    assert.equal(response.historyContent, response.text);
+});
+
+test("preserves a line break after an inline reaction tag", () => {
+    const response = parseClaudeResponse("First [REACT: 👍]\nSecond");
+    assert.deepEqual(response.reactions, ["👍"]);
+    assert.equal(response.text, "First \nSecond");
+});
+
+test("removes indented standalone reaction lines with CRLF endings", () => {
+    const response = parseClaudeResponse(
+        "First paragraph.\r\n  [REACT: 👍]  \r\n\r\nSecond paragraph.",
+    );
+    assert.deepEqual(response.reactions, ["👍"]);
+    assert.equal(response.text, "First paragraph.\r\n\r\nSecond paragraph.");
+});
+
 test("ignores reaction tags without an emoji", () => {
     const expected = {
         reactions: [],

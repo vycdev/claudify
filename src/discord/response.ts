@@ -201,7 +201,7 @@ export function parseClaudeResponse(response: string): ParsedClaudeResponse {
 
     const maskedResponse = maskInlineCode(maskFencedCode(response));
     const matches = [
-        ...maskedResponse.matchAll(/\[REACT:(.*?)\]\s*/g),
+        ...maskedResponse.matchAll(/\[REACT:(.*?)\][\t ]*/g),
     ];
     const reactions = matches
         .map((match) => match[1].trim())
@@ -209,7 +209,20 @@ export function parseClaudeResponse(response: string): ParsedClaudeResponse {
     let text = response;
     for (let i = matches.length - 1; i >= 0; i -= 1) {
         const match = matches[i];
-        text = text.slice(0, match.index) + text.slice(match.index + match[0].length);
+        const startOfLine = Math.max(
+            response.lastIndexOf("\n", match.index - 1),
+            response.lastIndexOf("\r", match.index - 1),
+        ) + 1;
+        const standalone = response.slice(startOfLine, match.index).trim() === "";
+        const end = match.index + match[0].length;
+        // A standalone directive replaces its line; inline directives must
+        // not consume a paragraph break or masked inline-code content.
+        const lineBreakLength = standalone
+            ? response.startsWith("\r\n", end) ? 2
+                : response[end] === "\r" || response[end] === "\n" ? 1 : 0
+            : 0;
+        const start = standalone ? startOfLine : match.index;
+        text = text.slice(0, start) + text.slice(end + lineBreakLength);
     }
     text = text.trim();
     return {
