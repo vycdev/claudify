@@ -12,6 +12,7 @@
 - Add typed per-workload model and effort routing for responses, profile updates, server-memory updates, and daily summaries, with legacy global fallbacks and workload-aware logs.
 
 ### Fixed
+- Bound per-model `!usage` field names so reports with many long model IDs stay within Discord's total embed character limit.
 
 - Keep a bounded excerpt of an oversized newest saved-history message instead of showing an empty channel log in response context.
 - Clarify that `!usage` only points Codex administrators to the private `!codex usage` limits command; it does not display limits itself.

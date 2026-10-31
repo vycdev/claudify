@@ -297,3 +297,29 @@ test("long model names fit Discord's embed field-name limit", () => {
     assert.ok(field.name.endsWith("…"));
     assert.doesNotMatch(field.name, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/u);
 });
+
+test("many long model names fit Discord's total embed character limit", () => {
+    const models = Array.from({ length: 25 }, (_, index) => ({
+        modelName: `model-${index}-${"x".repeat(300)}`,
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 1,
+    }));
+    const embed = buildHistoricalUsageEmbed("Daily", 0x57f287, "today", {
+        inputTokens: 25,
+        outputTokens: 25,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 50,
+        totalCost: 25,
+        modelBreakdowns: models,
+    }).toJSON();
+    const characters = (embed.title?.length ?? 0)
+        + (embed.description?.length ?? 0)
+        + (embed.footer?.text.length ?? 0)
+        + (embed.author?.name.length ?? 0)
+        + embed.fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
+    assert.ok(characters <= 6000, `embed contains ${characters} characters`);
+});
