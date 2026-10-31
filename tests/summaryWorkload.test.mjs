@@ -106,8 +106,34 @@ test("a long final log line does not produce an empty daily summary", async () =
 
     assert.equal(
         fs.readFileSync(summaryPath, "utf8"),
-        `b: ${"x".repeat(17)}`,
+        "x".repeat(20),
     );
+});
+
+test("oversized final log lines retain their latest content", async () => {
+    const date = new Date("2026-08-06T12:00:00Z");
+    const logPath = getDailyLogPath("channel-latest", date, "general");
+    const summaryPath = getSummaryPath("channel-latest", date, "general");
+    fs.writeFileSync(logPath, `u: q\nb: ${"x".repeat(100)} latest update\n`, "utf8");
+
+    await generateDailySummary("channel-latest", "general", date, async () => {
+        assert.fail("A single bounded line should not invoke the model");
+    });
+
+    assert.match(fs.readFileSync(summaryPath, "utf8"), /latest update$/);
+});
+
+test("oversized summary tail does not start with an orphaned low surrogate", async () => {
+    const date = new Date("2026-08-07T12:00:00Z");
+    const logPath = getDailyLogPath("channel-unicode-tail", date, "general");
+    const summaryPath = getSummaryPath("channel-unicode-tail", date, "general");
+    fs.writeFileSync(logPath, `u: q\nb: ${"x".repeat(30)}😀${"y".repeat(19)}\n`, "utf8");
+
+    await generateDailySummary("channel-unicode-tail", "general", date, async () => {
+        assert.fail("A single bounded line should not invoke the model");
+    });
+
+    assert.equal(fs.readFileSync(summaryPath, "utf8"), "y".repeat(19));
 });
 
 test("daily summary writes do not follow a destination symlink created during generation", async () => {

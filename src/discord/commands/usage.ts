@@ -60,6 +60,9 @@ const EMPTY_TOTALS: UsageTotals = {
 
 const DISCORD_MAX_EMBED_FIELDS = 25;
 const DISCORD_MAX_EMBED_FIELD_NAME_LENGTH = 256;
+// A 256-character name is valid alone, but 25 such model fields exceed
+// Discord's 6000-character aggregate embed limit before their values are added.
+const USAGE_MODEL_FIELD_NAME_LENGTH = 100;
 const DEFAULT_USAGE_TIMEOUT_MS = 120_000;
 const FORCE_KILL_GRACE_MS = 1_000;
 
@@ -270,10 +273,11 @@ const shortModel = (name: string) => name
     .replace(/-\d{8}$/, "");
 
 function boundedModelFieldName(name: string): string {
-    if (name.length <= DISCORD_MAX_EMBED_FIELD_NAME_LENGTH) return name;
+    const maxLength = Math.min(DISCORD_MAX_EMBED_FIELD_NAME_LENGTH, USAGE_MODEL_FIELD_NAME_LENGTH);
+    if (name.length <= maxLength) return name;
     let truncated = "";
     for (const character of name) {
-        if (truncated.length + character.length >= DISCORD_MAX_EMBED_FIELD_NAME_LENGTH) break;
+        if (truncated.length + character.length >= maxLength) break;
         truncated += character;
     }
     return `${truncated}…`;

@@ -96,6 +96,24 @@ if (!process.execArgv.includes("--experimental-test-module-mocks")) {
     });
 
     for (const tool of ["read-messages", "fetch-messages"]) {
+        test(`${tool} describes image paths without assuming a client Read tool`, async () => {
+            messages = [message("333333333333333331", "ordinary image", "ordinary")];
+            const server = createMcpServer();
+            const handler = server._requestHandlers.get("tools/call");
+            try {
+                const result = await handler({ method: "tools/call", params: {
+                    name: tool,
+                    arguments: tool === "read-messages"
+                        ? { server: guild.id, channel: channel.id, limit: 1 }
+                        : { links: [`https://discord.com/channels/${guild.id}/${channel.id}/${messages[0].id}`] },
+                } }, {});
+                assert.match(result.content[0].text, /clients with access to the bot's filesystem/);
+                assert.doesNotMatch(result.content[0].text, /Use the Read tool/);
+            } finally {
+                await server.close();
+            }
+        });
+
         test(`${tool} snapshots in-place embed data and all attachment entries before download`, async () => {
             downloads.length = 0;
             const first = message("333333333333333331", "ordinary content", "ordinary-first");
