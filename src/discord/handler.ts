@@ -969,23 +969,20 @@ async function processMessage(msg: Message): Promise<void> {
 
         // Background jobs
         const conversationContext = [
-            liveMessages
-                || `${authorLabel(msg.author)} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=false; created_at=${msg.createdAt.toISOString()}]: ${rawQuestion}`,
+            liveMessages,
+            `${authorLabel(msg.author)} [message_id=${msg.id}; author_id=${msg.author.id}; author_bot=false; created_at=${msg.createdAt.toISOString()}]: ${rawQuestion}`,
             `[Latest response] ${botName} (bot): ${parsedResponse.historyContent}`,
-        ].join("\n");
+        ].filter(Boolean).join("\n");
 
-        const participantUsers: { tag: string; id: string }[] = [];
-        if (recentMessages.length > 0) {
-            for (const m of recentMessages) {
-                if (!m.author.bot) {
-                    participantUsers.push({
-                        tag: authorLabel(m.author),
-                        id: m.author.id,
-                    });
-                }
+        const participantUsers: { tag: string; id: string }[] = [
+            { tag: authorLabel(msg.author), id: msg.author.id },
+        ];
+        const seenParticipantIds = new Set([msg.author.id]);
+        for (const m of recentMessages) {
+            if (!m.author.bot && !seenParticipantIds.has(m.author.id)) {
+                participantUsers.push({ tag: authorLabel(m.author), id: m.author.id });
+                seenParticipantIds.add(m.author.id);
             }
-        } else {
-            participantUsers.push({ tag: authorLabel(msg.author), id: msg.author.id });
         }
 
         queueBackgroundMemoryUpdate({

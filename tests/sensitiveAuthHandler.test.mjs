@@ -170,6 +170,19 @@ if (!process.execArgv.includes("--experimental-test-module-mocks")) {
         assertNoSecret();
     });
 
+    test("background memory includes the requesting user when others appear in live context", async () => {
+        const other = fixture("ordinary earlier message", { attachments: false });
+        const current = fixture("!ask what do you think?", { attachments: false, live: [other] });
+        await onMessage(current);
+        assert.equal(calls.memories.length, 1);
+        assert.deepEqual(
+            calls.memories[0].users.map((user) => user.id),
+            [current.author.id, other.author.id],
+        );
+        assert.match(calls.memories[0].conversationContext, /ordinary earlier message/);
+        assert.match(calls.memories[0].conversationContext, /what do you think\?/);
+    });
+
     test("ordinary direct replies preserve content, embeds and image downloads", async () => {
         const target = fixture("!authentic ordinary target");
         const current = fixture("!ask explain this", { reference: target, attachments: false });
