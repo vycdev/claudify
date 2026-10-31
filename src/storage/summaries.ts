@@ -34,6 +34,19 @@ function truncateUtf16(text: string, maxChars: number): string {
     return text.slice(0, end);
 }
 
+function takeUtf16Tail(text: string, maxChars: number): string {
+    let start = Math.max(0, text.length - maxChars);
+    if (
+        start > 0 &&
+        start < text.length &&
+        /[\uD800-\uDBFF]/.test(text[start - 1]) &&
+        /[\uDC00-\uDFFF]/.test(text[start])
+    ) {
+        start++;
+    }
+    return text.slice(start);
+}
+
 function trimSummaryInput(log: string): string {
     const lines = log.split("\n");
     const selected = HISTORY_RECAP_MAX_LINES === 0
@@ -47,9 +60,12 @@ function trimSummaryInput(log: string): string {
         selected.shift();
     }
 
-    // Keep a bounded excerpt of the latest line rather than discarding the
-    // entire day when one saved message exceeds the recap budget.
-    return truncateUtf16(selected.join("\n"), HISTORY_RECAP_MAX_CHARS).trim();
+    // If the newest line alone exceeds the budget, keep its newest content.
+    // A prefix would discard the end of a long final message or exchange.
+    const bounded = selected.join("\n");
+    return (bounded.length > HISTORY_RECAP_MAX_CHARS
+        ? takeUtf16Tail(bounded, HISTORY_RECAP_MAX_CHARS)
+        : bounded).trim();
 }
 
 export function getSummaryPath(
