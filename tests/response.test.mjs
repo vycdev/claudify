@@ -45,6 +45,17 @@ test("preserves a line break after an inline reaction tag", () => {
     assert.equal(response.text, "First \nSecond");
 });
 
+for (const [ending, newline] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
+    test(`preserves indentation before inline reaction tags with ${ending} endings`, () => {
+        const response = parseClaudeResponse(
+            `Example:${newline}${newline}    [REACT: 👍]print('hello')`,
+        );
+        assert.deepEqual(response.reactions, ["👍"]);
+        assert.equal(response.text, `Example:${newline}${newline}    print('hello')`);
+        assert.equal(response.historyContent, response.text);
+    });
+}
+
 test("removes indented standalone reaction lines with CRLF endings", () => {
     const response = parseClaudeResponse(
         "First paragraph.\r\n  [REACT: 👍]  \r\n\r\nSecond paragraph.",

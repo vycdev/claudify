@@ -213,8 +213,9 @@ export function parseClaudeResponse(response: string): ParsedClaudeResponse {
             response.lastIndexOf("\n", match.index - 1),
             response.lastIndexOf("\r", match.index - 1),
         ) + 1;
-        const standalone = response.slice(startOfLine, match.index).trim() === "";
         const end = match.index + match[0].length;
+        const standalone = response.slice(startOfLine, match.index).trim() === ""
+            && (end === response.length || response[end] === "\r" || response[end] === "\n");
         // A standalone directive replaces its line; inline directives must
         // not consume a paragraph break or masked inline-code content.
         const lineBreakLength = standalone
