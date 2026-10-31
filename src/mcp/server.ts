@@ -199,7 +199,7 @@ export const SendMessageSchema = z.object({
         ),
 });
 
-const READ_MESSAGES_RESPONSE_HINT = "\n\nNote: Some messages have images. Use the Read tool to view the image file paths listed above.";
+const READ_MESSAGES_RESPONSE_HINT = "\n\nNote: Some messages have downloaded images. The paths above are usable only by clients with access to the bot's filesystem.";
 
 type ReadMessageEntry = { images?: string[] } & Record<string, unknown>;
 
