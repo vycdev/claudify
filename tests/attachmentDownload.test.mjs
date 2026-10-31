@@ -117,6 +117,37 @@ test("an actual HTTP response body is interrupted by the download deadline", () 
     }
 });
 
+test("cancels failed HTTP attachment bodies without saving a file", () => {
+    const messagesDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-attachment-http-error-"),
+    );
+    try {
+        const script = `
+            const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            let bodyCancelled = false;
+            const body = new ReadableStream({
+                cancel() { bodyCancelled = true; },
+            });
+            globalThis.fetch = async () => new Response(body, {
+                status: 404,
+                statusText: "Not Found",
+            });
+            try {
+                await downloadAttachment("https://example.test/missing.png", "missing.png");
+                process.exitCode = 1;
+            } catch (error) {
+                if (!String(error?.message).includes("HTTP 404 Not Found")) process.exitCode = 2;
+                if (!bodyCancelled) process.exitCode = 3;
+            }
+        `;
+        const result = runAttachmentScript(messagesDir, script);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(fs.existsSync(path.join(messagesDir, "images", "missing.png")), false);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+});
+
 test("rejects oversized attachment responses before writing them", () => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-attachment-download-"),

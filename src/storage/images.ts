@@ -166,6 +166,7 @@ export async function downloadAttachment(
         signal: AbortSignal.timeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS),
     });
     if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
         throw new Error(
             `Failed to download attachment: HTTP ${response.status} ${response.statusText}`,
         );

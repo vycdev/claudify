@@ -13,6 +13,10 @@
 
 ### Fixed
 - Describe downloaded MCP image paths without assuming every client has a local Read tool.
+- Bound per-model `!usage` field names so reports with many long model IDs stay within Discord's total embed character limit.
+
+- Retain a bounded excerpt of the newest live MCP `read-messages` result when it alone exceeds the configured response limit.
+- Keep a bounded excerpt of an oversized newest saved-history message instead of showing an empty channel log in response context.
 - Clarify that `!usage` only points Codex administrators to the private `!codex usage` limits command; it does not display limits itself.
 - Recognize unambiguous underscored channel IDs in saved history filenames so renamed-channel lookup and indexing retain their logs.
 - Keep CRLF line endings together when splitting ordinary Discord response text.

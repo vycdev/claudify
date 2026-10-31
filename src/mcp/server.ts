@@ -231,6 +231,31 @@ function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
         selected.unshift(entries[index]);
     }
 
+    // A single oversized newest message must not hide all live context.
+    // Keep its metadata and as much of its text as the configured limit permits.
+    if (selected.length === 0 && entries.length > 0) {
+        const newest = entries[entries.length - 1];
+        if (typeof newest.content === "string") {
+            let low = 0;
+            let high = newest.content.length;
+            let excerpt: ReadMessageEntry | undefined;
+            while (low <= high) {
+                const mid = Math.floor((low + high) / 2);
+                const candidate = {
+                    ...newest,
+                    content: takeUtf16Prefix(newest.content, mid),
+                };
+                if (renderReadMessagesResponse([candidate], true).length <= MCP_READ_MESSAGES_MAX_CHARS) {
+                    excerpt = candidate;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            if (excerpt) selected.push(excerpt);
+        }
+    }
+
     return takeUtf16Prefix(
         renderReadMessagesResponse(selected, true),
         MCP_READ_MESSAGES_MAX_CHARS,
