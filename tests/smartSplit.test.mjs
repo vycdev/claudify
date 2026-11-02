@@ -39,6 +39,25 @@ test("does not split astral Unicode characters between surrogate pairs", () => {
     assert.deepEqual(smartSplit(text, 2000), [prefix, "😀"]);
 });
 
+test("keeps joined emoji and combining marks intact across Discord chunks", () => {
+    for (const cluster of ["👩‍💻", "e\u0301", "🇷🇴"]) {
+        const prefix = "x".repeat(2000 - cluster.length + 1);
+        const chunks = smartSplit(prefix + cluster, 2000);
+
+        assert.deepEqual(chunks, [prefix, cluster]);
+    }
+});
+
+test("keeps joined emoji intact while balancing a split code fence", () => {
+    const code = `${"x".repeat(22)}👩‍💻${"y".repeat(40)}`;
+    const chunks = smartSplit(`\`\`\`js\n${code}\n\`\`\``, 32);
+
+    assert.ok(chunks.every((chunk) => chunk.length <= 32));
+    chunks.forEach(assertBalancedFences);
+    assert.ok(chunks.some((chunk) => chunk.includes("👩‍💻")));
+    assert.equal(chunks.filter((chunk) => chunk.includes("👩‍💻")).length, 1);
+});
+
 test("keeps astral Unicode intact when balancing a split code fence", () => {
     const code = `${"a".repeat(25)}😀${"b".repeat(60)}`;
     const chunks = smartSplit(`\`\`\`js\n${code}\n\`\`\``, 32);
