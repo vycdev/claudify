@@ -212,6 +212,29 @@ test("same-named channels use isolated history and summaries", async () => {
     );
 });
 
+test("an unsafe yesterday summary does not hide a safe yesterday log", (t) => {
+    const channelId = "998877665544332211";
+    const channelName = "unsafe-summary";
+    const yesterday = new Date(Date.now() - 86_400_000);
+    appendToLog("tester", "yesterday safe context", channelId, channelName, yesterday);
+
+    const summaryPath = getSummaryPath(channelId, yesterday, channelName);
+    const outsidePath = path.join(messagesDir, "untrusted-summary.txt");
+    fs.writeFileSync(outsidePath, "not safe summary text");
+    try {
+        fs.symlinkSync(outsidePath, summaryPath);
+    } catch (error) {
+        if (error.code !== "EPERM" && error.code !== "EACCES") throw error;
+        t.skip("symbolic-link assertions require host permission");
+        return;
+    }
+
+    const history = loadRecentHistory(channelId, "ordinary question", channelName);
+    assert.match(history, /Yesterday recent tail/);
+    assert.match(history, /yesterday safe context/);
+    assert.doesNotMatch(history, /not safe summary text/);
+});
+
 test("history search finds older messages using Unicode terms", () => {
     const channelId = "444444444444444444";
     const channelName = "international";
