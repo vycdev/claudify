@@ -260,7 +260,9 @@ export function searchChannelHistory(
         if (!content) continue;
         if (seenContent.has(content)) continue;
         const renderedLength = row.history_date.length + content.length + 3;
-        if (usedChars + renderedLength > maxChars) break;
+        // A high-ranked hit with large surrounding context must not hide
+        // smaller matches later in the result set that still fit the budget.
+        if (usedChars + renderedLength > maxChars) continue;
         matches.push({
             date: row.history_date,
             content,
