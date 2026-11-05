@@ -274,6 +274,36 @@ test("MCP HTTP requests are validated without stopping the server", async (t) =>
         id: null,
     });
 
+    const invalidJsonResponse = await sendRequest(port, "/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: '{"jsonrpc":',
+    });
+    assert.equal(invalidJsonResponse.statusCode, 400);
+    assert.equal(invalidJsonResponse.contentType, "application/json");
+    assert.deepEqual(JSON.parse(invalidJsonResponse.body), {
+        jsonrpc: "2.0",
+        error: { code: -32700, message: "Parse error: Invalid JSON" },
+        id: null,
+    });
+
+    const rejectedOriginResponse = await sendRequest(port, "/mcp", {
+        method: "POST",
+        headers: {
+            origin: "https://untrusted.example",
+            "content-type": "application/json",
+        },
+        body: '{"jsonrpc":"2.0","method":"initialize"}',
+    });
+    assert.equal(rejectedOriginResponse.statusCode, 403);
+    assert.equal(rejectedOriginResponse.contentType, "application/json");
+    assert.deepEqual(JSON.parse(rejectedOriginResponse.body), {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Forbidden origin" },
+        id: null,
+    });
+
+    // A rejected request must not prevent the next client from initializing.
     const initializeResponse = await sendRequest(port, "/mcp", {
         method: "POST",
         headers: {
