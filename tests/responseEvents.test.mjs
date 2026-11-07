@@ -246,6 +246,26 @@ test("stores auditable response metadata separately from conversation text", () 
     );
 });
 
+test("malformed JSONL records do not hide valid recent response events", () => {
+    const yesterday = makeEvent("channel-malformed-record");
+    const today = {
+        ...yesterday,
+        createdAt: "2026-08-27T00:01:00.000Z",
+        sourceMessageId: "message-2",
+    };
+    const yesterdayPath = getResponseEventsPath(
+        yesterday.channelId,
+        new Date(yesterday.createdAt),
+    );
+    const todayPath = getResponseEventsPath(today.channelId, new Date(today.createdAt));
+    fs.writeFileSync(yesterdayPath, `${JSON.stringify(yesterday)}\n{incomplete\n`);
+    fs.writeFileSync(todayPath, `not JSON\n${JSON.stringify(today)}\n`);
+
+    const now = new Date("2026-08-27T00:02:00.000Z");
+    assert.deepEqual(loadRecentResponseEvents(today.channelId, 8, now), [yesterday, today]);
+    assert.deepEqual(loadRecentResponseEvents(today.channelId, 1, now), [today]);
+});
+
 test("response event writes and reads do not follow symbolic links", (t) => {
     const event = {
         version: 1,
