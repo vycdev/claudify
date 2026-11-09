@@ -83,3 +83,45 @@ test("reaction-only output cannot replace an answer to the bot's question", () =
     assert.equal(enforced.reason, "contract-fallback");
     assert.equal(enforced.contractFallback, true);
 });
+
+test("a structured response cannot react to a different message", () => {
+    const state = buildConversationTurnState({
+        triggerKind: "message",
+        sourceMessageId: "current-message",
+        messageContent: "Thanks",
+    });
+    const parsed = parseClaudeResponse(JSON.stringify({
+        text: "You're welcome.",
+        reaction: "👍",
+        reason: "acknowledgement",
+        targetMessageId: "other-message",
+    }));
+
+    const enforced = enforceResponseContract(parsed, state);
+    assert.equal(enforced.targetMessageId, "current-message");
+    assert.deepEqual(enforced.reactions, []);
+    assert.equal(enforced.text, "You're welcome.");
+    assert.equal(enforced.historyContent, "You're welcome.");
+    assert.equal(enforced.reason, "contract-fallback");
+    assert.equal(enforced.contractFallback, true);
+});
+
+test("a structured response to the active message retains its reaction", () => {
+    const state = buildConversationTurnState({
+        triggerKind: "message",
+        sourceMessageId: "current-message",
+        messageContent: "Thanks",
+    });
+    const parsed = parseClaudeResponse(JSON.stringify({
+        text: "You're welcome.",
+        reaction: "👍",
+        reason: "acknowledgement",
+        targetMessageId: "current-message",
+    }));
+
+    const enforced = enforceResponseContract(parsed, state);
+    assert.equal(enforced.targetMessageId, "current-message");
+    assert.deepEqual(enforced.reactions, ["👍"]);
+    assert.equal(enforced.reason, "acknowledgement");
+    assert.equal(enforced.contractFallback, false);
+});
