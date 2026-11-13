@@ -41,6 +41,29 @@ test("storage statistics count persisted documents and ignore symlinks", async (
     );
 });
 
+test("storage statistics include nested v2 logs and fact documents without traversing linked subtrees", async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-storage-nested-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const storageDir = path.join(root, "storage");
+    const logsDir = path.join(storageDir, "v2");
+    const factsDir = path.join(storageDir, "facts", "users");
+    const outsideDir = path.join(root, "outside");
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.mkdirSync(factsDir, { recursive: true });
+    fs.mkdirSync(outsideDir);
+    fs.writeFileSync(path.join(logsDir, "today.txt"), "daily log");
+    fs.writeFileSync(path.join(factsDir, "user.json"), "{}");
+    fs.writeFileSync(path.join(outsideDir, "other.txt"), "outside");
+    fs.symlinkSync(outsideDir, path.join(logsDir, "linked-subtree"), "dir");
+
+    const { countStorageFiles, getStorageDirectorySize } = await import(
+        "../build/discord/commands/storage.js"
+    );
+    assert.equal(countStorageFiles(storageDir), 1);
+    assert.equal(countStorageFiles(storageDir, [".txt", ".json"]), 2);
+    assert.equal(getStorageDirectorySize(storageDir), Buffer.byteLength("daily log{}"));
+});
+
 test("storage size retains other files when one disappears during traversal", async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-storage-race-"));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
