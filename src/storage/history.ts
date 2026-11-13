@@ -11,6 +11,7 @@ import {
     HISTORY_SEARCH_CONTEXT_LINES,
     HISTORY_SEARCH_MAX_BLOCKS,
     MESSAGES_DIR,
+    SUMMARIES_V2_DIR,
 } from "../config.js";
 import { getSummaryPath, loadRecentSummaries } from "./summaries.js";
 import {
@@ -417,7 +418,14 @@ export function loadRecentHistory(
     const yesterday = new Date(Date.now() - 86400000);
     const yesterdaySummary = getSummaryPath(channelId, yesterday, channelName);
     const yesterdayLog = getDailyLogPath(channelId, yesterday, channelName);
-    if (!fs.existsSync(yesterdaySummary) && fs.existsSync(yesterdayLog)) {
+    // An existing but unsafe summary (for example, a replaced symlink) is not
+    // usable context; fall back to the verified channel log instead.
+    const summaryRead = readVerifiedUtf8File(
+        yesterdaySummary,
+        MESSAGES_DIR,
+        SUMMARIES_V2_DIR,
+    );
+    if (summaryRead.state !== "valid" && fs.existsSync(yesterdayLog)) {
         const lines = readLogLines(yesterdayLog, HISTORY_V2_DIR).filter(
             (line) => !lineHasExcludedMessage(line, excludedMessageIds),
         );
