@@ -115,21 +115,6 @@ function isInsideFenceLine(spans: FenceSpan[], position: number): boolean {
     );
 }
 
-function splitsSurrogatePair(text: string, position: number): boolean {
-    const precedingCodeUnit = text.charCodeAt(position - 1);
-    const followingCodeUnit = text.charCodeAt(position);
-    return (
-        precedingCodeUnit >= 0xd800 &&
-        precedingCodeUnit <= 0xdbff &&
-        followingCodeUnit >= 0xdc00 &&
-        followingCodeUnit <= 0xdfff
-    );
-}
-
-function splitsCrLf(text: string, position: number): boolean {
-    return text[position - 1] === "\r" && text[position] === "\n";
-}
-
 function continuationOpener(fence: FenceSpan, maxLen: number): string {
     const minimumClosingLength = fence.marker.length + 1;
     return fence.opener.length + 1 + minimumClosingLength < maxLen
@@ -171,6 +156,7 @@ function findLargestFittingCandidate(
     prefix: string,
     maxLen: number,
     spans: FenceSpan[],
+    graphemeBoundaries: ReadonlySet<number>,
 ): ChunkCandidate | undefined {
     const remainingLength = text.length - offset;
     const largestSourceLength = Math.min(
@@ -182,8 +168,7 @@ function findLargestFittingCandidate(
         const absoluteSplit = offset + splitAt;
         if (
             isInsideFenceLine(spans, absoluteSplit) ||
-            splitsSurrogatePair(text, absoluteSplit) ||
-            splitsCrLf(text, absoluteSplit)
+            !graphemeBoundaries.has(absoluteSplit)
         ) {
             continue;
         }
@@ -236,6 +221,12 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
     if (text.length <= maxLen) return [text];
 
     const spans = findFenceSpans(text);
+    // Unicode grapheme boundaries keep joined emoji, flags, and combining
+    // marks together, as well as surrogate pairs and CRLF line endings.
+    const graphemeBoundaries = new Set<number>([text.length]);
+    for (const { index } of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+        graphemeBoundaries.add(index);
+    }
     const chunks: string[] = [];
     let offset = 0;
 
@@ -250,10 +241,13 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
             prefix,
             maxLen,
             spans,
+            graphemeBoundaries,
         );
         if (!candidate) {
             throw new RangeError(
-                "maxLen is too small to balance this fenced code block",
+                startingFence || spans.some((span) => span.openingStart === offset)
+                    ? "maxLen is too small to balance this fenced code block"
+                    : "maxLen is too small to keep a grapheme cluster intact",
             );
         }
 
@@ -273,8 +267,7 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
                 );
                 if (
                     !isInsideFenceLine(spans, offset + preferredSplit) &&
-                    !splitsSurrogatePair(text, offset + preferredSplit) &&
-                    !splitsCrLf(text, offset + preferredSplit) &&
+                    graphemeBoundaries.has(offset + preferredSplit) &&
                     prefix.length +
                         preferred.content.length +
                         preferred.suffix.length <=
