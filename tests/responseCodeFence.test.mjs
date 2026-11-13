@@ -14,3 +14,26 @@ test("does not interpret reaction directives inside fenced code", () => {
     contractFallback: false,
   });
 });
+
+test("keeps reaction directives literal in tilde, long, and unclosed fences", () => {
+  const examples = [
+    "Example:\n~~~text\n[REACT:🚫]\n~~~",
+    "Example:\n````text\n[REACT:🚫]\n```\n[REACT:🚫]\n````",
+    "Example:\n~~~text\n[REACT:🚫]",
+  ];
+
+  for (const example of examples) {
+    const outsideFence = example.endsWith("[REACT:🚫]") ? "" : "\n[REACT:👍] Good";
+    const response = example + outsideFence;
+    const expectedText = example + (outsideFence ? "\nGood" : "");
+    assert.deepEqual(parseClaudeResponse(response), {
+      reactions: outsideFence ? ["👍"] : [],
+      text: expectedText,
+      historyContent: expectedText,
+      reason: "legacy",
+      targetMessageId: null,
+      structured: false,
+      contractFallback: false,
+    }, example);
+  }
+});
