@@ -111,3 +111,40 @@ test("empty server-memory displays disable mentions in server names", async () =
     assert.match(messages[0].content, /^No server memory found for @here/);
     assert.deepEqual(messages[0].allowedMentions, { parse: [] });
 });
+
+test("profile displays disable mentions from stored facts and user names in every chunk", async () => {
+    fs.writeFileSync(
+        path.join(PROFILES_DIR, "profile-mentions.txt"),
+        `Stored @everyone <@123456789012345678> <@&234567890123456789> ${"x".repeat(2500)}`,
+        "utf8",
+    );
+
+    const messages = [];
+    await handleProfile({
+        mentions: { users: { first: () => undefined } },
+        author: { id: "profile-mentions", tag: "@here <@&345678901234567890>" },
+        reply: async (options) => messages.push(options),
+        channel: { send: async (options) => messages.push(options) },
+    });
+
+    assert.ok(messages.length > 1);
+    assert.match(messages[0].content, /^\*\*Profile for @here/);
+    assert.ok(messages.some((message) => message.content.includes("<@123456789012345678>")));
+    for (const message of messages) {
+        assert.equal(typeof message.content, "string");
+        assert.deepEqual(message.allowedMentions, { parse: [] });
+    }
+});
+
+test("missing profile responses disable mentions in user names", async () => {
+    const messages = [];
+    await handleProfile({
+        mentions: { users: { first: () => undefined } },
+        author: { id: "missing-profile-mentions", tag: "@everyone <@&345678901234567890>" },
+        reply: async (options) => messages.push(options),
+    });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].content, /^No profile found for @everyone/);
+    assert.deepEqual(messages[0].allowedMentions, { parse: [] });
+});
