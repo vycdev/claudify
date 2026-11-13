@@ -238,7 +238,7 @@ messages/
 - `codexClient.ts` owns bounded stdio JSON-RPC and a sanitized child environment. `codex.ts` validates model/effort, subscription auth, sandbox policy, and MCP result evidence. Never enable shell or interactive approval fallbacks.
 - `codexAuth.ts` owns the login lifecycle. Discord handlers in `commands/codexAuth.ts` must reject guild and unauthorized requests before touching auth. Route `!codex` before history logging.
 - Keep `CODEX_HOME` private, dedicated, and outside `MESSAGES_DIR`. Never print raw auth/server payloads or import a personal Codex config.
-- Run `node scripts/codex-smoke.mjs` with Codex CLI 0.156.1 for an unauthenticated real-protocol/MCP check. It performs no inference; live browser login and Discord delivery need separate verification.
+- Run `node scripts/codex-smoke.mjs` with Codex CLI 0.159.0 for an unauthenticated real-protocol/MCP check. It performs no inference; live browser login and Discord delivery need separate verification.
 
 ## Docker
 

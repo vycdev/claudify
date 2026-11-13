@@ -1,4 +1,4 @@
-// Offline policy regression test for Codex 0.156.1. Build first.
+// Offline policy regression test for Codex 0.159.0. Build first.
 // CODEX_BIN=/path/to/codex node scripts/codex-policy-smoke.mjs
 // Uses the production transport, policy builder and tools-only bridge.
 // All model responses are fixed synthetic SSE from loopback; no OAuth/inference.
@@ -25,7 +25,7 @@ const root = fs.mkdtempSync(path.join(process.env.CODEX_POLICY_ARTIFACT_DIR || o
 const save = (file, value) => fs.writeFileSync(path.join(root, file), JSON.stringify(value, null, 2));
 // Never inherit auth, proxy, provider, or personal Codex configuration.
 const childEnv = home => ({ PATH: process.env.PATH, HOME: home, CODEX_HOME: home });
-assert.equal(execFileSync(bin, ["--version"], { env: childEnv(root), cwd: root, encoding: "utf8" }).trim(), "codex-cli 0.156.1");
+assert.equal(execFileSync(bin, ["--version"], { env: childEnv(root), cwd: root, encoding: "utf8" }).trim(), "codex-cli 0.159.0");
 const model = "gpt-6-luna";
 const provider = "policy-loopback-fixture"; // Deliberate test-only provider, never production OpenAI.
 const marker = "FIXED LOCAL RESOURCE CANARY; NOT A CREDENTIAL\n";

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Configure Codex deployments for GPT-6.1 Terra and pin Codex CLI 0.159.0; retain existing reasoning-effort and workload overrides.
+
 ### Added
 
 - Add an opt-in Codex subscription provider with per-workload model/effort settings, private admin device-code login/logout and allowance checks, bounded app-server execution, image input, and MCP action verification. Existing Claude deployments remain the default.
