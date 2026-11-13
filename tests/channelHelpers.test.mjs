@@ -98,3 +98,34 @@ test("findChannel falls back to a numeric channel name after an ID mismatch", as
         client.guilds.cache.delete(guild.id);
     }
 });
+
+test("findChannel rejects ambiguous channel names but accepts an exact ID", async () => {
+    const { channel: first, guild } = createAnnouncementChannel({
+        channelId: "222222222222222222",
+        channelName: "updates",
+    });
+    const { channel: second } = createAnnouncementChannel({
+        channelId: "333333333333333333",
+        channelName: "updates",
+    });
+    guild.channels.cache.set(second.id, second);
+    const originalFetch = client.channels.fetch;
+    client.guilds.cache.set(guild.id, guild);
+    client.channels.fetch = async (identifier) => {
+        if (identifier === second.id) return second;
+        throw new Error("Not a channel ID");
+    };
+
+    try {
+        await assert.rejects(
+            findChannel("#updates", guild.id),
+            (error) => error.message.includes("Multiple channels found")
+                && error.message.includes(first.id)
+                && error.message.includes(second.id),
+        );
+        assert.equal(await findChannel(second.id, guild.id), second);
+    } finally {
+        client.channels.fetch = originalFetch;
+        client.guilds.cache.delete(guild.id);
+    }
+});
