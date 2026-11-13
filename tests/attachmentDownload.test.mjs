@@ -188,6 +188,43 @@ test("rejects oversized attachment responses before writing them", () => {
     }
 });
 
+test("cancels a streamed attachment that exceeds the byte limit without saving it", () => {
+    const messagesDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "claudify-attachment-stream-limit-"),
+    );
+    try {
+        const script = `
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const { MCP_ATTACHMENT_MAX_BYTES } = await import(${JSON.stringify(configUrl)});
+            const { downloadAttachment } = await import(${JSON.stringify(imagesUrl)});
+            let bodyCancelled = false;
+            const body = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new Uint8Array(MCP_ATTACHMENT_MAX_BYTES));
+                    controller.enqueue(new Uint8Array([1]));
+                },
+                cancel() { bodyCancelled = true; },
+            });
+            globalThis.fetch = async () => new Response(body);
+            try {
+                await downloadAttachment("https://example.test/large.png", "large.png");
+                process.exitCode = 1;
+            } catch (error) {
+                if (!String(error?.message).includes("download limit")) process.exitCode = 2;
+                if (!bodyCancelled) process.exitCode = 3;
+                if (fs.existsSync(path.join(process.env.MESSAGES_DIR, "images", "large.png"))) {
+                    process.exitCode = 4;
+                }
+            }
+        `;
+        const result = runAttachmentScript(messagesDir, script);
+        assert.equal(result.status, 0, result.stderr);
+    } finally {
+        fs.rmSync(messagesDir, { recursive: true, force: true });
+    }
+});
+
 test("writes attachment responses within the download limit", () => {
     const messagesDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "claudify-attachment-download-"),
