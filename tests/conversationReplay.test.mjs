@@ -44,6 +44,43 @@ test("historical search joins only contiguous recent messages from the author", 
     assert.doesNotMatch(searchText, /unrelated older topic/);
 });
 
+test("historical search stops at an intervening author, even when an older message matches", () => {
+    const current = new Date("2026-08-28T09:31:00.000Z");
+    const searchText = buildHistoricalSearchText("current question", "user-1", current, [
+        { authorId: "user-1", content: "older private topic", createdAt: new Date("2026-08-28T09:28:00.000Z") },
+        { authorId: "other-user", content: "topic changed", createdAt: new Date("2026-08-28T09:29:00.000Z") },
+        { authorId: "user-1", content: "recent relevant topic", createdAt: new Date("2026-08-28T09:30:00.000Z") },
+    ]);
+
+    assert.equal(searchText, "recent relevant topic\ncurrent question");
+});
+
+test("historical search enforces the gap and message-count bounds", () => {
+    const current = new Date("2026-08-28T09:31:00.000Z");
+    const messages = Array.from({ length: 8 }, (_, index) => ({
+        authorId: "user-1",
+        content: `recent ${index}`,
+        createdAt: new Date(current.getTime() - (8 - index) * 60_000),
+    }));
+    messages.unshift({
+        authorId: "user-1",
+        content: "too old",
+        createdAt: new Date(current.getTime() - 30 * 60_000),
+    });
+
+    assert.equal(
+        buildHistoricalSearchText("current", "user-1", current, messages),
+        "recent 2\nrecent 3\nrecent 4\nrecent 5\nrecent 6\nrecent 7\ncurrent",
+    );
+    assert.equal(
+        buildHistoricalSearchText("current", "user-1", current, [
+            messages[0],
+            { authorId: "user-1", content: "recent", createdAt: new Date(current.getTime() - 60_000) },
+        ]),
+        "recent\ncurrent",
+    );
+});
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = JSON.parse(fs.readFileSync(
     path.join(currentDir, "fixtures", "conversation-replays.json"),
