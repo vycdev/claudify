@@ -116,6 +116,38 @@ test("records transport errors and missing tool results", () => {
     ]);
 });
 
+test("rejects complete oversized stream lines and still accepts later results", () => {
+    const collector = new ClaudeStreamCollector();
+    collector.consume(event({ type: "result", result: "x".repeat(4 * 1024 * 1024) }));
+    assert.deepEqual(collector.finish(), {
+        result: "",
+        trace: {
+            format: "stream-json",
+            resultEventReceived: false,
+            malformedEventCount: 1,
+            toolCalls: [],
+        },
+    });
+
+    const recoveringCollector = new ClaudeStreamCollector();
+    recoveringCollector.consume(event({ type: "result", result: "x".repeat(4 * 1024 * 1024) }));
+    recoveringCollector.consume(event({ type: "result", result: "Valid answer" }));
+
+    const result = recoveringCollector.finish();
+    assert.equal(result.result, "Valid answer");
+    assert.equal(result.trace.malformedEventCount, 1);
+});
+
+test("rejects an oversized final line without a newline", () => {
+    const collector = new ClaudeStreamCollector();
+    collector.consume(JSON.stringify({ type: "result", result: "x".repeat(4 * 1024 * 1024) }));
+
+    const result = collector.finish();
+    assert.equal(result.result, "");
+    assert.equal(result.trace.resultEventReceived, false);
+    assert.equal(result.trace.malformedEventCount, 1);
+});
+
 test("Claude runner returns the final text and evidence instead of raw JSONL", async () => {
     const output = [
         event({
