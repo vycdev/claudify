@@ -101,6 +101,12 @@ export class ClaudeStreamCollector {
     }
 
     private consumeLine(line: string): void {
+        // Complete lines can arrive in a single data chunk, bypassing the
+        // pending-buffer limit checked after consumeCompleteLines().
+        if (line.length > MAX_STREAM_LINE_CHARS) {
+            this.malformedEventCount++;
+            return;
+        }
         const normalized = line.trim();
         if (!normalized) return;
         const event = parseJsonObject(normalized);
