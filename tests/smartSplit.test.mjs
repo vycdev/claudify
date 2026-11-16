@@ -177,3 +177,26 @@ test("balances CRLF fences without losing code or splitting a CRLF pair", () => 
     assert.ok(chunks.every((chunk) => !chunk.endsWith("\r")));
     assert.ok(chunks.every((chunk) => !chunk.startsWith("\n")));
 });
+
+test("balances consecutive long fences without carrying one language into the next", () => {
+    for (const marker of ["```", "~~~~"]) {
+        const text = [
+            "Before the code.",
+            `${marker}js\n${"x".repeat(110)}\n${marker}`,
+            `${marker}py\n${"y".repeat(110)}\n${marker}`,
+            "After the code.",
+        ].join("\n\n");
+        const chunks = smartSplit(text, 60);
+
+        assert.ok(chunks.length > 4);
+        assert.ok(chunks.every((chunk) => chunk.length <= 60));
+        chunks.forEach(assertBalancedFences);
+        assert.equal(chunks.join("").match(/x/g)?.length, 110);
+        assert.equal(chunks.join("").replaceAll(`${marker}py`, marker).match(/y/g)?.length, 110);
+        assert.equal(chunks.join("").match(/Before the code\./g)?.length, 1);
+        assert.equal(chunks.join("").match(/After the code\./g)?.length, 1);
+        assert.ok(chunks.filter((chunk) => chunk.includes("y")).every(
+            (chunk) => !chunk.includes(`${marker}js`),
+        ));
+    }
+});
