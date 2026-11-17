@@ -148,6 +148,19 @@ test("rejects an oversized final line without a newline", () => {
     assert.equal(result.trace.malformedEventCount, 1);
 });
 
+test("recovers after an oversized line split across stream chunks", () => {
+    const collector = new ClaudeStreamCollector();
+    collector.consume('{"type":"result","result":"' + "x".repeat(4 * 1024 * 1024));
+    // Discard the rest of the oversized event up to its newline, then
+    // accept a valid result delivered in the same subsequent chunk.
+    collector.consume('"}\n' + event({ type: "result", result: "Recovered" }));
+
+    const result = collector.finish();
+    assert.equal(result.result, "Recovered");
+    assert.equal(result.trace.resultEventReceived, true);
+    assert.equal(result.trace.malformedEventCount, 1);
+});
+
 test("Claude runner returns the final text and evidence instead of raw JSONL", async () => {
     const output = [
         event({
