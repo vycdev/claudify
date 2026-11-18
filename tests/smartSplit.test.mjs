@@ -91,6 +91,19 @@ test("balances fenced code blocks across split messages", () => {
     assert.match(chunks.at(-1), /Outro$/);
 });
 
+test("does not emit an empty first code block for a long fence opener", () => {
+    for (const marker of ["```", "~~~~"]) {
+        const code = "x".repeat(100);
+        const chunks = smartSplit(`${marker}typescript\n${code}\n${marker}`, 40);
+
+        assert.ok(chunks.length > 1);
+        assert.ok(chunks.every((chunk) => chunk.length <= 40));
+        chunks.forEach(assertBalancedFences);
+        assert.match(chunks[0], /x/, "the first block should include code");
+        assert.equal(chunks.join("").match(/x/g)?.length, code.length);
+    }
+});
+
 test("preserves code content when splitting at line boundaries", () => {
     const lines = Array.from(
         { length: 12 },
