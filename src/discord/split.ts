@@ -252,13 +252,25 @@ export function smartSplit(text: string, maxLen: number = 2000): string[] {
         }
 
         if (offset + candidate.splitAt < text.length) {
+            const largestSplit = candidate.splitAt;
             const preferredSplit = findPreferredBoundary(
                 text,
                 offset,
                 candidate.splitAt,
                 spans,
             );
-            if (preferredSplit && preferredSplit > 0) {
+            if (
+                preferredSplit &&
+                preferredSplit > 0 &&
+                // The opener's newline is readable, but choosing it when code
+                // fits would send a standalone empty fenced block first.
+                !spans.some(
+                    (span) =>
+                        span.openingStart === offset &&
+                        span.contentStart === offset + preferredSplit &&
+                        largestSplit > preferredSplit,
+                )
+            ) {
                 const preferred = makeCandidate(
                     text,
                     offset,
