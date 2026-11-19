@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -7,10 +10,48 @@ import {
     createUsageRequest,
     formatUsageBlockTime,
     getCurrentUsagePeriod,
+    handleUsage,
     runUsageCommand,
 } from "../build/discord/commands/usage.js";
 
 const fixedNow = new Date("2026-08-05T14:30:45.000Z");
+
+test("billing-window model lists fit a Discord field without failing the usage reply", async (t) => {
+    if (process.platform === "win32") {
+        t.skip("PATH-based executable fixture requires POSIX");
+        return;
+    }
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "claudify-usage-models-"));
+    const originalPath = process.env.PATH;
+    t.after(() => {
+        process.env.PATH = originalPath;
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+    const models = Array.from({ length: 20 }, (_, index) =>
+        `claude-model-${index}-${"x".repeat(90)}`);
+    fs.writeFileSync(path.join(root, "npx"),
+        `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({
+            blocks: [{
+                startTime: "2026-08-05T00:00:00Z",
+                endTime: "2026-08-05T05:00:00Z",
+                tokenCounts: { inputTokens: 1, outputTokens: 1, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 },
+                totalTokens: 2, costUSD: 0.01, entries: 1, models,
+            }],
+        }))});\n`, { mode: 0o700 });
+    process.env.PATH = `${root}${path.delimiter}${originalPath ?? ""}`;
+    const replies = [];
+    await handleUsage({
+        content: "!usage blocks",
+        channel: { sendTyping: async () => {}, send: async () => {} },
+        reply: async (payload) => { replies.push(payload); },
+    });
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0].embeds[0].toJSON().title, "⏱️ Billing Windows (Today)");
+    const field = replies[0].embeds[0].toJSON().fields.find((item) => item.name === "🤖 Models");
+    assert.ok(field);
+    assert.ok(field.value.length <= 1024);
+    assert.match(field.value, /more models omitted/);
+});
 
 test("times out a usage subprocess that does not exit", async () => {
     await assert.rejects(
