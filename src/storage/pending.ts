@@ -43,5 +43,11 @@ export function removePending(msgId: string) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
         throw error;
     }
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    // existsSync follows a dangling file link and reports it as absent, even
+    // though that link still blocks the next pending write. Unlink by name.
+    try {
+        fs.unlinkSync(filePath);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
 }
