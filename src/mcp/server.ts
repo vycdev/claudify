@@ -265,13 +265,16 @@ function boundReadMessagesResponse(entries: ReadMessageEntry[]): string {
 function renderFetchMessagesResponse(
     entries: ReadMessageEntry[],
     omitted: number,
+    truncatedContent = false,
 ): string {
     const hint = entries.some((entry) => entry.images?.length)
         ? READ_MESSAGES_RESPONSE_HINT
         : "";
-    const note = omitted > 0
-        ? `\n\n[Fetch-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; ${omitted} later result(s) omitted.]`
-        : "";
+    const note = truncatedContent
+        ? `\n\n[Fetch-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; message content truncated${omitted ? `; ${omitted} later result(s) omitted` : ""}.]`
+        : omitted > 0
+            ? `\n\n[Fetch-messages response truncated at ${MCP_READ_MESSAGES_MAX_CHARS} characters; ${omitted} later result(s) omitted.]`
+            : "";
     return JSON.stringify(entries, null, 2) + hint + note;
 }
 
@@ -290,6 +293,36 @@ function boundFetchMessagesResponse(entries: ReadMessageEntry[]): string {
             break;
         }
         selected.push(entry);
+    }
+
+    // Keep the first requested message even when its body alone exceeds the
+    // budget. A bounded excerpt is more useful than an empty result array.
+    const first = entries[0];
+    if (selected.length === 0 && typeof first?.content === "string") {
+        const content = first.content;
+        let low = 0;
+        let high = content.length;
+        let excerpt: ReadMessageEntry | undefined;
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const candidate = {
+                ...first,
+                content: takeUtf16Prefix(content, mid),
+            };
+            if (renderFetchMessagesResponse(
+                [candidate], entries.length - 1, true,
+            ).length <= MCP_READ_MESSAGES_MAX_CHARS) {
+                excerpt = candidate;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        if (excerpt) {
+            return renderFetchMessagesResponse(
+                [excerpt], entries.length - 1, true,
+            );
+        }
     }
 
     return takeUtf16Prefix(
