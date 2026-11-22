@@ -10,7 +10,9 @@ export function createProfileMessageOptions(content: string) {
 }
 
 export async function handleProfile(msg: Message): Promise<void> {
-    const mentioned = msg.mentions.users.first();
+    // mentions.users also holds the author of a message replied to with a
+    // ping, so only a user written in the command selects another profile.
+    const mentioned = msg.mentions.parsedUsers.first();
     const targetUser = mentioned || msg.author;
     const profile = getUserProfile(targetUser.id);
     if (profile) {
