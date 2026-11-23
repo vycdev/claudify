@@ -235,7 +235,8 @@ messages/
 
 ## Codex provider
 
-- `BOT_PROVIDER=codex` selects the official Codex app-server, with managed ChatGPT device authentication, never API keys. Default model: `gpt-6-luna`.
+- `BOT_PROVIDER=codex` selects the official Codex app-server, with managed ChatGPT device authentication, never API keys. The runtime falls back to `gpt-6-luna` when `CODEX_MODEL` is unset or blank.
+  The bundled Compose file sets `CODEX_MODEL=gpt-6.1-terra`.
 - `model.ts` routes all four workloads. Preserve the legacy Claude runner seam for injected tests; Codex translates system prompts and native image inputs at the adapter boundary.
 - `codexClient.ts` owns bounded stdio JSON-RPC and a sanitized child environment. `codex.ts` validates model/effort, subscription auth, sandbox policy, and MCP result evidence. Never enable shell or interactive approval fallbacks.
 - `codexAuth.ts` owns the login lifecycle. Discord handlers in `commands/codexAuth.ts` must reject guild and unauthorized requests before touching auth. Route `!codex` before history logging.
