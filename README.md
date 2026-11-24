@@ -155,10 +155,10 @@ To roll back, set `BOT_PROVIDER=claude` and restart. Existing Claude settings,
 credentials, and stored Discord history remain intact. No automatic cross-provider
 failover occurs on authentication errors, quota exhaustion, or timeouts.
 
-**Verification:** Run `npm test` with Node 22, matching the Docker image. The test
-suite is offline. To exercise the real pinned Codex
-app-server, read-only thread setup, and a harmless local MCP round trip without
-logging in or running inference:
+Run the offline tests described under [Development](#development).
+To exercise the real pinned Codex app-server, read-only thread setup, and a
+harmless local MCP round trip without logging in or running inference, use
+the smoke scripts below.
 
 ```bash
 npm run build
@@ -310,13 +310,30 @@ does not expose it to host-side MCP clients by default.
 
 ## Development
 
+Use Node.js 22 to match the Docker image. Install dependencies from the committed
+lockfile with `npm ci`. The offline test suite runs without Discord or model
+credentials.
+
 ```bash
-npm install
+npm ci
 npm run dev      # watch mode
 npm run build    # compile
 npm test         # build and run the complete test suite
 npm run eval:conversation # replay conversational failures against the configured Claude model
 npm start        # run
+```
+
+On macOS, the `node-pty@1.1.0` prebuild can fail the Claude auth tests
+because its helper ships without execute permission. With Python 3 and the
+Xcode Command Line Tools installed, run `npm_config_build_from_source=true npm ci`
+to build it locally. [Upstream node-pty issue](https://github.com/microsoft/node-pty/issues/850)
+
+If the macOS temporary directory goes through a symlink, use its physical path
+for the tests. Storage fixtures inherit `TMPDIR`, and storage checks reject
+symlinked directory components.
+
+```bash
+TMPDIR="$(cd "${TMPDIR:-/tmp}" && pwd -P)" npm test
 ```
 
 Test with the MCP Inspector:

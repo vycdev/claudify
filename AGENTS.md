@@ -5,7 +5,7 @@ Project guidance for Claude Code when working in this repository.
 ## Build & Run
 
 - **Build:** `npm run build` (runs `tsc`, outputs to `build/`)
-- **Test:** `npm test` (builds, then runs `node --test tests/*.test.mjs`)
+- **Test:** `npm test` (builds, then runs `node --experimental-test-module-mocks --test tests/*.test.mjs`)
 - **Conversation eval:** `npm run eval:conversation` (live-model replay; not part of the offline test suite)
 - **Dev:** `npm run dev` (runs `tsc -w` for watch mode)
 - **Start:** `npm start` (runs `node build/index.js`)
