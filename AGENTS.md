@@ -9,7 +9,9 @@ Project guidance for Claude Code when working in this repository.
 - **Conversation eval:** `npm run eval:conversation` (live-model replay; not part of the offline test suite)
 - **Dev:** `npm run dev` (runs `tsc -w` for watch mode)
 - **Start:** `npm start` (runs `node build/index.js`)
-- **MCP Inspector:** `npx @modelcontextprotocol/inspector node build/index.js`
+- To use **MCP Inspector**, start Claudify with `npm start`. In a separate terminal,
+  run `npx @modelcontextprotocol/inspector` and select **Streamable HTTP**.
+  Connect to `http://127.0.0.1:3100/mcp`. If you set `MCP_PORT`, use that port in the URL.
 
 No linter is configured. Always run `npm test` after changes; `npm run build`
 is the minimum compilation gate when tests cannot run.
