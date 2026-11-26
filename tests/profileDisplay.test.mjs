@@ -47,7 +47,7 @@ test("profile and server-memory displays preserve astral Unicode across chunks",
 
     const profileMessages = [];
     await handleProfile({
-        mentions: { users: { first: () => undefined } },
+        mentions: { parsedUsers: { first: () => undefined } },
         author: { id: "user-1", tag: "UnicodeUser" },
         reply: async (content) => profileMessages.push(content),
         channel: { send: async (content) => profileMessages.push(content) },
@@ -121,7 +121,7 @@ test("profile displays disable mentions from stored facts and user names in ever
 
     const messages = [];
     await handleProfile({
-        mentions: { users: { first: () => undefined } },
+        mentions: { parsedUsers: { first: () => undefined } },
         author: { id: "profile-mentions", tag: "@here <@&345678901234567890>" },
         reply: async (options) => messages.push(options),
         channel: { send: async (options) => messages.push(options) },
@@ -139,7 +139,7 @@ test("profile displays disable mentions from stored facts and user names in ever
 test("missing profile responses disable mentions in user names", async () => {
     const messages = [];
     await handleProfile({
-        mentions: { users: { first: () => undefined } },
+        mentions: { parsedUsers: { first: () => undefined } },
         author: { id: "missing-profile-mentions", tag: "@everyone <@&345678901234567890>" },
         reply: async (options) => messages.push(options),
     });
@@ -147,4 +147,41 @@ test("missing profile responses disable mentions in user names", async () => {
     assert.equal(messages.length, 1);
     assert.match(messages[0].content, /^No profile found for @everyone/);
     assert.deepEqual(messages[0].allowedMentions, { parse: [] });
+});
+
+test("profile replies ignore the pinged author of the replied-to message", async () => {
+    const { Client, MessageMentions } = await import("discord.js");
+    const client = new Client({ intents: [] });
+    const author = { id: "111111111111111111", username: "requester", discriminator: "0" };
+    const repliedTo = { id: "222222222222222222", username: "replied-to", discriminator: "0" };
+    fs.writeFileSync(path.join(PROFILES_DIR, `${author.id}.txt`), "Requester profile", "utf8");
+    fs.writeFileSync(path.join(PROFILES_DIR, `${repliedTo.id}.txt`), "Replied-to profile", "utf8");
+
+    const handle = async (content, users) => {
+        const messages = [];
+        await handleProfile({
+            mentions: new MessageMentions(
+                { client, guild: null, content },
+                users,
+                [],
+                false,
+                [],
+                repliedTo,
+            ),
+            author: client.users._add(author),
+            reply: async (options) => messages.push(options),
+        });
+        assert.equal(messages.length, 1);
+        return messages[0].content;
+    };
+
+    // Discord lists a reply's pinged author in the API mentions array.
+    assert.equal(
+        await handle("!profile", [repliedTo]),
+        "**Profile for requester:**\nRequester profile",
+    );
+    assert.equal(
+        await handle(`!profile <@${repliedTo.id}>`, [repliedTo]),
+        "**Profile for replied-to:**\nReplied-to profile",
+    );
 });
