@@ -16,6 +16,7 @@
 - Add typed per-workload model and effort routing for responses, profile updates, server-memory updates, and daily summaries, with legacy global fallbacks and workload-aware logs.
 
 ### Fixed
+- Keep a bounded excerpt of the first oversized linked MCP `fetch-messages` result instead of returning an empty array.
 - Keep joined emoji, flags, and combining marks together when splitting long Discord responses, including fenced code.
 - Describe downloaded MCP image paths without assuming every client has a local Read tool.
 - Bound per-model `!usage` field names so reports with many long model IDs stay within Discord's total embed character limit.
