@@ -1,6 +1,8 @@
 node_modules
 build
 .env
+.mcp-config.json
+.mcp-config.json.tmp-*
 .git
 .gitignore
 .claude
