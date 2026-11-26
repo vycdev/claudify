@@ -6,7 +6,7 @@ import test from "node:test";
 
 test("pending writes refuse symlinks and removals reject traversal", async (t) => {
     const testDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), "claudify-pending-symlink-"),
+        path.join(fs.realpathSync(os.tmpdir()), "claudify-pending-symlink-"),
     );
     t.after(() => fs.rmSync(testDir, { recursive: true, force: true }));
 
@@ -52,6 +52,22 @@ test("pending writes refuse symlinks and removals reject traversal", async (t) =
     fs.writeFileSync(ordinaryPending, "done", "utf8");
     removePending("333333333333333333");
     assert.equal(fs.existsSync(ordinaryPending), false);
+
+    // A dangling file link still occupies the pending filename. Cleanup must
+    // unlink the link itself so a retry can save the message again.
+    const danglingPending = path.join(messagesDir, "pending", "444444444444444444.txt");
+    fs.symlinkSync(path.join(testDir, "missing-target.txt"), danglingPending);
+    removePending("444444444444444444");
+    assert.throws(() => fs.lstatSync(danglingPending), { code: "ENOENT" });
+    savePending({
+        id: "444444444444444444",
+        author: { tag: "user#0001" },
+        channel: { name: "general" },
+        channelId: "111111111111111111",
+        createdAt: new Date("2026-08-31T12:30:00.000Z"),
+        content: "retry",
+    });
+    assert.match(fs.readFileSync(danglingPending, "utf8"), /retry$/);
 
     // The pending directory itself may be replaced after initialization.
     const outsideDir = path.join(testDir, "outside");
