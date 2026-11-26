@@ -4,7 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
+process.env.BOT_PROVIDER = "claude";
+
+const {
     buildCurrentPeriodUsageEmbed,
     buildHistoricalUsageEmbed,
     createUsageRequest,
@@ -12,7 +14,7 @@ import {
     getCurrentUsagePeriod,
     handleUsage,
     runUsageCommand,
-} from "../build/discord/commands/usage.js";
+} = await import("../build/discord/commands/usage.js");
 
 const fixedNow = new Date("2026-08-05T14:30:45.000Z");
 
@@ -50,7 +52,9 @@ test("billing-window model lists fit a Discord field without failing the usage r
     const field = replies[0].embeds[0].toJSON().fields.find((item) => item.name === "🤖 Models");
     assert.ok(field);
     assert.ok(field.value.length <= 1024);
-    assert.match(field.value, /more models omitted/);
+    const modelLines = field.value.split("\n");
+    const omitted = modelLines.pop();
+    assert.equal(omitted, `${models.length - modelLines.length} more models omitted`);
 });
 
 test("times out a usage subprocess that does not exit", async () => {
