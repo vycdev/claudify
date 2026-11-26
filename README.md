@@ -56,9 +56,13 @@ AUTH_ADMIN_USER_IDS=your_discord_user_id
 docker compose up -d --build
 ```
 
-The image includes Codex CLI **0.159.0**. For a non-Docker install, install
-`@openai/codex@0.159.0` and set the same variables in the bot's environment or
-`.env`. Outside Docker, omit `CODEX_HOME` to use `~/.claudify-codex`.
+The image includes Codex CLI **0.159.0**. The bundled Compose file explicitly
+sets `CODEX_MODEL=gpt-6.1-terra`. If `CODEX_MODEL` is unset or blank, Claudify
+uses `gpt-6-luna` as its global Codex model fallback.
+
+For a non-Docker install, install `@openai/codex@0.159.0` and set the variables
+shown above in the bot's environment or `.env`. Outside Docker, omit
+`CODEX_HOME` to use `~/.claudify-codex`.
 
 **Login from Discord:**
 
