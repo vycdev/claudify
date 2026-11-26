@@ -6,7 +6,7 @@ import test from "node:test";
 
 test("pending writes refuse symlinks and removals reject traversal", async (t) => {
     const testDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), "claudify-pending-symlink-"),
+        path.join(fs.realpathSync(os.tmpdir()), "claudify-pending-symlink-"),
     );
     t.after(() => fs.rmSync(testDir, { recursive: true, force: true }));
 
@@ -58,7 +58,6 @@ test("pending writes refuse symlinks and removals reject traversal", async (t) =
     const danglingPending = path.join(messagesDir, "pending", "444444444444444444.txt");
     fs.symlinkSync(path.join(testDir, "missing-target.txt"), danglingPending);
     removePending("444444444444444444");
-    assert.equal(fs.existsSync(danglingPending), false);
     assert.throws(() => fs.lstatSync(danglingPending), { code: "ENOENT" });
     savePending({
         id: "444444444444444444",
