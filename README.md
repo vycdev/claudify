@@ -310,9 +310,9 @@ does not expose it to host-side MCP clients by default.
 
 ## Development
 
-Use Node.js 22 to match the Docker image. Install dependencies from the committed
-lockfile with `npm ci`. The offline test suite runs without Discord or model
-credentials.
+Use a current Node.js 22.x release to match the Docker image. Install dependencies
+from the committed lockfile with `npm ci`. The offline test suite runs without
+Discord or model credentials.
 
 ```bash
 npm ci
