@@ -15,6 +15,10 @@ dist/
 .env.*.local
 publish/.env
 
+# Generated MCP configuration
+/.mcp-config.json
+/.mcp-config.json.tmp-*
+
 # IDE/Editor specific
 .vscode/
 .idea/
