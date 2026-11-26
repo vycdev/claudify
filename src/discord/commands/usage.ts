@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { BOT_PROVIDER, USAGE_COMMAND_MAX_OUTPUT_BYTES } from "../../config.js";
+import { BOT_PROVIDER, DISCORD_EMBED_FIELD_VALUE_MAX_CHARS, USAGE_COMMAND_MAX_OUTPUT_BYTES } from "../../config.js";
 import { Message, TextChannel, EmbedBuilder } from "discord.js";
 
 export type CurrentUsagePeriodKind = "week" | "month";
@@ -272,6 +272,23 @@ const shortModel = (name: string) => name
     .replace("claude-", "")
     .replace(/-\d{8}$/, "");
 
+function boundedBlockModelList(models: string[]): string {
+    const lines: string[] = [];
+    let length = 0;
+    for (const model of models) {
+        const line = boundedModelFieldName(`${modelEmoji(model)} ${shortModel(model)}`);
+        const separatorLength = lines.length > 0 ? 1 : 0;
+        const remaining = models.length - lines.length - 1;
+        const omission = remaining > 0 ? `\n${remaining} more models omitted` : "";
+        if (length + separatorLength + line.length + omission.length > DISCORD_EMBED_FIELD_VALUE_MAX_CHARS) break;
+        lines.push(line);
+        length += separatorLength + line.length;
+    }
+    const omitted = models.length - lines.length;
+    if (omitted > 0) lines.push(`${omitted} more models omitted`);
+    return lines.join("\n");
+}
+
 function boundedModelFieldName(name: string): string {
     const maxLength = Math.min(DISCORD_MAX_EMBED_FIELD_NAME_LENGTH, USAGE_MODEL_FIELD_NAME_LENGTH);
     if (name.length <= maxLength) return name;
@@ -506,7 +523,7 @@ export async function handleUsage(msg: Message): Promise<void> {
                 );
 
                 if (block.models && block.models.length > 0) {
-                    const modelList = block.models.map((m: string) => `${modelEmoji(m)} ${shortModel(m)}`).join("\n");
+                    const modelList = boundedBlockModelList(block.models);
                     embed.addFields({ name: "🤖 Models", value: modelList, inline: true });
                 }
 
